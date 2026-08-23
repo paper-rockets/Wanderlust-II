@@ -3,7 +3,8 @@ import { MeshStandardNodeMaterial } from 'three/webgpu';
 import {
     Fn, vec2, vec3, float, sin, cos, dot, mix, clamp, pow,
     positionWorld, normalWorld, smoothstep as tslSmoothstep,
-    floor, fract, uniform, cameraPosition, normalize, reflect, step, texture
+    floor, fract, uniform, cameraPosition, normalize, reflect, step, texture,
+    vertexColor
 } from 'three/tsl';
 
 // 1. ISOTROPIC PROCEDURAL NOISE (TSL Implementation from 001)
@@ -37,72 +38,12 @@ const fbm2D = Fn(([p]) => {
     return n1.mul(0.55).add(n2.mul(0.30)).add(n3.mul(0.15));
 });
 
-export function createTerrainColorNode(waterLevelUniform, uTime, uSunDir, uSandNoiseMap, uShimmerMult) {
+export function createTerrainColorNode(waterLevelUniform, uTime, uSunDir, uSandNoiseMap, uShimmerMult, uWorldOriginZ) {
     return Fn(() => {
         const p = positionWorld;
         const norm = normalize(normalWorld);
-        const slope = float(1.0).sub(clamp(norm.y, 0.0, 1.0));
-        const h = p.y;
-
-        // Isotropic procedural noise in meters
-        const combN = fbm2D(p.xz.mul(0.032)).sub(0.5).mul(2.0); // Range -1.0 to 1.0
-        const patchNoise = vnoise2D(p.xz.mul(0.018).add(vec2(100.0, 100.0)));
-        const snowAltNoise = fbm2D(p.xz.mul(0.022)).mul(8.0);
-
-        const hAdj = h.add(combN.mul(2.2));
-        const wl = waterLevelUniform || uniform(2.4);
-
-        // Master Archipelago Grass & Shore Palette (100% Preserved from 001)
-        const cSandWet = vec3(0.70, 0.56, 0.36);
-        const cSand = vec3(0.88, 0.77, 0.52);
-        const cGrassLow = vec3(0.24, 0.72, 0.08);
-        const cGrassMid = vec3(0.12, 0.56, 0.30);
-        const cGrassHigh = vec3(0.06, 0.40, 0.22);
-        const cMossYellow = vec3(0.48, 0.90, 0.05);
-
-        // Alpine Mountain Snow & Cliff Rock Palette
-        const cSnowBase = vec3(0.96, 0.98, 1.0);
-        const cSnowShadow = vec3(0.78, 0.85, 0.96);
-        const cRockCliff = vec3(0.30, 0.33, 0.37);
-        const cRockLichen = vec3(0.42, 0.45, 0.36);
-
-        // 1. Shore sand
-        const tSand = tslSmoothstep(wl.sub(1.8), wl.add(0.4), hAdj);
-        const colSand = mix(cSandWet, cSand, tSand);
-
-        // 2. Sand to coastal grass
-        const tLow = tslSmoothstep(wl.add(0.4), wl.add(3.2), hAdj);
-        const colLow = mix(colSand, cGrassLow, tLow);
-
-        // 3. Low to mid lush canopy with organic moss patches
-        const tMid = tslSmoothstep(wl.add(3.2), wl.add(22.0), hAdj);
-        const lushBase = mix(cGrassLow, cGrassMid, tMid);
-        const mossW = clamp(combN.sub(0.05).mul(1.5), 0.0, 1.0);
-        const lushMoss = mix(lushBase, cMossYellow, mossW);
-        const patchW = clamp(patchNoise.sub(0.55).mul(2.0), 0.0, 1.0);
-        const lushPatched = mix(lushMoss, cGrassLow, patchW);
-        const colMid = mix(colLow, lushPatched, tMid);
-
-        // 4. Mid to high ridge grass
-        const tHigh = tslSmoothstep(wl.add(22.0), wl.add(44.0), hAdj);
-        const colHigh = mix(colMid, cGrassHigh, tHigh);
-
-        // 5. Alpine Cliff Rock (Exposed on steep slopes or transition)
-        const cliffRock = mix(cRockCliff, cRockLichen, clamp(combN.mul(0.5).add(0.5), 0.0, 1.0));
-        const tRock = tslSmoothstep(wl.add(34.0), wl.add(60.0), hAdj);
-        const colMountain = mix(colHigh, cliffRock, tRock);
-
-        // 6. Slope-Aware Snow Accumulation on Mountain Peaks
-        const snowAltitude = tslSmoothstep(wl.add(32.0).add(snowAltNoise), wl.add(58.0).add(snowAltNoise), hAdj);
-        const snowSlopeRetention = tslSmoothstep(float(0.55), float(0.28), slope.add(combN.mul(0.12)));
-        const snowAmount = snowAltitude.mul(snowSlopeRetention);
-
-        const litSnow = mix(cSnowShadow, cSnowBase, clamp(norm.y.mul(0.75).add(0.25), 0.0, 1.0));
-        const withSnow = mix(colMountain, litSnow, snowAmount);
-
-        // 7. Sheer cliff rock exposure on very steep angles
-        const cliffMask = tslSmoothstep(float(0.48), float(0.68), slope.add(combN.mul(0.12)));
-        const baseColor = mix(withSnow, cRockCliff, cliffMask.mul(tslSmoothstep(wl.add(5.0), wl.add(25.0), hAdj)));
+        // Use CPU-computed per-vertex biome colors (set by each biome's getColor())
+        const baseColor = vertexColor();
 
         // 8. Sand & Snow Shimmer and Specular Highlights Shader
         const viewDir = normalize(cameraPosition.sub(p));
@@ -110,10 +51,11 @@ export function createTerrainColorNode(waterLevelUniform, uTime, uSunDir, uSandN
         const halfDir = normalize(sunDirection.add(viewDir));
         const shimmerMult = uShimmerMult || float(1.0);
 
-        // Biome Masking
+        // Biome Masking - reconstruct true world Z by adding floating origin offset
         // Desert Dunes: [155,000 - 180,000] (Sand shimmer)
         // North Pole: [180,000 - 205,000] & Misty Mountains: [40,000 - 70,000] (Snow & ice shimmer)
-        const wz = fract(p.z.div(float(215000.0))).mul(215000.0);
+        const worldZ = p.z.add(uWorldOriginZ || float(0.0));
+        const wz = fract(worldZ.div(float(215000.0))).mul(215000.0);
         const desertMask = tslSmoothstep(float(152500.0), float(155000.0), wz).mul(tslSmoothstep(float(182500.0), float(180000.0), wz));
         const northPoleMask = tslSmoothstep(float(177500.0), float(180000.0), wz).mul(tslSmoothstep(float(207500.0), float(205000.0), wz));
         const mtnMask = tslSmoothstep(float(37500.0), float(40000.0), wz).mul(tslSmoothstep(float(72500.0), float(70000.0), wz));
@@ -170,14 +112,14 @@ export function createTerrainColorNode(waterLevelUniform, uTime, uSunDir, uSandN
     });
 }
 
-export const createTerrainMaterial = (uTime, uSunDir, uSandNoiseMap, uShimmerMult) => {
+export const createTerrainMaterial = (uTime, uSunDir, uSandNoiseMap, uShimmerMult, uWorldOriginZ) => {
     const terrainMat = new MeshStandardNodeMaterial({
         roughness: 0.82,
         metalness: 0.05
     });
 
     const waterLevelUniform = uniform(2.4);
-    terrainMat.colorNode = createTerrainColorNode(waterLevelUniform, uTime, uSunDir, uSandNoiseMap, uShimmerMult)();
+    terrainMat.colorNode = createTerrainColorNode(waterLevelUniform, uTime, uSunDir, uSandNoiseMap, uShimmerMult, uWorldOriginZ)();
 
     return terrainMat;
 };

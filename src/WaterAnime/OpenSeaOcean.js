@@ -307,13 +307,16 @@ export function setWindDirection(angleDeg, spreadPercent = 45) {
   });
 }
 
-// phase: f = k * (dot(direction, xz) - time * c) + phase
-const wavePhase = (w, xz, time) =>
-  w.k.mul(dot(vec2(w.dx, w.dz), xz).sub(time.mul(w.c))).add(w.phase);
+// phase: f = k * (dot(direction, xz) - time * c) + phase (wrapped to [0, 2*PI) to avoid precision loss)
+const TWO_PI_NODE = float(Math.PI * 2.0);
+const wavePhase = (w, xz, time) => {
+  const rawPhase = w.k.mul(dot(vec2(w.dx, w.dz), xz).sub(time.mul(w.c))).add(w.phase);
+  return fract(rawPhase.div(TWO_PI_NODE)).mul(TWO_PI_NODE);
+};
 
 // displaced surface point for a given parametric xz (sampled in world space for true physical waves)
 const wavePosition = Fn(([localXz, time, sea, shallowFade]) => {
-  const worldXz = localXz.add(cameraPosition.xz);
+  const worldXz = positionWorld.xz;
   const xz = worldXz.mul(oceanScaleUniform).toVar();
   const p = vec3(localXz.x, float(0.0), localXz.y).toVar();
   for (const w of WAVES) {

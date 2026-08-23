@@ -23,5 +23,5 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "exclude": ["castle-generator-v2", "node_modules", "dist", "external"]
+  "exclude": ["castle-generator-v2", "node_modules", "dist", "external", "FLIGHT_MERGED", "LEGACY", "src/components"]
 }

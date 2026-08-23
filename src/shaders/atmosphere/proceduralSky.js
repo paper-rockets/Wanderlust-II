@@ -113,12 +113,12 @@ export function createProceduralSky() {
     // Night sky. All of these are multiplied by uNightFactor, which is exactly 0.0 at dusk,
     // so none of them can alter the golden dusk render.
     const uStarDensity = uniform(0.055);
-    const uStarBrightness = uniform(1.0);
+    const uStarBrightness = uniform(1.35);
     const uStarTwinkle = uniform(0.45);
-    const uMilkyWay = uniform(0.9);
-    const uMilkyDust = uniform(1.0);
-    const uMilkyArmColor = uniform(new THREE.Color(0.34, 0.40, 0.62));
-    const uMilkyCoreColor = uniform(new THREE.Color(0.72, 0.63, 0.50));
+    const uMilkyWay = uniform(2.2);
+    const uMilkyDust = uniform(0.85);
+    const uMilkyArmColor = uniform(new THREE.Color(0.55, 0.68, 1.15));
+    const uMilkyCoreColor = uniform(new THREE.Color(1.35, 1.10, 0.85));
     const uNightSkyLift = uniform(1.0);
     const uNightColor = uniform(new THREE.Color(0.035, 0.045, 0.11));
 
@@ -189,16 +189,16 @@ export function createProceduralSky() {
             // Two falloffs: a tight bright lane and a broad halo around it. Gaussians rather
             // than a linear ramp -- a hard edge on a galaxy looks like a painted stripe.
             const a2 = across.mul(across);
-            const bandCore = exp(a2.mul(-30.0));
-            const bandWide = exp(a2.mul(-5.0));
+            const bandCore = exp(a2.mul(-28.0));
+            const bandWide = exp(a2.mul(-4.5));
 
             // ---- Structure, three scales ----
             const large = fbm(inPlane.mul(2.1));                                  // where the band swells
             const fila  = fbm(inPlane.mul(7.5).add(across.mul(5.0)));              // filaments
             const fine  = fbm(inPlane.mul(18.0).add(across.mul(9.0)));             // mottling
 
-            let glow = bandWide.mul(large.mul(0.85).add(0.30))
-                .add(bandCore.mul(fila.mul(0.9).add(0.45))).toVar();
+            let glow = bandWide.mul(large.mul(1.1).add(0.40))
+                .add(bandCore.mul(fila.mul(1.2).add(0.60))).toVar();
 
             // ---- Dust lanes ----
             // The dark rifts are what make it read as the Milky Way and not just a bright
@@ -214,8 +214,8 @@ export function createProceduralSky() {
             // One brighter, warmer swelling along the band. Without it the band is uniform
             // and reads as procedural.
             const coreDir = normalize(vec3(0.78, 0.30, 0.55));
-            const coreProx = pow(clamp(dot(dir, coreDir), 0.0, 1.0), 8.0);
-            const coreGlow = coreProx.mul(bandWide).mul(1.6);
+            const coreProx = pow(clamp(dot(dir, coreDir), 0.0, 1.0), 6.0);
+            const coreGlow = coreProx.mul(bandWide).mul(2.6);
 
             // Colour: cool blue-white arms, warm core. A single flat tint is the main reason
             // the old band looked like fog.
@@ -230,7 +230,7 @@ export function createProceduralSky() {
             // Density is boosted inside the band: the real Milky Way is dense with stars, and
             // this is what visually ties the glow to the star field instead of layering an
             // unrelated fog over it.
-            const bandStarBoost = float(1.0).add(bandWide.mul(1.5).mul(uMilkyWay));
+            const bandStarBoost = float(1.0).add(bandWide.mul(2.5).mul(uMilkyWay));
             const densCoarse = clamp(uStarDensity.mul(bandStarBoost), 0.0, 0.6);
             const densFine = clamp(uStarDensity.mul(0.7).mul(bandStarBoost), 0.0, 0.6);
 
@@ -247,9 +247,7 @@ export function createProceduralSky() {
 
         // Composite atmospheric sky
         let sky = baseAtmosphere.add(sunCorona).add(sunHaze).add(sunDisc).add(duskGlow);
-        // Mix to 0.82 rather than 1.0. A full replace threw away the horizon gradient, the
-        // sun haze and the mid-sky band, leaving a flat dome with no skyline at all.
-        sky = mix(sky, nightSky, uNightFactor.mul(0.82));
+        sky = mix(sky, nightSky, uNightFactor);
 
         // Storm darkening for base sky
         sky = mix(sky, vec3(0.12, 0.14, 0.18), uStormDarken);

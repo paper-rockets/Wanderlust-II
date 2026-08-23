@@ -13,7 +13,9 @@ export default defineConfig(() => {
       },
     },
     server: {
+      host: true,
       hmr: true,
+      allowedHosts: true as const,
     },
     build: {
       target: 'esnext',
@@ -25,11 +27,6 @@ export default defineConfig(() => {
           mobile_test: path.resolve(__dirname, 'mobile_test.html'),
           archipelago_studio: path.resolve(__dirname, 'archipelago_studio.html'),
         },
-      },
-    },
-    esbuild: {
-      supported: {
-        'top-level-await': true,
       },
     },
   };

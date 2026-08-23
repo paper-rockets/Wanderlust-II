@@ -26,12 +26,14 @@ jobs:
         with:
           ref: main
           path: webgpu
+          lfs: true
 
       - name: Checkout webgl branch
         uses: actions/checkout@v4
         with:
           ref: webgl
           path: webgl
+          lfs: true
 
       - name: Set up Node
         uses: actions/setup-node@v4

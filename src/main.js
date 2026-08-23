@@ -1516,6 +1516,8 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
     const birdFolder = debugFolder.addFolder('Bird & Flock Settings');
     params.birdCount = LOW_GFX ? 12 : 40;
     params.birdScale = 0.42;
+    params.flamingoScale = 0.007;
+    params.animatedBirdScale = 0.08;
     params.birdColor = '#d6e5f5';
     params.birdFlockRadius = 22;
     params.birdFlockSpread = 9;
@@ -1526,6 +1528,16 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         instBirds.instanceMatrix.needsUpdate = true;
     });
     birdFolder.add(params, 'birdScale', 0.1, 2.0, 0.05).name('Bird Size');
+    birdFolder.add(params, 'flamingoScale', 0.001, 0.03, 0.001).name('Flamingo Size').onChange(v => {
+        if (typeof window.flamingoFlock !== 'undefined' && window.flamingoFlock) {
+            window.flamingoFlock.setScale(v);
+        }
+    });
+    birdFolder.add(params, 'animatedBirdScale', 0.01, 0.25, 0.01).name('Flock Bird Size').onChange(v => {
+        if (typeof window.birdFlock !== 'undefined' && window.birdFlock) {
+            window.birdFlock.setScale(v);
+        }
+    });
     birdFolder.addColor(params, 'birdColor').name('Bird Color').onChange(v => {
         matBird.color.set(v);
     });
@@ -1800,6 +1812,44 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         localStorage.setItem('wl_zoomDist', cameraZoomDist);
     }, { passive: true });
     
+    // Add mobile touch handling for two-finger zoom (pinch gesture)
+    let gameInitialTouchDistance = null;
+    let gameInitialZoom = null;
+    window.addEventListener('touchstart', (e) => {
+        if ((window.editorState && window.editorState.isEditorMode) || isGodMode) return;
+        if (e.touches.length === 2) {
+            gameInitialTouchDistance = Math.hypot(
+                e.touches[0].pageX - e.touches[1].pageX,
+                e.touches[0].pageY - e.touches[1].pageY
+            );
+            gameInitialZoom = cameraZoomDist;
+        }
+    }, { passive: true });
+
+    window.addEventListener('touchmove', (e) => {
+        if ((window.editorState && window.editorState.isEditorMode) || isGodMode) return;
+        if (e.touches.length === 2 && gameInitialTouchDistance !== null && gameInitialZoom !== null) {
+            const currentTouchDistance = Math.hypot(
+                e.touches[0].pageX - e.touches[1].pageX,
+                e.touches[0].pageY - e.touches[1].pageY
+            );
+            if (gameInitialTouchDistance > 0 && currentTouchDistance > 0) {
+                const factor = gameInitialTouchDistance / currentTouchDistance;
+                cameraZoomDist = gameInitialZoom * factor;
+                cameraZoomDist = Math.max(5.0, Math.min(300.0, cameraZoomDist));
+                if (cameraManager) cameraManager.setZoom(cameraZoomDist);
+                localStorage.setItem('wl_zoomDist', cameraZoomDist);
+            }
+        }
+    }, { passive: true });
+
+    window.addEventListener('touchend', (e) => {
+        if (e.touches.length < 2) {
+            gameInitialTouchDistance = null;
+            gameInitialZoom = null;
+        }
+    }, { passive: true });
+    
 
 
     // ==========================================
@@ -2001,14 +2051,16 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         uTime: uniform(0),
         uSunDir: uniform(new THREE.Vector3(0.3, 0.8, 0.5)),
         uSandNoiseMap: texture(sandNoiseMap),
-        uShimmerMult: uniform(1.0)
+        uShimmerMult: uniform(1.0),
+        uWorldOriginZ: uniform(0.0)
     };
 
     const terrainMat = createTerrainMaterial(
         terrainUniforms.uTime,
         terrainUniforms.uSunDir,
         terrainUniforms.uSandNoiseMap,
-        terrainUniforms.uShimmerMult
+        terrainUniforms.uShimmerMult,
+        terrainUniforms.uWorldOriginZ
     );
     const treeUniforms = {
         uPlayerPos: uniform(new THREE.Vector3(0, 0, 0)),
@@ -2142,9 +2194,25 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
                 norm.setXYZ(idx, dx * invLen, twoSpacing * invLen, dz * invLen);
             }
         }
+
+        // 3. Vertex color computation from biome getColor() functions
+        if (!terrainGeo.attributes.color) {
+            terrainGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(pos.count * 3), 3));
+        }
+        const colors = terrainGeo.attributes.color;
+        for (let i = 0; i < pos.count; i++) {
+            const localX = pos.getX(i);
+            const localZ = pos.getZ(i);
+            const worldX = localX + gridX;
+            const worldZ = localZ + gridZ;
+            const h = pos.getY(i);
+            getWorldColor(h, worldX, worldZ, tempColor);
+            colors.setXYZ(i, tempColor.r, tempColor.g, tempColor.b);
+        }
         
         pos.needsUpdate = true;
         norm.needsUpdate = true;
+        colors.needsUpdate = true;
         
         lastTerrainGridX = gridX;
         lastTerrainGridZ = gridZ;
@@ -2973,25 +3041,55 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         // Use 4K JPEG (1.4 MB) — small enough to not stall WebGPU on first render.
         // JPEG has no alpha channel so read .rgb only.
         // Mesh starts invisible and is only shown after the onLoad callback fires.
-        const mwLoader = new THREE.TextureLoader();
-        const mwTex = mwLoader.load(
+        const loader = new THREE.TextureLoader();
+        const mwTex = new THREE.Texture();
+        mwTex.colorSpace = THREE.SRGBColorSpace;
+        mwTex.anisotropy = 4;
+        mwTex.wrapS = THREE.RepeatWrapping;
+        mwTex.wrapT = THREE.ClampToEdgeWrapping;
+
+        const candidates = [
+            resolveAssetUrl('assets/skybox/milkyway_equirect.jpg'),
+            resolveAssetUrl('assets/Skybox/milkyway_equirect.jpg'),
             'assets/skybox/milkyway_equirect.jpg',
-            (tex) => {
-                tex.colorSpace = THREE.SRGBColorSpace;
-                tex.anisotropy = Math.min(4, renderer.capabilities ? renderer.capabilities.getMaxAnisotropy() : 4);
-                tex.needsUpdate = true;
-                milkyWayReady = true;
-                console.log('[MilkyWay] texture loaded OK');
-            },
-            undefined,
-            (err) => console.warn('[MilkyWay] texture failed:', err)
-        );
+            'assets/Skybox/milkyway_equirect.jpg',
+            '/assets/skybox/milkyway_equirect.jpg',
+            '/assets/Skybox/milkyway_equirect.jpg',
+            'public/assets/skybox/milkyway_equirect.jpg',
+            'public/assets/Skybox/milkyway_equirect.jpg'
+        ];
+
+        let attemptIdx = 0;
+        function tryLoadNext() {
+            if (attemptIdx >= candidates.length) {
+                console.error('[MilkyWay] All candidate paths failed to load Milky Way texture:', candidates);
+                return;
+            }
+            const path = candidates[attemptIdx++];
+            loader.load(
+                path,
+                (loadedTex) => {
+                    mwTex.image = loadedTex.image;
+                    mwTex.needsUpdate = true;
+                    milkyWayReady = true;
+                    console.log('[MilkyWay] Successfully loaded Milky Way texture from:', path);
+                },
+                undefined,
+                (err) => {
+                    console.warn(`[MilkyWay] Failed to load from: ${path}, trying next fallback...`);
+                    tryLoadNext();
+                }
+            );
+        }
+        tryLoadNext();
         const mwMat = new MeshBasicNodeMaterial({
             side: THREE.BackSide,
             depthWrite: false,
             depthTest: false,
             transparent: true,
             fog: false,
+            // Additive: the panorama's near-black sky adds nothing, so the procedural starfield
+            // underneath stays visible — we only ADD the Milky Way band/glow on top of it.
             blending: THREE.AdditiveBlending
         });
 
@@ -3780,16 +3878,18 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
     });
     window.birdFlock = birdFlock;
 
-    // Flamingo Flock (flamingo.glb) - Warm zones only!
+    // Flamingo Flock (flamingo.glb) - Warm zones only, Daytime only!
     const flamingoFlock = new AnimatedFlockSystem({
         scene,
         gltfLoader,
         resolveAssetUrl,
         count: LOW_GFX ? 8 : 16,
         modelPath: 'flight_models/flamingo.glb',
-        scale: 0.05,
+        scale: params.flamingoScale || 0.007,
         rotYOffset: 0,
         isWarmOnly: true,
+        dayOnly: true,
+        getTimePhase: () => timePhase,
         getBiomeAt,
         altitudeOffset: 50,
         flockRadius: 90
@@ -4903,8 +5003,7 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         lastAnimTime = nowAnimTime;
         adaptiveRes.sample(rawDt * 1000);
         if (rawDt > 0.1 || rawDt <= 0) rawDt = 0.0166;
-        smoothedDt = smoothedDt * 0.7 + rawDt * 0.3;
-        let dt = smoothedDt;
+        let dt = Math.min(rawDt, 0.066);
 
         const time = clock.getElapsedTime();
         const SHADER_TIME_PERIOD = 3600.0;
@@ -4923,6 +5022,7 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         if (animeWaterSystem) animeWaterSystem.tickDepthField();
         if (typeof terrainUniforms !== 'undefined') {
             terrainUniforms.uTime.value = wrappedTime;
+            terrainUniforms.uWorldOriginZ.value = worldOriginOffset.y;
             if (typeof dirLight !== 'undefined') {
                 terrainUniforms.uSunDir.value.copy(dirLight.position).sub(playerGrp.position).normalize();
             }
@@ -5515,6 +5615,7 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
     
     function setTimePhase(phase) {
         timePhase = (phase % 3 + 3) % 3;
+        window.timePhase = timePhase;
         if (envConfigs[timePhase]) {
             params.sunAltitude = envConfigs[timePhase].sunY;
         }
@@ -5530,6 +5631,8 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         }
     }
     window.setTimePhase = setTimePhase;
+    window.getTimePhase = () => timePhase;
+    window.timePhase = timePhase;
 
     if (timeToggleBtn) {
         timeToggleBtn.innerHTML = timeIcons[timePhase] || timeIcons[0];
