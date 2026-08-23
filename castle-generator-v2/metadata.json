@@ -1,6 +1,0 @@
-{
-  "name": "Fairytale Castle Generator",
-  "description": "High-fidelity procedural WebGL generator with Ghibli-style European Coastal Towns, Traditional Japanese Villages, and Fairytale Castles. Features power lines, street lamps, and standalone export capability.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
