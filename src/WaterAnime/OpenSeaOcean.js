@@ -307,13 +307,16 @@ export function setWindDirection(angleDeg, spreadPercent = 45) {
   });
 }
 
-// phase: f = k * (dot(direction, xz) - time * c) + phase
-const wavePhase = (w, xz, time) =>
-  w.k.mul(dot(vec2(w.dx, w.dz), xz).sub(time.mul(w.c))).add(w.phase);
+// phase: f = k * (dot(direction, xz) - time * c) + phase (wrapped to [0, 2*PI) to avoid precision loss)
+const TWO_PI_NODE = float(Math.PI * 2.0);
+const wavePhase = (w, xz, time) => {
+  const rawPhase = w.k.mul(dot(vec2(w.dx, w.dz), xz).sub(time.mul(w.c))).add(w.phase);
+  return fract(rawPhase.div(TWO_PI_NODE)).mul(TWO_PI_NODE);
+};
 
 // displaced surface point for a given parametric xz (sampled in world space for true physical waves)
 const wavePosition = Fn(([localXz, time, sea, shallowFade]) => {
-  const worldXz = localXz.add(cameraPosition.xz);
+  const worldXz = positionWorld.xz;
   const xz = worldXz.mul(oceanScaleUniform).toVar();
   const p = vec3(localXz.x, float(0.0), localXz.y).toVar();
   for (const w of WAVES) {
@@ -484,9 +487,10 @@ const waveJacobianAt = Fn(([rawXz, time, sea, shallowFade]) => {
    Procedural gradient noise + 3-octave FBM
    ============================================================ */
 const hash2 = Fn(([p]) => {
+  const pMod = fract(p.div(256.0)).mul(256.0);
   const h = vec2(
-    dot(p, vec2(127.1, 311.7)),
-    dot(p, vec2(269.5, 183.3))
+    dot(pMod, vec2(127.1, 311.7)),
+    dot(pMod, vec2(269.5, 183.3))
   );
   return fract(sin(h).mul(43758.5453)).mul(2.0).sub(1.0);
 });
@@ -624,6 +628,11 @@ export const createOpenSeaMaterial = () => {
   const oceanMaterial = new THREE.MeshBasicNodeMaterial();
   oceanMaterial.transparent = true;
   oceanMaterial.side = THREE.DoubleSide;
+  oceanMaterial.depthWrite = true;
+  oceanMaterial.depthTest = true;
+  oceanMaterial.polygonOffset = true;
+  oceanMaterial.polygonOffsetFactor = 1.0;
+  oceanMaterial.polygonOffsetUnits = 1.0;
 
   const scaledTime = timeUniform.mul(speedUniform);
 
@@ -631,7 +640,7 @@ export const createOpenSeaMaterial = () => {
   // through the beach face every cycle (the swinging waterline in WATER_DIAGNOSIS.md 3.7).
   // Sampled at the undisplaced grid position; explicit level 0 because the vertex stage has no
   // derivatives and the field has no mips.
-  const vtxWorldXz = positionLocal.xz.add(cameraPosition.xz);
+  const vtxWorldXz = positionWorld.xz;
   const vtxUv = vtxWorldXz.sub(depthFieldOriginUniform).div(depthFieldSizeUniform);
   const vtxInside = step(0.0, vtxUv.x).mul(step(vtxUv.x, 1.0))
     .mul(step(0.0, vtxUv.y)).mul(step(vtxUv.y, 1.0));
@@ -914,7 +923,8 @@ export function getWaterHeightAt(rawX, rawZ, time, sea) {
     let dz = 0;
     for (const w of WAVES) {
       const a = _waveAmplitude(w, sea);
-      const f = w.k.value * (w.dx.value * px + w.dz.value * pz - t * w.c.value) + w.phase.value;
+      const rawF = w.k.value * (w.dx.value * px + w.dz.value * pz - t * w.c.value) + w.phase.value;
+      const f = ((rawF % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
       const ha = Q * a * Math.cos(f);
       dx += ha * w.dx.value;
       dz += ha * w.dz.value;
@@ -928,7 +938,8 @@ export function getWaterHeightAt(rawX, rawZ, time, sea) {
   let y = 0;
   for (const w of WAVES) {
     const a = _waveAmplitude(w, sea);
-    const f = w.k.value * (w.dx.value * px + w.dz.value * pz - t * w.c.value) + w.phase.value;
+    const rawF = w.k.value * (w.dx.value * px + w.dz.value * pz - t * w.c.value) + w.phase.value;
+    const f = ((rawF % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
     const pinch = 0.5 * w.k.value * a * a * Math.cos(2 * f)
       * crestSharpnessUniform.value * w.geo2.value;
     y += a * Math.sin(f) - pinch;

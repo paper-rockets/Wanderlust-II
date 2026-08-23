@@ -20,7 +20,7 @@ import { TimeOfDayExporter } from './environment/TimeOfDayExporter.js';
 import { LOW_GFX, TERRAIN_RES } from './config/constants.js';
 import { snoise } from './world/Noise.js';
 import { ZONES, WORLD_LENGTH, BLEND_WIDTH } from './world/BiomeManager.js';
-import { getBiomeAt, getWorldHeight, getWorldColor, getIslandData, biomeHeights, biomeScales, globalTerrainParams } from './world/TerrainGenerator.js';
+import { getBiomeAt, getWorldHeight, getWorldColor, getIslandData, biomeHeights, biomeScales, globalTerrainParams, setWorldOriginOffset, worldOriginOffset } from './world/TerrainGenerator.js';
 
     import * as THREE from 'three';
 
@@ -4336,11 +4336,39 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
     let lastAnimTime = performance.now();
     let smoothedDt = 0.0166;
 
+    function shiftInstancedMesh(mesh, count, shiftX, shiftZ) {
+        if (!mesh) return;
+        const dummy = new THREE.Object3D();
+        const actualCount = count || mesh.count;
+        for (let i = 0; i < actualCount; i++) {
+            mesh.getMatrixAt(i, dummy.matrix);
+            dummy.matrix.decompose(dummy.position, dummy.quaternion, dummy.scale);
+            dummy.position.x -= shiftX;
+            dummy.position.z -= shiftZ;
+            dummy.updateMatrix();
+            mesh.setMatrixAt(i, dummy.matrix);
+        }
+        mesh.instanceMatrix.needsUpdate = true;
+    }
+
+    function shiftAllInstances(shiftX, shiftZ) {
+        if (typeof instCrystals !== 'undefined') shiftInstancedMesh(instCrystals, typeof CRYSTAL_COUNT !== 'undefined' ? CRYSTAL_COUNT : instCrystals.count, shiftX, shiftZ);
+        if (typeof instIcebergs !== 'undefined') shiftInstancedMesh(instIcebergs, typeof ICEBERG_COUNT !== 'undefined' ? ICEBERG_COUNT : instIcebergs.count, shiftX, shiftZ);
+        if (typeof instClouds !== 'undefined') shiftInstancedMesh(instClouds, typeof MAX_CLOUD_COUNT !== 'undefined' ? MAX_CLOUD_COUNT : instClouds.count, shiftX, shiftZ);
+        if (typeof instHighClouds !== 'undefined') shiftInstancedMesh(instHighClouds, typeof MAX_HIGH_CLOUD_COUNT !== 'undefined' ? MAX_HIGH_CLOUD_COUNT : instHighClouds.count, shiftX, shiftZ);
+        if (typeof instWispyClouds !== 'undefined') shiftInstancedMesh(instWispyClouds, typeof MAX_WISPY_CLOUD_COUNT !== 'undefined' ? MAX_WISPY_CLOUD_COUNT : instWispyClouds.count, shiftX, shiftZ);
+        if (typeof instMegaClouds !== 'undefined') shiftInstancedMesh(instMegaClouds, typeof MAX_MEGA_CLOUD_COUNT !== 'undefined' ? MAX_MEGA_CLOUD_COUNT : instMegaClouds.count, shiftX, shiftZ);
+        if (typeof instRocks !== 'undefined') shiftInstancedMesh(instRocks, typeof ROCK_COUNT !== 'undefined' ? ROCK_COUNT : instRocks.count, shiftX, shiftZ);
+        if (typeof instBushes !== 'undefined') shiftInstancedMesh(instBushes, typeof BUSH_COUNT !== 'undefined' ? BUSH_COUNT : instBushes.count, shiftX, shiftZ);
+        if (typeof instFlowers !== 'undefined') shiftInstancedMesh(instFlowers, typeof FLOWER_COUNT !== 'undefined' ? FLOWER_COUNT : instFlowers.count, shiftX, shiftZ);
+        if (typeof instBirds !== 'undefined') shiftInstancedMesh(instBirds, typeof MAX_BIRD_COUNT !== 'undefined' ? MAX_BIRD_COUNT : instBirds.count, shiftX, shiftZ);
+        if (typeof instHighBirds !== 'undefined') shiftInstancedMesh(instHighBirds, typeof HIGH_BIRD_COUNT !== 'undefined' ? HIGH_BIRD_COUNT : instHighBirds.count, shiftX, shiftZ);
+        if (typeof instBillboardTrees !== 'undefined') shiftInstancedMesh(instBillboardTrees, instBillboardTrees.count, shiftX, shiftZ);
+        if (typeof instJungleBillboardTrees !== 'undefined') shiftInstancedMesh(instJungleBillboardTrees, instJungleBillboardTrees.count, shiftX, shiftZ);
+    }
 
     let playerPhysics;
     let cameraManager;
-    
-
 
     const _cachedWaterSunDir = new THREE.Vector3();
 
@@ -4360,10 +4388,11 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         lastAnimTime = nowAnimTime;
         adaptiveRes.sample(rawDt * 1000);
         if (rawDt > 0.1 || rawDt <= 0) rawDt = 0.0166;
-        smoothedDt = smoothedDt * 0.7 + rawDt * 0.3;
-        let dt = smoothedDt;
+        let dt = Math.min(rawDt, 0.066);
 
         const time = clock.getElapsedTime();
+        const SHADER_TIME_PERIOD = 3600.0;
+        const wrappedTime = time % SHADER_TIME_PERIOD;
 
         if (animeWaterSystem && animeWaterSystem.visible) {
             const activeCam = isGodMode ? godCamera : camera;
@@ -4372,18 +4401,18 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
                 _cachedWaterSunDir.copy(dirLight.position).sub(playerGrp.position).normalize();
                 _wsd = _cachedWaterSunDir;
             }
-            animeWaterSystem.update(dt, time, activeCam, playerGrp ? playerGrp.position : null, _wsd);
+            animeWaterSystem.update(dt, wrappedTime, activeCam, playerGrp ? playerGrp.position : null, _wsd);
         }
         // Advance the amortised terrain depth-field bake (no-op when idle)
         if (animeWaterSystem) animeWaterSystem.tickDepthField();
         if (typeof terrainUniforms !== 'undefined') {
-            terrainUniforms.uTime.value = time;
+            terrainUniforms.uTime.value = wrappedTime;
             if (typeof dirLight !== 'undefined') {
                 terrainUniforms.uSunDir.value.copy(dirLight.position).sub(playerGrp.position).normalize();
             }
         }
         if (skyUniforms) {
-            skyUniforms.uTime.value = time;
+            skyUniforms.uTime.value = wrappedTime;
             if (typeof dirLight !== 'undefined' && typeof playerGrp !== 'undefined') {
                 skyUniforms.uSunPosition.value.copy(dirLight.position).sub(playerGrp.position).normalize();
             }
@@ -4679,6 +4708,34 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         if (playerPhysics) {
             playerPhysics.update(dt, inputState, isBraking, isBoosting, isFlightPaused, treeGrid);
             
+            // Floating origin recentering system (threshold: 5,000 meters)
+            const distFromOrigin = Math.hypot(playerGrp.position.x, playerGrp.position.z);
+            if (distFromOrigin > 5000.0) {
+                const shiftX = playerGrp.position.x;
+                const shiftZ = playerGrp.position.z;
+                
+                // Recenter player & camera base
+                playerGrp.position.x = 0;
+                playerGrp.position.z = 0;
+                cameraBase.position.x = 0;
+                cameraBase.position.z = 0;
+                
+                // Shift terrain grid trackers and mesh
+                lastTerrainGridX -= shiftX;
+                lastTerrainGridZ -= shiftZ;
+                terrain.position.x -= shiftX;
+                terrain.position.z -= shiftZ;
+                
+                // Shift all active instanced diorama props and clouds
+                shiftAllInstances(shiftX, shiftZ);
+                
+                // Accumulate global world origin offset
+                setWorldOriginOffset(worldOriginOffset.x + shiftX, worldOriginOffset.y + shiftZ);
+                
+                // Regenerate terrain geometry at new local origin
+                updateTerrainGeometry(playerGrp.position.x, playerGrp.position.z);
+            }
+
             if (cameraManager) {
                 cameraManager.update(dt, playerGrp, playerPhysics.currentYaw, isBoosting, curWaterY);
             }

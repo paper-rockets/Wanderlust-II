@@ -41,37 +41,47 @@ export const globalTerrainParams = {
 const _tempC1 = new THREE.Color();
 const _tempC2 = new THREE.Color();
 
+export const worldOriginOffset = new THREE.Vector2(0, 0);
+
+export function setWorldOriginOffset(x, z) {
+    worldOriginOffset.set(x, z);
+}
+
 export function getBiomeAt(worldX, worldZ) {
-    const wz = wrapZ(worldZ);
+    const wz = wrapZ(worldZ + worldOriginOffset.y);
     const idx = zoneIdxAt(wz);
     return ZONES[idx] || ZONES[0];
 }
 
 export function getWorldHeight(worldX, worldZ) {
-    const wts = zoneWeights(worldZ);
+    const wx = worldX + worldOriginOffset.x;
+    const wz = worldZ + worldOriginOffset.y;
+    const wts = zoneWeights(wz);
     let h = 0;
     for (let i = 0; i < wts.length; i++) {
         const zn = ZONES[wts[i].idx];
         const scale = ((biomeScales[zn.name] !== undefined) ? biomeScales[zn.name] : 1.0) * globalTerrainParams.globalNoiseScale;
         const hMult = ((biomeHeights[zn.name] !== undefined) ? biomeHeights[zn.name] : 1.0) * globalTerrainParams.globalHeightMultiplier;
-        let rawH = zn.module.getHeight(worldX * scale, worldZ * scale, snoise);
-        if (zn.archT) rawH = zn.module.getHeight(worldX * scale, worldZ * scale, snoise, zn.archT(wts[i].t));
+        let rawH = zn.module.getHeight(wx * scale, wz * scale, snoise);
+        if (zn.archT) rawH = zn.module.getHeight(wx * scale, wz * scale, snoise, zn.archT(wts[i].t));
         h += (rawH * hMult) * wts[i].w;
     }
     return h;
 }
 
 export function getWorldColor(h, worldX, worldZ, targetColor) {
-    const wts = zoneWeights(worldZ);
+    const wx = worldX + worldOriginOffset.x;
+    const wz = worldZ + worldOriginOffset.y;
+    const wts = zoneWeights(wz);
     if (wts.length === 1) {
         const zn = ZONES[wts[0].idx];
-        zn.module.getColor(h, worldX, worldZ, snoise, targetColor, smoothstep);
+        zn.module.getColor(h, wx, wz, snoise, targetColor, smoothstep);
         return;
     }
     const zn1 = ZONES[wts[0].idx];
     const zn2 = ZONES[wts[1].idx];
-    zn1.module.getColor(h, worldX, worldZ, snoise, _tempC1, smoothstep);
-    zn2.module.getColor(h, worldX, worldZ, snoise, _tempC2, smoothstep);
+    zn1.module.getColor(h, wx, wz, snoise, _tempC1, smoothstep);
+    zn2.module.getColor(h, wx, wz, snoise, _tempC2, smoothstep);
     targetColor.copy(_tempC1).lerp(_tempC2, wts[1].w);
 }
 
