@@ -8,9 +8,10 @@ import {
 
 // 1. ISOTROPIC PROCEDURAL NOISE (TSL Implementation from 001)
 const hash2D = Fn(([p]) => {
+    const pMod = fract(p.div(256.0)).mul(256.0);
     const d = vec2(
-        dot(p, vec2(127.1, 311.7)),
-        dot(p, vec2(269.5, 183.3))
+        dot(pMod, vec2(127.1, 311.7)),
+        dot(pMod, vec2(269.5, 183.3))
     );
     return fract(sin(d).mul(float(43758.5453123)));
 });

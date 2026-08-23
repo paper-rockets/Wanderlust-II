@@ -93,15 +93,15 @@ console.error = function(...args) {
 
   
   <div id="top-bar" style="position: fixed; top: 16px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; z-index: 10; background: rgba(0,0,0,0.5); padding: 6px 12px; border-radius: 6px;">
-    <button id="pause-toggle" style="background: none; border: none; color: white; cursor: pointer; font-size: 16px; padding: 0;">⏸</button>
+    <button id="pause-toggle" style="background: none; border: none; color: white; cursor: pointer; font-size: 16px; padding: 0;">Pause</button>
     <div id="fps-counter" style="color: #fff; font-family: monospace; font-size: 13px; font-weight: bold; pointer-events: none;">0 FPS</div>
     <div id="biome-label" style="color: #ffe066; font-family: monospace; font-size: 13px; font-weight: bold; pointer-events: none; opacity: 0.9;"></div>
-    <button id="time-toggle" style="background: none; border: none; color: white; cursor: pointer; font-size: 16px; padding: 0;">☀️</button>
+    <button id="time-toggle" style="background: none; border: none; color: white; cursor: pointer; font-size: 16px; padding: 0;">Day</button>
   </div>
 
     <!-- Mini-map overlay -->
   <div id="world-map" style="position: fixed; bottom: 170px; left: 20px; z-index: 15; background: rgba(0,0,0,0.75); backdrop-filter: blur(8px); border-radius: 10px; padding: 10px; border: 1px solid rgba(255,255,255,0.25); width: 240px; box-sizing: border-box;">
-    <div style="color: #ffe066; font-family: monospace; font-size: 11px; font-weight: bold; margin-bottom: 6px; text-align: center;">🗺️ WORLD MAP & TERRAIN SIZES</div>
+    <div style="color: #ffe066; font-family: monospace; font-size: 11px; font-weight: bold; margin-bottom: 6px; text-align: center;">WORLD MAP & TERRAIN SIZES</div>
     <canvas id="map-canvas" width="220" height="45" style="display: block; border-radius: 6px; margin: 0 auto; border: 1px solid rgba(255,255,255,0.3);"></canvas>
     <div id="map-info-text" style="color: #ffffff; font-family: monospace; font-size: 10px; margin-top: 6px; opacity: 0.9; text-align: center; font-weight: bold;">Z: 0m / 72,000m</div>
   </div>
@@ -471,6 +471,7 @@ initMapUI();
     };
 
     const perfFolder = gui.addFolder('Performance');
+    perfFolder.close();
     perfFolder.add(params, 'quality', ['Regular', 'Low']).name('Quality').onChange(v => {
         localStorage.setItem('gfxQuality', v === 'Low' ? 'low' : 'regular');
         if (!isInitializingGui) location.reload();
@@ -522,6 +523,7 @@ initMapUI();
     
     // Add Navigation folder (Go To Biome)
     const navFolder = gui.addFolder('Navigation');
+    navFolder.close();
     const navParams = { biome: ZONES[0].name };
     navFolder.add(navParams, 'biome', ZONES.map(z => z.name)).name('Go To Biome').onChange(v => {
         const zn = ZONES.find(z => z.name === v);
@@ -533,17 +535,19 @@ initMapUI();
 
     // Add Editor folder (Terrain Editor & Edit Crystals)
     const editorFolder = gui.addFolder('Editor');
+    editorFolder.close();
     editorFolder.add({ openTerrainEditor: () => {
         const btn = document.getElementById('editor-toggle');
         if (btn) btn.click();
-    }}, 'openTerrainEditor').name('🛠️ Terrain Editor');
+    }}, 'openTerrainEditor').name('Terrain Editor');
     editorFolder.add({ openCrystalEditor: () => {
         const crystalEditor = document.getElementById('crystal-editor');
         if (crystalEditor) crystalEditor.style.display = crystalEditor.style.display === 'none' ? 'block' : 'none';
-    }}, 'openCrystalEditor').name('💎 Edit Crystals');
+    }}, 'openCrystalEditor').name('Edit Crystals');
 
     // Add Game folder
     const gameFolder = gui.addFolder('Game');
+    gameFolder.close();
         gameFolder.add(guiActions, 'switchModel').name('Switch Character');
     gameFolder.add(guiActions, 'toggleMusic').name('Toggle Music');
     gameFolder.add(guiActions, 'nextTrack').name('Next Track');
@@ -552,6 +556,7 @@ initMapUI();
     gameFolder.add(guiActions, 'fullscreen').name('Fullscreen');
 
     const envFolder = gui.addFolder('Environment');
+    envFolder.close();
     envFolder.add(params, 'wind').name('Wind').onChange(v => { if(isWindOn !== v) document.getElementById('wind-toggle').click(); });
     envFolder.add(params, 'rain').name('Rain').onChange(v => { isRainOn = v; if(typeof rainSystem !== 'undefined') rainSystem.visible = v; });
     envFolder.add(params, 'fogPlane').name('Ground Fog').onChange(v => { if(typeof window.fogGroup !== 'undefined') window.fogGroup.visible = v; });
@@ -3400,9 +3405,9 @@ initMapUI();
     if (timeToggleBtn) {
         timeToggleBtn.addEventListener('click', () => {
             timePhase = (timePhase + 1) % 3;
-            if (timePhase === 0) timeToggleBtn.innerText = '☀️';
-            else if (timePhase === 1) timeToggleBtn.innerText = '🌇';
-            else timeToggleBtn.innerText = '🌙';
+            if (timePhase === 0) timeToggleBtn.innerText = 'Day';
+            else if (timePhase === 1) timeToggleBtn.innerText = 'Dusk';
+            else timeToggleBtn.innerText = 'Night';
         });
     }
 
@@ -3787,7 +3792,8 @@ initMapUI();
             setTimeout(updateAtmoParamsFromPhase, 50);
         });
 
-        const atmoFolder = gui.addFolder('Atmosphere');
+        const atmoFolder = gui.addFolder('Atmosphere and Lighting');
+        atmoFolder.close();
         atmoFolder.addColor(atmoParams, 'skyColor').name('Sky Color').onChange(v => envConfigs[timePhase].bg = parseInt(v.replace('#',''), 16));
         atmoFolder.addColor(atmoParams, 'fogColor').name('Fog Color').onChange(v => envConfigs[timePhase].fog = parseInt(v.replace('#',''), 16));
         atmoFolder.addColor(atmoParams, 'ambColor').name('Ambient Light').onChange(v => envConfigs[timePhase].amb = parseInt(v.replace('#',''), 16));
@@ -3832,6 +3838,7 @@ initMapUI();
         }
 
         const cloudFolder = gui.addFolder('Cloud Editor');
+        cloudFolder.close();
         cloudFolder.addColor(cloudParams, 'c0').name('Color 1').onChange(v => updateCloudColorForIndex(0, v));
         cloudFolder.addColor(cloudParams, 'c1').name('Color 2').onChange(v => updateCloudColorForIndex(1, v));
         cloudFolder.addColor(cloudParams, 'c2').name('Color 3').onChange(v => updateCloudColorForIndex(2, v));
@@ -3867,6 +3874,7 @@ initMapUI();
         }
 
         const treeFolder = gui.addFolder('Tree Editor');
+        treeFolder.close();
         treeFolder.add(params, 'treeScale', 0.5, 4.0).name('Tree Scale').onChange(v => treeUniforms.uTreeScale.value = v);
         treeFolder.addColor(params, 'treeColor0').name('Color 1').onChange(v => updateTreeColorForIndex(0, v));
         treeFolder.addColor(params, 'treeColor1').name('Color 2').onChange(v => updateTreeColorForIndex(1, v));
@@ -3880,6 +3888,7 @@ initMapUI();
         // SYSTEM SETTINGS (SAVE/LOAD)
         // ==========================================
         const sysFolder = gui.addFolder('System Settings');
+        sysFolder.close();
         sysFolder.add({
             saveSettings: () => {
                 const data = gui.save();

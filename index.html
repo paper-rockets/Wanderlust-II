@@ -23,14 +23,15 @@
     #joystick-base {
       position: absolute; left: 40px; bottom: 40px;
       width: 100px; height: 100px; border-radius: 50%;
-      background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2);
+      background: rgba(255, 255, 255, 0.05); border: 1.5px dashed rgba(255, 255, 255, 0.15);
       pointer-events: auto;
+      opacity: 0.3 !important; /* Low opacity/see-through */
     }
     
     #joystick-knob {
       position: absolute; left: 50%; top: 50%;
       width: 40px; height: 40px; border-radius: 50%;
-      background: rgba(255, 255, 255, 0.3);
+      background: rgba(255, 255, 255, 0.2);
       transform: translate(-50%, -50%);
       pointer-events: none;
     }
@@ -38,17 +39,22 @@
     #boost-btn {
       position: fixed; right: 20px; bottom: 25px;
       width: 75px; height: 75px; border-radius: 50%;
-      color: white; font-weight: bold; font-size: 14px;
+      color: rgba(255, 255, 255, 0.4); font-weight: bold; font-size: 14px;
       display: flex; align-items: center; justify-content: center;
       user-select: none; pointer-events: auto;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-      background: rgba(30, 64, 175, 0.85); border: 2px solid rgba(96, 165, 250, 0.6);
+      box-shadow: none;
+      background: rgba(255, 255, 255, 0.05); border: 1.5px dashed rgba(255, 255, 255, 0.15);
       transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       z-index: 20;
+      opacity: 0.3 !important; /* Low opacity/see-through */
     }
 
     #touch-controls {
-      display: none !important;
+      display: none;
+    }
+    body.force-mobile #touch-controls,
+    .force-mobile #touch-controls {
+      display: block !important;
     }
     body.force-mobile #world-map,
     .force-mobile #world-map {
@@ -97,7 +103,60 @@
       user-select: none;
       pointer-events: none;
       line-height: 1;
+    }
+    .top-save-container {
+      position: relative;
       margin-right: auto;
+      pointer-events: auto;
+    }
+    #top-bar #top-save-setting-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(15, 20, 28, 0.94);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 8px;
+      padding: 4px 10px;
+      color: rgba(255, 255, 255, 0.92);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.4px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+      cursor: pointer;
+      pointer-events: auto;
+      user-select: none;
+      transition: all 0.2s ease;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+      line-height: 1;
+      white-space: nowrap;
+    }
+    #top-bar #top-save-setting-btn:hover {
+      background: rgba(30, 41, 59, 0.95);
+      border-color: rgba(56, 189, 248, 0.5);
+      color: #38bdf8;
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+    }
+    #top-bar #top-save-setting-btn:active {
+      transform: translateY(0px) scale(0.96);
+      background: rgba(15, 20, 28, 0.98);
+    }
+    .save-gui-menu.lil-gui.root {
+      position: fixed !important;
+      top: 58px !important;
+      left: 80px !important;
+      right: auto !important;
+      max-width: min(280px, 92vw) !important;
+      width: 250px !important;
+      max-height: calc(100vh - 78px) !important;
+      overflow-y: auto !important;
+      border-radius: 12px !important;
+      background: rgba(15, 20, 28, 0.96) !important;
+      border: 1px solid rgba(255, 255, 255, 0.15) !important;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6) !important;
+      z-index: 95 !important;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
     }
     #top-model-switcher {
       display: inline-flex;
@@ -155,19 +214,32 @@
     }
     @media (max-width: 600px) {
       .top-model-name { min-width: 44px !important; font-size: 11px !important; }
+      #top-bar #top-save-setting-btn { font-size: 11px !important; padding: 3px 6px !important; }
     }
-    #fps-counter {
-      color: rgba(255, 255, 255, 0.95);
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      font-size: 16px;
-      font-weight: 500;
-      letter-spacing: 0.5px;
-      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35), 0 0 8px rgba(0, 0, 0, 0.2);
-      user-select: none;
-      pointer-events: none;
-      line-height: 1;
+    
+    /* Avoid clipping in forced mobile viewport simulation */
+    body.force-mobile #top-bar,
+    .force-mobile #top-bar {
+      left: 10px;
+      right: 10px;
+      top: 10px;
+      gap: 6px;
     }
-    #top-bar button {
+    body.force-mobile #top-bar #top-save-setting-btn,
+    .force-mobile #top-bar #top-save-setting-btn {
+      font-size: 10px !important;
+      padding: 3px 5px !important;
+    }
+    body.force-mobile .top-model-name,
+    .force-mobile .top-model-name {
+      font-size: 10px !important;
+      min-width: 36px !important;
+    }
+    body.force-mobile #top-bar > button,
+    .force-mobile #top-bar > button {
+      font-size: 15px !important;
+    }
+    #top-bar > button {
       background: none;
       border: none;
       color: rgba(255, 255, 255, 0.95);
@@ -184,11 +256,11 @@
       -webkit-tap-highlight-color: transparent;
       outline: none;
     }
-    #top-bar button:hover {
+    #top-bar > button:hover {
       opacity: 1;
       transform: scale(1.08);
     }
-    #top-bar button:active { transform: scale(0.88); opacity: 0.7; }
+    #top-bar > button:active { transform: scale(0.88); opacity: 0.7; }
 
     /* lil-gui positioning below top bar */
     .lil-gui.root {
@@ -239,7 +311,10 @@ window.addEventListener("unhandledrejection", function(event) {
   <div id="app"></div>
 
   <div id="top-bar">
-    <div id="fps-counter">FPS 61</div>
+    <div id="fps-counter">FPS 60</div>
+    <div class="top-save-container">
+      <button id="top-save-setting-btn" title="Per-Biome & Global Saves" aria-label="Save Setting">Save Setting</button>
+    </div>
     <div id="top-model-switcher" title="Flight Model - Click arrows or name to switch">
       <button id="top-model-prev-btn" class="top-model-arrow" title="Previous Model [Shift+C]" aria-label="Previous Model">
         <svg width="8" height="10" viewBox="0 0 8 10" fill="currentColor"><polygon points="8,0 0,5 8,10"/></svg>

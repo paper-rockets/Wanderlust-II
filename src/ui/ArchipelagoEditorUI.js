@@ -270,6 +270,9 @@ export class ArchipelagoEditorUI {
 
         // Global hotkey Shift+A to toggle Archipelago Editor
         window.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) {
+                return;
+            }
             if (e.shiftKey && e.code === 'KeyA') {
                 this.toggle();
             }

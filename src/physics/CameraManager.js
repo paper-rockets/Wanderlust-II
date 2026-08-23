@@ -16,7 +16,8 @@ export class CameraManager {
         this.BASE_FOV = 60;
         this.cameraZoomDist = initialZoomDist;
         this.minTerrainClearance = 8.0;
-        this.minWaterClearance = 16.0; // Enforces minimum elevation above sea level
+        this.minWaterClearance = 32.0; // Enforces higher minimum elevation above sea level to prevent underwater camera
+        this.currentLiftY = 0.0;
     }
     
     update(delta, playerGrp, currentYaw, isBoosting, waterLevel = 2.4) {
@@ -38,21 +39,24 @@ export class CameraManager {
         this.cameraBase.quaternion.slerp(this.baseTargetQuat, decayCameraBaseQuat); 
         this.camera.quaternion.slerp(this.quatIdentity, decayCameraQuat);
         
-        // Single unified cameraBase tracking pass per frame (exponential lerp)
-        const decayCamPos = 1.0 - Math.exp(-22.0 * delta);
-        this.cameraBase.position.lerp(playerGrp.position, decayCamPos);
+        // Evaluate terrain/water clearance lift smoothly to prevent 1-frame snapping
+        this.updateLift(delta, playerGrp, waterLevel);
+
+        // Anchor camera base directly to player position plus smoothed clearance lift
+        this.cameraBase.position.set(
+            playerGrp.position.x,
+            playerGrp.position.y + this.currentLiftY,
+            playerGrp.position.z
+        );
         
         // Speed zoom effect
         this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, isBoosting ? this.BASE_FOV + 12 : this.BASE_FOV, 1.0 - Math.exp(-5.0 * delta));
         this.camera.up.set(0, 1, 0);
         this.camera.rotation.z = 0;
         this.camera.updateProjectionMatrix();
-
-        // Enforce terrain and water height constraints to prevent camera going underground or underwater
-        this.clampAboveTerrainAndWater(playerGrp, waterLevel);
     }
 
-    clampAboveTerrainAndWater(playerGrp, waterLevel = 2.4) {
+    updateLift(delta, playerGrp, waterLevel = 2.4) {
         this.camera.updateMatrixWorld(true);
         this.camera.getWorldPosition(_tempCamWorldPos);
 
@@ -85,12 +89,11 @@ export class CameraManager {
             }
         }
 
-        // 3. Lift cameraBase if camera is below minimum required height
-        if (_tempCamWorldPos.y < minRequiredCamY) {
-            const liftAmount = minRequiredCamY - _tempCamWorldPos.y;
-            this.cameraBase.position.y += liftAmount;
-            this.camera.updateMatrixWorld(true);
-        }
+        // 3. Smoothly lerp lift offset to eliminate 1-frame oscillation chatter
+        const baseCamY = playerGrp.position.y + this.camera.position.y;
+        const targetLift = Math.max(0, minRequiredCamY - baseCamY);
+        const decayLift = 1.0 - Math.exp(-8.0 * delta);
+        this.currentLiftY = THREE.MathUtils.lerp(this.currentLiftY, targetLift, decayLift);
     }
     
     setZoom(dist) {

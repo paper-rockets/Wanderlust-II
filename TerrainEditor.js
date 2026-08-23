@@ -187,10 +187,40 @@ export function initTerrainEditor(scene, camera, renderer, terrainMesh) {
     uploadLabel.appendChild(uploadInput);
     importSection.appendChild(uploadLabel);
 
+    // --- Stylized Trees Library ---
+    const stylizedTreesSection = document.createElement('div');
+    stylizedTreesSection.style.cssText = 'border-bottom:1px solid #444;padding-bottom:8px;';
+    stylizedTreesSection.innerHTML = '<div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px;">Stylized Trees</div>';
+    uiContainer.appendChild(stylizedTreesSection);
+
+    const stylizedTreeList = document.createElement('div');
+    stylizedTreeList.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;max-height:130px;overflow-y:auto;';
+    stylizedTreesSection.appendChild(stylizedTreeList);
+
+    const STYLIZED_TREE_MODELS = [
+        { name: 'Pine 01 (Med 6m)', file: 'pine_tree_01.glb' },
+        { name: 'Pine 02 (Full 6m)', file: 'pine_tree_02.glb' },
+        { name: 'Pine 03 (Dense 6m)', file: 'pine_tree_03.glb' },
+        { name: 'Pine 04 (Stylized 6m)', file: 'pine_tree_04.glb' },
+        { name: 'Pine 05 (Tall 9m)', file: 'pine_tree_05.glb' },
+        { name: 'Pine 06 (Ancient 11m)', file: 'pine_tree_06.glb' },
+        { name: 'Pine 07 (Small 3m)', file: 'pine_tree_07.glb' },
+        { name: 'Grove Cluster', file: 'pine_forest_cluster.glb' }
+    ];
+
+    STYLIZED_TREE_MODELS.forEach(t => {
+        const btn = document.createElement('button');
+        btn.innerText = t.name;
+        btn.title = t.file;
+        btn.style.cssText = btnStyle + btnBg + 'font-size:11px;padding:4px 8px;background:rgba(46,125,50,0.35);border:1px solid #2e7d32;';
+        btn.addEventListener('click', () => selectLibraryModel(t.file));
+        stylizedTreeList.appendChild(btn);
+    });
+
     // --- Model Library ---
     const libSection = document.createElement('div');
     libSection.style.cssText = 'border-bottom:1px solid #444;padding-bottom:8px;';
-    libSection.innerHTML = '<div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px;">Model Library</div>';
+    libSection.innerHTML = '<div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px;">Custom Model Library</div>';
     uiContainer.appendChild(libSection);
 
     const libList = document.createElement('div');
@@ -214,7 +244,7 @@ export function initTerrainEditor(scene, camera, renderer, terrainMesh) {
                 libList.innerHTML = '<span style="font-size:11px;color:#666;">No saved models yet</span>';
             }
         } catch (e) {
-            libList.innerHTML = '<span style="font-size:11px;color:#aa3333;">Editor server not running (port 9100)</span>';
+            libList.innerHTML = '<span style="font-size:11px;color:#888;">Local server optional</span>';
         }
     }
 
@@ -222,7 +252,7 @@ export function initTerrainEditor(scene, camera, renderer, terrainMesh) {
         if (modelTemplates[filename]) {
             activeModelScene = modelTemplates[filename];
             activeModelFilename = filename;
-            showToast(`Selected: ${filename}`);
+            showToast(`Selected: ${filename} (Click terrain to place)`);
             return;
         }
         try {
@@ -230,7 +260,7 @@ export function initTerrainEditor(scene, camera, renderer, terrainMesh) {
             modelTemplates[filename] = model;
             activeModelScene = model;
             activeModelFilename = filename;
-            showToast(`Loaded: ${filename}`);
+            showToast(`Loaded: ${filename} (Click terrain to place)`);
         } catch (e) {
             showToast(`Failed to load ${filename}`);
         }
@@ -238,9 +268,15 @@ export function initTerrainEditor(scene, camera, renderer, terrainMesh) {
 
     function loadModelFromServer(filename) {
         return new Promise((resolve, reject) => {
-            gltfLoader.load(EDITOR_SERVER + '/models/' + filename, (gltf) => {
+            const isTree = filename.startsWith('pine_');
+            const primaryUrl = isTree ? ('assets/models/trees/' + filename) : (EDITOR_SERVER + '/models/' + filename);
+            gltfLoader.load(primaryUrl, (gltf) => {
                 resolve(gltf.scene);
-            }, undefined, reject);
+            }, undefined, (err) => {
+                gltfLoader.load('assets/models/trees/' + filename, (gltf2) => {
+                    resolve(gltf2.scene);
+                }, undefined, reject);
+            });
         });
     }
 

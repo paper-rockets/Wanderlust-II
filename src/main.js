@@ -20,7 +20,7 @@ import { TimeOfDayExporter } from './environment/TimeOfDayExporter.js';
 import { LOW_GFX, TERRAIN_RES } from './config/constants.js';
 import { snoise } from './world/Noise.js';
 import { ZONES, WORLD_LENGTH, BLEND_WIDTH } from './world/BiomeManager.js';
-import { getBiomeAt, getWorldHeight, getWorldColor, getIslandData, biomeHeights, biomeScales, globalTerrainParams } from './world/TerrainGenerator.js';
+import { getBiomeAt, getWorldHeight, getWorldColor, getIslandData, biomeHeights, biomeScales, globalTerrainParams, biomeWaterHeights, getWorldWaterHeight, worldOriginOffset, setWorldOriginOffset } from './world/TerrainGenerator.js';
 
     import * as THREE from 'three';
 
@@ -32,7 +32,7 @@ import { setupGodMode, toggleGodMode, updateGodMode } from './physics/GodMode.js
 
 
 import { MeshToonNodeMaterial, MeshStandardNodeMaterial, MeshBasicNodeMaterial, PointsNodeMaterial } from 'three/webgpu';
-import { uniform, texture, Fn, positionLocal, abs, positionGeometry, sin, step, positionWorld, normalWorld, cameraPosition, float, vec2, vec3, vec4, dot, fract, mix, pow, clamp, normalize, smoothstep as tslSmoothstep, attribute } from 'three/tsl';
+import { uniform, texture, Fn, positionLocal, abs, positionGeometry, sin, step, positionWorld, normalWorld, cameraPosition, float, vec2, vec3, vec4, dot, fract, mix, pow, clamp, normalize, smoothstep as tslSmoothstep, attribute, mod } from 'three/tsl';
 import { scene, camera, renderer, clock, applyRenderBudget } from './core/Engine.js';
 import { deviceTier, tierSettings, budgetedPixelRatio, AdaptiveResolution, describeTier } from './core/DeviceTier.js';
 import { StylizedPineSystem } from './entities/StylizedPineSystem.js';
@@ -63,7 +63,7 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
     // Wait for WebGPU Backend to initialize before doing ANY graph or material allocations
     await renderer.init();
 
-    const BASE_URL = import.meta.env.BASE_URL || './';
+    const BASE_URL = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.BASE_URL) ? import.meta.env.BASE_URL : './';
     function resolveAssetUrl(p) {
         if (!p) return p;
         if (p.startsWith('http://') || p.startsWith('https://') || p.startsWith('data:') || p.startsWith('blob:')) return p;
@@ -100,6 +100,7 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
     let waterEditorFolder = null;
     let globalWaterParam = { waterHeight: 2.4 };
     let waterHeightController = null;
+    let globalWaterHeightOffset = 0.0;
     let stdFolder = null;
     let terrainRes = TERRAIN_RES;
     let playerGrp;
@@ -364,6 +365,8 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
     let presetDropdownControllers = [];
 
     const gui = new GUI({ title: 'Controls & Settings' });
+    gui.domElement.id = 'main-settings-gui';
+    gui.domElement.classList.add('main-settings-gui');
     const origGuiOpen = gui.open.bind(gui);
     gui.open = function(t = true) {
         if (this.$children) this.$children.style.height = '';
@@ -583,13 +586,148 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
 
     let timeOfDayExporter = null;
 
+    function downloadPresetFile(data, filename) {
+        try {
+            const jsonStr = JSON.stringify(data, null, 2);
+            const blob = new Blob([jsonStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        } catch (err) {
+            console.error('Failed to download save file to disk:', err);
+        }
+    }
+
+    function applyPresetData(p) {
+        if (!p) return;
+        if (p.envConfigs && Array.isArray(p.envConfigs) && typeof envConfigs !== 'undefined') {
+            for (let i = 0; i < p.envConfigs.length; i++) {
+                if (envConfigs[i]) Object.assign(envConfigs[i], p.envConfigs[i]);
+            }
+        }
+        if (p.timePhase !== undefined) {
+            if (typeof window.setTimePhase === 'function') {
+                window.setTimePhase(p.timePhase);
+            } else if (typeof setTimePhase === 'function') {
+                setTimePhase(p.timePhase);
+            } else {
+                timePhase = p.timePhase;
+            }
+            if (typeof updateAtmoParamsFromPhase === 'function') updateAtmoParamsFromPhase();
+        }
+        if (p.params) {
+            Object.assign(params, p.params);
+        }
+        if (p.cloudParams && typeof cloudParams !== 'undefined') {
+            Object.assign(cloudParams, p.cloudParams);
+        }
+        if (p.biomeFogSettings && window.biomeFogSettings) {
+            Object.assign(window.biomeFogSettings, p.biomeFogSettings);
+        }
+        if (p.biomeSkyConfigs && window.BIOME_SKY_CONFIGS) {
+            Object.assign(window.BIOME_SKY_CONFIGS, p.biomeSkyConfigs);
+        }
+        if (p.modelId && typeof flightModelManager !== 'undefined' && flightModelManager) {
+            flightModelManager.setModelById(p.modelId);
+        }
+        if (p.guiData && gui) {
+            gui.load(p.guiData);
+        }
+        if (gui) {
+            gui.controllersRecursive().forEach(c => c.updateDisplay && c.updateDisplay());
+        }
+        if (p.name) {
+            const saved = JSON.parse(localStorage.getItem('wl_custom_presets') || '{}');
+            saved[p.name] = p;
+            localStorage.setItem('wl_custom_presets', JSON.stringify(saved));
+            settingsManager.loadPreset = p.name;
+            updateAllPresetDropdowns(p.name);
+        }
+        showVisualToast(`Loaded Save File: ${p.name || 'Preset'}`);
+    }
+
+    function handlePresetFile(file) {
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = JSON.parse(e.target.result);
+                if (data.params || data.guiData || data.timePhase !== undefined) {
+                    applyPresetData(data);
+                } else if (data.customPresets) {
+                    localStorage.setItem('wl_custom_presets', JSON.stringify(data.customPresets));
+                    updateAllPresetDropdowns();
+                    if (data.params) Object.assign(params, data.params);
+                    if (data.timePhase !== undefined && typeof window.setTimePhase === 'function') window.setTimePhase(data.timePhase);
+                    showVisualToast('Restored Backup from File');
+                } else if (typeof data === 'object') {
+                    const cur = JSON.parse(localStorage.getItem('wl_custom_presets') || '{}');
+                    Object.assign(cur, data);
+                    localStorage.setItem('wl_custom_presets', JSON.stringify(cur));
+                    updateAllPresetDropdowns();
+                    const firstKey = Object.keys(data)[0];
+                    if (firstKey) settingsManager.loadSetting(firstKey);
+                    showVisualToast('Imported Presets from File');
+                }
+            } catch (err) {
+                alert('Invalid JSON Save File: ' + err.message);
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    let fileInput = document.getElementById('wl-preset-file-loader');
+    if (!fileInput) {
+        fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.id = 'wl-preset-file-loader';
+        fileInput.accept = '.json,application/json';
+        fileInput.style.display = 'none';
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files && e.target.files.length > 0) {
+                handlePresetFile(e.target.files[0]);
+                fileInput.value = '';
+            }
+        });
+        document.body.appendChild(fileInput);
+    }
+
+    window.addEventListener('dragover', (e) => {
+        e.preventDefault();
+    });
+    window.addEventListener('drop', (e) => {
+        e.preventDefault();
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            const file = e.dataTransfer.files[0];
+            if (file.name.endsWith('.json') || file.type === 'application/json') {
+                handlePresetFile(file);
+            }
+        }
+    });
+
     const settingsManager = {
         presetName: 'My Dusk Look 1',
         loadPreset: 'Golden Hour Dusk (Default)',
+        loadFromFile: () => { if (fileInput) fileInput.click(); },
         saveSetting: (customName) => {
-            const name = (typeof customName === 'string' && customName.trim())
+            const saved = JSON.parse(localStorage.getItem('wl_custom_presets') || '{}');
+            let name = (typeof customName === 'string' && customName.trim())
                 ? customName.trim()
-                : (settingsManager.presetName.trim() || `Look ${new Date().toLocaleTimeString()}`);
+                : '';
+
+            if (!name) {
+                const phaseStr = (typeof timePhase !== 'undefined' && timePhase === 0) ? 'Day' : ((typeof timePhase !== 'undefined' && timePhase === 2) ? 'Night' : 'Dusk');
+                let idx = 1;
+                while (saved[`Preset ${idx} (${phaseStr})`] || saved[`Preset ${idx}`]) {
+                    idx++;
+                }
+                name = `Preset ${idx} (${phaseStr})`;
+            }
 
             const currentGuiData = gui ? gui.save() : null;
             const currentEnvConfigs = (typeof envConfigs !== 'undefined') ? JSON.parse(JSON.stringify(envConfigs)) : null;
@@ -598,9 +736,18 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
                 if (typeof params[k] !== 'function') currentParams[k] = params[k];
             }
             const currentCloudParams = (typeof cloudParams !== 'undefined') ? JSON.parse(JSON.stringify(cloudParams)) : null;
+            const currentBiomeFogSettings = window.biomeFogSettings ? JSON.parse(JSON.stringify(window.biomeFogSettings)) : null;
+            const currentBiomeSkyConfigs = window.BIOME_SKY_CONFIGS ? JSON.parse(JSON.stringify(window.BIOME_SKY_CONFIGS)) : null;
             const currentModelId = (typeof flightModelManager !== 'undefined' && flightModelManager)
                 ? (flightModelManager.getCurrentConfig()?.id || 'mitsubishi_b2m2')
                 : 'kiki';
+
+            const d = new Date();
+            const pad = (n) => String(n).padStart(2, '0');
+            const dateStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+            const timeStr = `${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
+            const cleanName = name.replace(/[^a-zA-Z0-9_-]/g, '_');
+            const filename = `wanderlust_preset_${cleanName}_${dateStr}_${timeStr}.json`;
 
             const presetData = {
                 name: name,
@@ -609,16 +756,24 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
                 envConfigs: currentEnvConfigs,
                 params: currentParams,
                 cloudParams: currentCloudParams,
+                biomeFogSettings: currentBiomeFogSettings,
+                biomeSkyConfigs: currentBiomeSkyConfigs,
                 modelId: currentModelId,
-                timestamp: Date.now()
+                timestamp: d.getTime(),
+                date: dateStr,
+                time: `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
             };
 
-            const saved = JSON.parse(localStorage.getItem('wl_custom_presets') || '{}');
             saved[name] = presetData;
             localStorage.setItem('wl_custom_presets', JSON.stringify(saved));
             settingsManager.loadPreset = name;
             updateAllPresetDropdowns(name);
-            showVisualToast(`Saved Preset: ${name}`);
+
+            // Auto-save file to disk
+            downloadPresetFile(presetData, filename);
+
+            showVisualToast(`Saved Preset & File: ${filename}`);
+            return name;
         },
         loadSetting: (presetName) => {
             const target = presetName || settingsManager.loadPreset;
@@ -666,6 +821,12 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
                 }
                 if (p.cloudParams && typeof cloudParams !== 'undefined') {
                     Object.assign(cloudParams, p.cloudParams);
+                }
+                if (p.biomeFogSettings && window.biomeFogSettings) {
+                    Object.assign(window.biomeFogSettings, p.biomeFogSettings);
+                }
+                if (p.biomeSkyConfigs && window.BIOME_SKY_CONFIGS) {
+                    Object.assign(window.BIOME_SKY_CONFIGS, p.biomeSkyConfigs);
                 }
                 if (p.modelId && typeof flightModelManager !== 'undefined' && flightModelManager) {
                     flightModelManager.setModelById(p.modelId);
@@ -734,6 +895,9 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
             if (input && timeOfDayExporter) timeOfDayExporter.importSettings(input);
         }
     };
+
+    window.settingsManager = settingsManager;
+    window.saveSetting = (name) => settingsManager.saveSetting(name);
 
     let isUpdatingPresetDropdown = false;
     function updateAllPresetDropdowns(selectedName) {
@@ -863,6 +1027,11 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         lastDepthFieldGridZ = -999999;
     });
     waterHeightController = terrainTuningFolder.add(globalWaterParam, 'waterHeight', -20.0, 50.0, 0.1).name('Water Height').onChange(v => {
+        const playerX = (typeof playerGrp !== 'undefined' && playerGrp && playerGrp.position) ? playerGrp.position.x : 0;
+        const playerZ = (typeof playerGrp !== 'undefined' && playerGrp && playerGrp.position) ? playerGrp.position.z : 0;
+        const currentTarget = getWorldWaterHeight(playerX, playerZ);
+        globalWaterHeightOffset = v - currentTarget;
+
         if (animeWaterSystem) {
             animeWaterSystem.setHeight(v);
         }
@@ -874,6 +1043,7 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
 
     const heightSubFolder = terrainTuningFolder.addFolder('Height Multipliers');
     const scaleSubFolder = terrainTuningFolder.addFolder('Noise Scale Factors');
+    const waterSubFolder = terrainTuningFolder.addFolder('Water Heights');
 
     const biomesList = ['Archipelago', 'Ghibli Land', 'Misty Mountains', 'Lush Jungle', 'Crystal Land', 'Magical Sanctuary', 'Desert Dunes', 'North Pole'];
     biomesList.forEach(bName => {
@@ -893,10 +1063,33 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
                 lastDepthFieldGridZ = -999999;
             });
         }
+        if (biomeWaterHeights[bName] !== undefined) {
+            waterSubFolder.add(biomeWaterHeights, bName, -20.0, 50.0, 0.1).name(bName).onChange(() => {
+                lastTerrainGridX = -999999;
+                lastTerrainGridZ = -999999;
+                lastDepthFieldGridX = -999999;
+                lastDepthFieldGridZ = -999999;
+            });
+        }
     });
 
     // Add Editor folder (Edit Crystals, Tree Editor, Custom Models)
     const editorFolder = gui.addFolder('Editor');
+    editorFolder.add({ togglePlacementEditor: () => {
+        if (typeof window.toggleTerrainEditor === 'function') {
+            window.toggleTerrainEditor();
+        }
+    }}, 'togglePlacementEditor').name('Model & Tree Placement Editor');
+
+    editorFolder.add({ teleportToForest: () => {
+        if (typeof teleportToBiome === 'function') {
+            teleportToBiome('Ghibli Land');
+        } else if (playerGrp) {
+            playerGrp.position.set(0, 45, 18000);
+        }
+        if (window.stylizedTrees) window.stylizedTrees.respawn();
+    }}, 'teleportToForest').name('Teleport to Forest');
+
     editorFolder.add({ openCrystalEditor: () => {
         const crystalEditor = document.getElementById('crystal-editor');
         if (crystalEditor) crystalEditor.style.display = crystalEditor.style.display === 'none' ? 'block' : 'none';
@@ -1086,7 +1279,7 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         minElevation: 4.0,
         maxElevation: 85.0,
         windSway: 1.0,
-        preset: 'spring',
+        preset: 'auto',
         leafBottom: 0x1c3b23,
         leafTop: 0x5c8338,
         leafVarColor: 0x1e4430,
@@ -1117,7 +1310,7 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
     stylizedTreeFolder.add(pineParams, 'windSway', 0.0, 3.0, 0.05).name('Wind Sway').onChange(v => {
         if (_pines()) _pines().uWindStrength.value = v;
     });
-    stylizedTreeFolder.add(pineParams, 'preset', ['spring', 'autumn']).name('Season Preset').onChange(v => {
+    stylizedTreeFolder.add(pineParams, 'preset', ['auto', 'spring', 'autumn', 'winter']).name('Season Preset').onChange(v => {
         if (_pines()) _pines().setPreset(v);
     });
     stylizedTreeFolder.add({ respawn: _respawnPines }, 'respawn').name('Respawn Trees');
@@ -1387,7 +1580,7 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
     }
 
     function toggleGUI(show) {
-        const guiEl = document.querySelector('.lil-gui.root') || (gui && gui.domElement);
+        const guiEl = (gui && gui.domElement) || document.getElementById('main-settings-gui');
         if (!guiEl) return;
         
         const isDisplayNone = guiEl.style.display === 'none' || (typeof window !== 'undefined' && window.getComputedStyle(guiEl).display === 'none');
@@ -2411,11 +2604,20 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
             
             const aRand = attribute('aRand', 'float');
 
+            // Animating falling rain in local space on GPU
+            const fallY = uTime.mul(float(90.0).add(aRand.mul(30.0))).mul(uIntensity);
+            const wrappedY = mod(positionLocal.y.sub(fallY), 100.0);
+            const driftX = uTime.mul(uWind.x).mul(15.0);
+            const driftZ = uTime.mul(uWind.y).mul(15.0);
+            const wrappedX = mod(positionLocal.x.add(driftX).add(150.0), 300.0).sub(150.0);
+            const wrappedZ = mod(positionLocal.z.add(driftZ).add(150.0), 300.0).sub(150.0);
+
             const material = new PointsNodeMaterial({
                 transparent: true,
                 depthWrite: false,
-                colorNode: vec4(0.4, 0.5, 0.7, uIntensity.mul(0.6)),
-                sizeNode: uSize.mul(aRand.mul(0.5).add(0.5))
+                colorNode: vec4(0.5, 0.6, 0.85, uIntensity.mul(0.65)),
+                sizeNode: uSize.mul(aRand.mul(0.4).add(0.6)),
+                positionNode: vec3(wrappedX, wrappedY, wrappedZ)
             });
 
             this.mesh = new THREE.Points(geometry, material);
@@ -2427,6 +2629,9 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         update(time, cam, params) {
             this.mesh.visible = params.rain;
             if (!params.rain) return;
+            this.mesh.position.copy(cam.position);
+            this.mesh.position.y -= 30.0; // Offset downward to keep camera inside the 0-100 fall box
+            
             this.uniforms.uTime.value = time;
             this.uniforms.uCamPos.value.copy(cam.position);
             this.uniforms.uSize.value = params.rainSize || 2.0;
@@ -2522,7 +2727,81 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
     window.fogGroup = fogGroup;
     window.fogUniforms = fogUniforms;
     window.fogMat = fogMat;
-    window.biomeFogSettings = {};
+    
+    window.BIOME_SKY_CONFIGS = BIOME_SKY_CONFIGS;
+    window.ORIGINAL_BIOME_SKY_CONFIGS = JSON.parse(JSON.stringify(BIOME_SKY_CONFIGS));
+    
+    // Load custom biome settings from localStorage
+    try {
+        const savedSky = localStorage.getItem('wanderlust_biome_sky_configs');
+        if (savedSky) {
+            const parsed = JSON.parse(savedSky);
+            for (let k in parsed) {
+                if (BIOME_SKY_CONFIGS[k]) {
+                    Object.assign(BIOME_SKY_CONFIGS[k], parsed[k]);
+                } else {
+                    BIOME_SKY_CONFIGS[k] = parsed[k];
+                }
+            }
+        }
+    } catch(e) {
+        console.error('Failed to load wanderlust_biome_sky_configs', e);
+    }
+
+    try {
+        const savedFog = localStorage.getItem('wanderlust_biome_fog_settings');
+        window.biomeFogSettings = savedFog ? JSON.parse(savedFog) : {};
+    } catch(e) {
+        window.biomeFogSettings = {};
+    }
+
+    // Ensure all clean keys map to the same config objects in BIOME_SKY_CONFIGS
+    Object.keys(BIOME_SKY_CONFIGS).forEach(k => {
+        const cleanK = k.replace(/[^\w\s]/gi, '').trim();
+        if (cleanK !== k) {
+            BIOME_SKY_CONFIGS[cleanK] = BIOME_SKY_CONFIGS[k];
+        }
+    });
+
+    window.saveBiomeSettings = (biomeName) => {
+        if (!biomeName) return;
+        localStorage.setItem('wanderlust_biome_fog_settings', JSON.stringify(window.biomeFogSettings || {}));
+        localStorage.setItem('wanderlust_biome_sky_configs', JSON.stringify(BIOME_SKY_CONFIGS));
+        showVisualToast(`Saved settings for ${biomeName}`);
+    };
+
+    window.resetBiomeSettings = (biomeName) => {
+        if (!biomeName) return;
+        const cleanName = biomeName.replace(/[^\w\s]/gi, '').trim().toLowerCase();
+        
+        // Reset fog setting
+        if (window.biomeFogSettings) {
+            delete window.biomeFogSettings[biomeName];
+            for (let k in window.biomeFogSettings) {
+                if (k.replace(/[^\w\s]/gi, '').trim().toLowerCase() === cleanName) {
+                    delete window.biomeFogSettings[k];
+                }
+            }
+        }
+        
+        // Reset sky config to original
+        for (let key in window.ORIGINAL_BIOME_SKY_CONFIGS) {
+            const cleanKey = key.replace(/[^\w\s]/gi, '').trim().toLowerCase();
+            if (cleanKey === cleanName) {
+                if (BIOME_SKY_CONFIGS[key]) {
+                    Object.assign(BIOME_SKY_CONFIGS[key], window.ORIGINAL_BIOME_SKY_CONFIGS[key]);
+                }
+                const cleanActualKey = key.replace(/[^\w\s]/gi, '').trim();
+                if (BIOME_SKY_CONFIGS[cleanActualKey]) {
+                    Object.assign(BIOME_SKY_CONFIGS[cleanActualKey], window.ORIGINAL_BIOME_SKY_CONFIGS[key]);
+                }
+            }
+        }
+        
+        localStorage.setItem('wanderlust_biome_fog_settings', JSON.stringify(window.biomeFogSettings || {}));
+        localStorage.setItem('wanderlust_biome_sky_configs', JSON.stringify(BIOME_SKY_CONFIGS));
+        showVisualToast(`Reset settings for ${biomeName}`);
+    };
 
     window.getBiomeAt = getBiomeAt;
     const groundFogEditor = new GroundFogEditor();
@@ -2661,23 +2940,26 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
     scene.add(proceduralSkyMesh);
 
     // ==========================================
-    // MILKY WAY NIGHT SKY (photographic cubemap from LEGACY/galactic-home)
-    // Real full-sky Milky Way panorama, extracted from galactic-home. It overlays the
-    // procedural night dome and fades in ONLY at night. Its opacity is driven by
-    // skyUniforms.uNightFactor, which is exactly 0.0 at Day and Dusk, so the locked
-    // Golden Hour Dusk look is provably untouched (neutral value at dusk).
+    // MILKY WAY NIGHT SKY (photographic equirectangular panorama)
+    // Overlays the procedural night dome, fades in ONLY at night.
+    // Opacity driven by uNightFactor — exactly 0.0 at Day and Dusk.
     // ==========================================
-    const uMilkyWayOpacity = uniform(0.0);
-    const uMilkyWayBrightness = uniform(1.5);
+    const uMilkyWayOpacity    = uniform(0.0);
+    const uMilkyWayBrightness = uniform(2.0);
+    const uMilkyWayContrast   = uniform(1.0);  // 1.0 = neutral, >1 = more contrast
+    const uMilkyWayHue        = uniform(0.0);  // degrees, -180 to 180
+    const uMilkyWaySat        = uniform(1.0);  // 0 = greyscale, 1 = natural, 2 = vivid
     let milkyWayMesh = null;
-    // Live-tunable so the look can be perfected from the GUI (Environment > Moonlight & Night
-    // > Milky Way Photo). Configured to produce a dramatic diagonal galactic arc across the night sky.
+    let milkyWayReady = false;
     const milkyWayParams = {
-        brightness: 1.5,   // multiplies texture colour naturally
-        opacity: 1.0,      // max blend at full night
-        tiltX: 0,          // degrees — positions galactic core at optimal elevation
-        tiltY: -25,        // degrees — swings the core across the diagonal view
-        tiltZ: 18          // degrees — diagonal lean matching starry night photography
+        brightness: 2.0,
+        opacity:    1.0,
+        contrast:   1.0,
+        hue:        0.0,
+        saturation: 1.0,
+        tiltX: 0,
+        tiltY: 90,
+        tiltZ: 23
     };
     const applyMilkyWayTilt = () => {
         if (!milkyWayMesh) return;
@@ -2688,33 +2970,77 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         );
     };
     try {
-        // Equirectangular Milky Way panorama (built from the galactic-home cubemap). Using a
-        // single 2D texture on a sphere — the same proven setup as the procedural sky dome —
-        // instead of a samplerCube node, which dropped the WebGPU device on this renderer.
-        const mwTex = new THREE.TextureLoader().load('assets/skybox/milkyway_equirect.png');
-        mwTex.colorSpace = THREE.SRGBColorSpace;
-        mwTex.anisotropy = 4;
-
+        // Use 4K JPEG (1.4 MB) — small enough to not stall WebGPU on first render.
+        // JPEG has no alpha channel so read .rgb only.
+        // Mesh starts invisible and is only shown after the onLoad callback fires.
+        const mwLoader = new THREE.TextureLoader();
+        const mwTex = mwLoader.load(
+            'assets/skybox/milkyway_equirect.jpg',
+            (tex) => {
+                tex.colorSpace = THREE.SRGBColorSpace;
+                tex.anisotropy = Math.min(4, renderer.capabilities ? renderer.capabilities.getMaxAnisotropy() : 4);
+                tex.needsUpdate = true;
+                milkyWayReady = true;
+                console.log('[MilkyWay] texture loaded OK');
+            },
+            undefined,
+            (err) => console.warn('[MilkyWay] texture failed:', err)
+        );
         const mwMat = new MeshBasicNodeMaterial({
             side: THREE.BackSide,
             depthWrite: false,
+            depthTest: false,
             transparent: true,
             fog: false,
-            // Additive: the panorama's near-black sky adds nothing, so the procedural starfield
-            // underneath stays visible — we only ADD the Milky Way band/glow on top of it.
-            // depthTest=true (default) ensures it doesn't bleed through the water surface.
             blending: THREE.AdditiveBlending
         });
-        // Standard sphere UVs map the equirect panorama seamlessly.
+
+        // --- TSL color processing chain ---
+        // 1. Sample raw texture RGB
         const mwSample = texture(mwTex);
-        const mwRaw = mwSample.rgb.mul(mwSample.a);
-        mwMat.colorNode = mwRaw.mul(uMilkyWayBrightness);
+        const mwRaw = mwSample.rgb;
+
+        // 2. Brightness
+        const mwBright = mwRaw.mul(uMilkyWayBrightness);
+
+        // 3. Contrast  (pivot around 0.5)
+        const mwContrasted = mwBright.sub(0.5).mul(uMilkyWayContrast).add(0.5);
+
+        // 4. Saturation  (blend towards luminance)
+        const mwLum = dot(mwContrasted, vec3(0.2126, 0.7152, 0.0722));
+        const mwSatOut = mix(vec3(mwLum), mwContrasted, uMilkyWaySat);
+
+        // 5. Hue rotation using RGB->HSL->RGB in TSL
+        //    Hue is supplied in degrees; convert to [0,1] and do the standard rotation matrix.
+        //    k = hue/360 kept in [0,1] range for the formula below.
+        const mwHueFrac = uMilkyWayHue.div(360.0);
+        // Rodrigues-style hue rotation in linear RGB space:
+        //   out = col * cos(a) + cross(axis, col) * sin(a) + axis * dot(axis, col) * (1-cos(a))
+        // where axis = normalize(1,1,1)/sqrt(3)
+        // Pre-baked scalar coefficients for cos(a) and sin(a) computed via uniforms:
+        const mwCosH = uMilkyWayHue.mul(Math.PI / 180.0).cos();
+        const mwSinH = uMilkyWayHue.mul(Math.PI / 180.0).sin();
+        const w = float(0.57735); // 1/sqrt(3)
+        // dot(axis, col) * (1 - cos)
+        const d = dot(mwSatOut, vec3(w, w, w)).mul(float(1.0).sub(mwCosH));
+        // cross(axis, col) * sin
+        const cx = mwSatOut.y.sub(mwSatOut.z).mul(w).mul(mwSinH);
+        const cy = mwSatOut.z.sub(mwSatOut.x).mul(w).mul(mwSinH);
+        const cz = mwSatOut.x.sub(mwSatOut.y).mul(w).mul(mwSinH);
+        const mwHued = vec3(
+            mwSatOut.x.mul(mwCosH).add(cx).add(d),
+            mwSatOut.y.mul(mwCosH).add(cy).add(d),
+            mwSatOut.z.mul(mwCosH).add(cz).add(d)
+        );
+
+        mwMat.colorNode = clamp(mwHued, 0.0, 10.0);
         mwMat.opacityNode = uMilkyWayOpacity;
 
         const mwGeo = new THREE.SphereGeometry(16000, 64, 32);
         milkyWayMesh = new THREE.Mesh(mwGeo, mwMat);
-        milkyWayMesh.renderOrder = -999; // just after the procedural dome (-1000), before terrain
+        milkyWayMesh.renderOrder = -999;
         milkyWayMesh.frustumCulled = false;
+        milkyWayMesh.visible = false;
         applyMilkyWayTilt();
         scene.add(milkyWayMesh);
     } catch (e) {
@@ -3378,11 +3704,12 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
             const isFreeCam = (window.editorState && window.editorState.isEditorMode) || isGodMode;
             const focusX = isFreeCam ? (isGodMode ? godCamera.position.x : camera.position.x) : playerX;
             const focusZ = isFreeCam ? (isGodMode ? godCamera.position.z : camera.position.z) : playerZ;
+            const activeCam = isFreeCam ? (isGodMode ? godCamera : camera) : camera;
             
-            // Stylized Pine Biome Trees: deterministic cell-hash placement, 3 LOD bands.
-            // Runs on the same focus point as the player/camera so editor/God-mode freecam works.
+            // Stylized Pine Biome Trees: natural clusters + accents, multi-point cliff exclusion,
+            // active camera frustum culling, and 3 LOD bands.
             if (stylizedTrees && stylizedTrees.ready) {
-                stylizedTrees.update(focusX, focusZ);
+                stylizedTrees.update(focusX, focusZ, activeCam);
             }
 
         } // End of shouldUpdateTerrain block
@@ -3474,6 +3801,7 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
     // ==========================================
     const stylizedTrees = new StylizedPineSystem({
         scene,
+        camera,
         gltfLoader,
         resolveAssetUrl,
         uTime: terrainUniforms.uTime,
@@ -3671,6 +3999,167 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
             e.stopPropagation();
             if (typeof flightModelManager !== 'undefined' && flightModelManager) {
                 flightModelManager.nextModel();
+            }
+        });
+    }
+
+    function getActiveBiomeNameSafe() {
+        if (typeof playerGrp !== 'undefined' && playerGrp.position && typeof getBiomeAt === 'function') {
+            const b = getBiomeAt(playerGrp.position.x, playerGrp.position.z);
+            return b ? b.name : 'Unknown Biome';
+        }
+        return 'Unknown Biome';
+    }
+
+    function saveActiveBiomeToDisk() {
+        const bName = getActiveBiomeNameSafe();
+        if (!bName || bName === 'Unknown Biome') {
+            showVisualToast('Cannot save: unknown biome');
+            return;
+        }
+        if (typeof window.saveBiomeSettings === 'function') {
+            window.saveBiomeSettings(bName);
+        }
+        const d = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        const dateStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+        const timeStr = `${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
+        const cleanBName = bName.replace(/[^a-zA-Z0-9_-]/g, '_');
+        const filename = `wanderlust_biome_${cleanBName}_${dateStr}_${timeStr}.json`;
+
+        const biomeData = {
+            type: 'biome_save',
+            biome: bName,
+            fog: window.biomeFogSettings ? window.biomeFogSettings[bName] : null,
+            sky: window.BIOME_SKY_CONFIGS ? window.BIOME_SKY_CONFIGS[bName] : null,
+            timestamp: d.getTime(),
+            date: dateStr,
+            time: `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+        };
+        downloadPresetFile(biomeData, filename);
+        showVisualToast(`Saved Biome to Disk: ${filename}`);
+    }
+
+    function saveAllBiomesToDisk() {
+        localStorage.setItem('wanderlust_biome_fog_settings', JSON.stringify(window.biomeFogSettings || {}));
+        localStorage.setItem('wanderlust_biome_sky_configs', JSON.stringify(BIOME_SKY_CONFIGS || {}));
+
+        const d = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        const dateStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+        const timeStr = `${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
+        const filename = `wanderlust_all_biomes_${dateStr}_${timeStr}.json`;
+
+        const allBiomesData = {
+            type: 'all_biomes_save',
+            biomeFogSettings: window.biomeFogSettings || {},
+            biomeSkyConfigs: BIOME_SKY_CONFIGS || {},
+            timestamp: d.getTime(),
+            date: dateStr,
+            time: `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+        };
+        downloadPresetFile(allBiomesData, filename);
+        showVisualToast(`Saved All Biomes to Disk: ${filename}`);
+    }
+
+    window.saveActiveBiomeToDisk = saveActiveBiomeToDisk;
+    window.saveAllBiomesToDisk = saveAllBiomesToDisk;
+
+    const saveGui = new GUI({
+        title: 'Per-Biome Saves',
+        autoPlace: false,
+        width: 250
+    });
+    document.body.appendChild(saveGui.domElement);
+    saveGui.domElement.classList.add('save-gui-menu');
+    saveGui.domElement.id = 'top-save-menu';
+    saveGui.domElement.style.display = 'none';
+
+    function positionSaveGui() {
+        const btn = document.getElementById('top-save-setting-btn');
+        if (btn && saveGui && saveGui.domElement) {
+            const rect = btn.getBoundingClientRect();
+            saveGui.domElement.style.left = `${Math.max(10, Math.round(rect.left))}px`;
+            saveGui.domElement.style.top = `${Math.round(rect.bottom + 8)}px`;
+        }
+    }
+    window.addEventListener('resize', positionSaveGui);
+
+    const saveActions = {
+        saveActive: () => {
+            saveActiveBiomeToDisk();
+            saveGui.domElement.style.display = 'none';
+        },
+        resetActive: () => {
+            const bName = getActiveBiomeNameSafe();
+            if (bName && bName !== 'Unknown Biome' && typeof window.resetBiomeSettings === 'function') {
+                window.resetBiomeSettings(bName);
+            } else {
+                showVisualToast('Cannot reset: unknown biome');
+            }
+            saveGui.domElement.style.display = 'none';
+        },
+        saveAll: () => {
+            saveAllBiomesToDisk();
+            saveGui.domElement.style.display = 'none';
+        },
+        resetAll: () => {
+            if (confirm('Are you sure you want to reset all biome settings to default?')) {
+                localStorage.removeItem('wanderlust_biome_fog_settings');
+                localStorage.removeItem('wanderlust_biome_sky_configs');
+                window.biomeFogSettings = {};
+                if (window.ORIGINAL_BIOME_SKY_CONFIGS) {
+                    for (let key in window.ORIGINAL_BIOME_SKY_CONFIGS) {
+                        if (BIOME_SKY_CONFIGS[key]) {
+                            Object.assign(BIOME_SKY_CONFIGS[key], window.ORIGINAL_BIOME_SKY_CONFIGS[key]);
+                        }
+                        const cleanK = key.replace(/[^\w\s]/gi, '').trim();
+                        if (BIOME_SKY_CONFIGS[cleanK]) {
+                            Object.assign(BIOME_SKY_CONFIGS[cleanK], window.ORIGINAL_BIOME_SKY_CONFIGS[key]);
+                        }
+                    }
+                }
+                showVisualToast('Reset all biomes to defaults');
+                if (gui) gui.controllersRecursive().forEach(c => c.updateDisplay && c.updateDisplay());
+            }
+            saveGui.domElement.style.display = 'none';
+        },
+        saveGlobal: () => {
+            settingsManager.saveSetting();
+            saveGui.domElement.style.display = 'none';
+        },
+        loadFile: () => {
+            settingsManager.loadFromFile();
+            saveGui.domElement.style.display = 'none';
+        }
+    };
+
+    saveGui.add(saveActions, 'saveActive').name('Save Current Biome');
+    saveGui.add(saveActions, 'resetActive').name('Reset Current Biome');
+    saveGui.add(saveActions, 'saveAll').name('Save All Biomes');
+    saveGui.add(saveActions, 'resetAll').name('Reset All Biomes');
+
+    const globalFolder = saveGui.addFolder('Global Scene Saves');
+    globalFolder.add(saveActions, 'saveGlobal').name('Save Global Preset');
+    globalFolder.add(saveActions, 'loadFile').name('Load File from Disk');
+    globalFolder.open();
+
+    const topSaveBtn = document.getElementById('top-save-setting-btn');
+    if (topSaveBtn) {
+        topSaveBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = saveGui.domElement.style.display !== 'none';
+            if (isOpen) {
+                saveGui.domElement.style.display = 'none';
+            } else {
+                positionSaveGui();
+                saveGui.domElement.style.display = '';
+            }
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('#top-save-setting-btn') && !e.target.closest('.save-gui-menu')) {
+                saveGui.domElement.style.display = 'none';
             }
         });
     }
@@ -4114,9 +4603,14 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
                          window.innerWidth <= 1024;
 
     if (joyBase) {
-        joyBase.style.display = 'none';
-        joyBase.style.opacity = '0';
-        joyBase.style.pointerEvents = 'none';
+        if (isMobileMode) {
+            joyBase.style.display = 'block';
+            joyBase.style.pointerEvents = 'auto';
+        } else {
+            joyBase.style.display = 'none';
+            joyBase.style.opacity = '0';
+            joyBase.style.pointerEvents = 'none';
+        }
     }
 
     let initialPinchDist = null;
@@ -4149,6 +4643,20 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
     }
 
     window.addEventListener('touchstart', e => {
+        // If they touch the left half of the screen, automatically reposition the joystick base under their finger
+        if (isMobileMode && e.touches.length === 1 && e.changedTouches[0].clientX < window.innerWidth / 2) {
+            const touch = e.changedTouches[0];
+            activeTouchId = touch.identifier;
+            if (joyBase) {
+                joyBase.style.left = `${touch.clientX - 50}px`;
+                joyBase.style.bottom = 'auto';
+                joyBase.style.top = `${touch.clientY - 50}px`;
+            }
+            updateJoystick(touch);
+            e.preventDefault();
+            return;
+        }
+
         if (e.target.tagName !== 'CANVAS' && e.target !== joyBase && e.target !== joyKnob) return;
         e.preventDefault();
 
@@ -4197,8 +4705,15 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         touchState.x = 0; touchState.y = 0;
         if (joyKnob) joyKnob.style.transform = `translate(-50%, -50%)`;
         if (joyBase) {
-            joyBase.style.opacity = '0';
-            joyBase.style.display = 'none';
+            if (!isMobileMode) {
+                joyBase.style.opacity = '0';
+                joyBase.style.display = 'none';
+            } else {
+                // Revert to default bottom-left placement on finger lift
+                joyBase.style.left = '40px';
+                joyBase.style.top = 'auto';
+                joyBase.style.bottom = '40px';
+            }
         }
     };
 
@@ -4336,11 +4851,39 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
     let lastAnimTime = performance.now();
     let smoothedDt = 0.0166;
 
+    function shiftInstancedMesh(mesh, count, shiftX, shiftZ) {
+        if (!mesh) return;
+        const dummy = new THREE.Object3D();
+        const actualCount = count || mesh.count;
+        for (let i = 0; i < actualCount; i++) {
+            mesh.getMatrixAt(i, dummy.matrix);
+            dummy.matrix.decompose(dummy.position, dummy.quaternion, dummy.scale);
+            dummy.position.x -= shiftX;
+            dummy.position.z -= shiftZ;
+            dummy.updateMatrix();
+            mesh.setMatrixAt(i, dummy.matrix);
+        }
+        mesh.instanceMatrix.needsUpdate = true;
+    }
+
+    function shiftAllInstances(shiftX, shiftZ) {
+        if (typeof instCrystals !== 'undefined') shiftInstancedMesh(instCrystals, typeof CRYSTAL_COUNT !== 'undefined' ? CRYSTAL_COUNT : instCrystals.count, shiftX, shiftZ);
+        if (typeof instIcebergs !== 'undefined') shiftInstancedMesh(instIcebergs, typeof ICEBERG_COUNT !== 'undefined' ? ICEBERG_COUNT : instIcebergs.count, shiftX, shiftZ);
+        if (typeof instClouds !== 'undefined') shiftInstancedMesh(instClouds, typeof MAX_CLOUD_COUNT !== 'undefined' ? MAX_CLOUD_COUNT : instClouds.count, shiftX, shiftZ);
+        if (typeof instHighClouds !== 'undefined') shiftInstancedMesh(instHighClouds, typeof MAX_HIGH_CLOUD_COUNT !== 'undefined' ? MAX_HIGH_CLOUD_COUNT : instHighClouds.count, shiftX, shiftZ);
+        if (typeof instWispyClouds !== 'undefined') shiftInstancedMesh(instWispyClouds, typeof MAX_WISPY_CLOUD_COUNT !== 'undefined' ? MAX_WISPY_CLOUD_COUNT : instWispyClouds.count, shiftX, shiftZ);
+        if (typeof instMegaClouds !== 'undefined') shiftInstancedMesh(instMegaClouds, typeof MAX_MEGA_CLOUD_COUNT !== 'undefined' ? MAX_MEGA_CLOUD_COUNT : instMegaClouds.count, shiftX, shiftZ);
+        if (typeof instRocks !== 'undefined') shiftInstancedMesh(instRocks, typeof ROCK_COUNT !== 'undefined' ? ROCK_COUNT : instRocks.count, shiftX, shiftZ);
+        if (typeof instBushes !== 'undefined') shiftInstancedMesh(instBushes, typeof BUSH_COUNT !== 'undefined' ? BUSH_COUNT : instBushes.count, shiftX, shiftZ);
+        if (typeof instFlowers !== 'undefined') shiftInstancedMesh(instFlowers, typeof FLOWER_COUNT !== 'undefined' ? FLOWER_COUNT : instFlowers.count, shiftX, shiftZ);
+        if (typeof instBirds !== 'undefined') shiftInstancedMesh(instBirds, typeof MAX_BIRD_COUNT !== 'undefined' ? MAX_BIRD_COUNT : instBirds.count, shiftX, shiftZ);
+        if (typeof instHighBirds !== 'undefined') shiftInstancedMesh(instHighBirds, typeof HIGH_BIRD_COUNT !== 'undefined' ? HIGH_BIRD_COUNT : instHighBirds.count, shiftX, shiftZ);
+        if (typeof instBillboardTrees !== 'undefined') shiftInstancedMesh(instBillboardTrees, instBillboardTrees.count, shiftX, shiftZ);
+        if (typeof instJungleBillboardTrees !== 'undefined') shiftInstancedMesh(instJungleBillboardTrees, instJungleBillboardTrees.count, shiftX, shiftZ);
+    }
 
     let playerPhysics;
     let cameraManager;
-    
-
 
     const _cachedWaterSunDir = new THREE.Vector3();
 
@@ -4364,6 +4907,8 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         let dt = smoothedDt;
 
         const time = clock.getElapsedTime();
+        const SHADER_TIME_PERIOD = 3600.0;
+        const wrappedTime = time % SHADER_TIME_PERIOD;
 
         if (animeWaterSystem && animeWaterSystem.visible) {
             const activeCam = isGodMode ? godCamera : camera;
@@ -4372,18 +4917,18 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
                 _cachedWaterSunDir.copy(dirLight.position).sub(playerGrp.position).normalize();
                 _wsd = _cachedWaterSunDir;
             }
-            animeWaterSystem.update(dt, time, activeCam, playerGrp ? playerGrp.position : null, _wsd);
+            animeWaterSystem.update(dt, wrappedTime, activeCam, playerGrp ? playerGrp.position : null, _wsd);
         }
         // Advance the amortised terrain depth-field bake (no-op when idle)
         if (animeWaterSystem) animeWaterSystem.tickDepthField();
         if (typeof terrainUniforms !== 'undefined') {
-            terrainUniforms.uTime.value = time;
+            terrainUniforms.uTime.value = wrappedTime;
             if (typeof dirLight !== 'undefined') {
                 terrainUniforms.uSunDir.value.copy(dirLight.position).sub(playerGrp.position).normalize();
             }
         }
         if (skyUniforms) {
-            skyUniforms.uTime.value = time;
+            skyUniforms.uTime.value = wrappedTime;
             if (typeof dirLight !== 'undefined' && typeof playerGrp !== 'undefined') {
                 skyUniforms.uSunPosition.value.copy(dirLight.position).sub(playerGrp.position).normalize();
             }
@@ -4398,7 +4943,7 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         if (window.groundFogEditor && typeof playerGrp !== 'undefined' && playerGrp.position) {
             window.groundFogEditor.updateFrame(dt, timePhase);
             if (typeof window.fogUniforms !== 'undefined' && window.fogGroup) {
-                window.fogUniforms.uTime.value = time;
+                window.fogUniforms.uTime.value = wrappedTime;
                 const currentB = getBiomeAt(playerGrp.position.x, playerGrp.position.z);
                 const bName = currentB ? currentB.name : 'Archipelago';
                 const cleanB = cleanBiomeName(bName);
@@ -4453,7 +4998,11 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         if (scene.background && scene.background.isColor) {
             scene.background.lerp(tempColorTarget.setHex(target.bg), decayEnv);
         }
-        scene.fog.color.lerp(tempColorTarget.setHex(target.fog), decayEnv);
+        if (skyUniforms && skyUniforms.uSkyColorHorizon) {
+            scene.fog.color.copy(skyUniforms.uSkyColorHorizon.value);
+        } else {
+            scene.fog.color.lerp(tempColorTarget.setHex(target.fog), decayEnv);
+        }
         
         ambientLight.color.lerp(tempColorTarget.setHex(target.amb), decayEnv);
         ambientLight.intensity += (target.ambI - ambientLight.intensity) * decayEnv;
@@ -4496,14 +5045,18 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
 
             // Milky Way night skybox — fade in with night, keep centred on the camera.
             // Driven off uNightFactor so it is fully invisible at Dusk (dusk look untouched).
-            if (milkyWayMesh) {
-                uMilkyWayOpacity.value = skyUniforms.uNightFactor.value * milkyWayParams.opacity;
+            if (milkyWayMesh && milkyWayReady) {
+                uMilkyWayOpacity.value    = skyUniforms.uNightFactor.value * milkyWayParams.opacity;
                 uMilkyWayBrightness.value = milkyWayParams.brightness;
+                uMilkyWayContrast.value   = milkyWayParams.contrast;
+                uMilkyWayHue.value        = milkyWayParams.hue;
+                uMilkyWaySat.value        = milkyWayParams.saturation;
                 milkyWayMesh.visible = uMilkyWayOpacity.value > 0.01;
                 const activeCam = isGodMode ? godCamera : camera;
                 activeCam.getWorldPosition(tempVec1);
                 milkyWayMesh.position.copy(tempVec1);
             }
+
             if (auroraMesh) {
                 const nightF = skyUniforms.uNightFactor.value;
                 uAuroraTime.value += dt * auroraParams.speed;
@@ -4670,7 +5223,17 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
             right: keys.d || touchState.x > 0.1
         };
 
-        const curWaterY = (animeWaterSystem && animeWaterSystem.waterLevel !== undefined) ? animeWaterSystem.waterLevel : 2.4;
+        let curWaterY = 2.4;
+        if (animeWaterSystem) {
+            const playerX = (typeof playerGrp !== 'undefined' && playerGrp && playerGrp.position) ? playerGrp.position.x : 0;
+            const playerZ = (typeof playerGrp !== 'undefined' && playerGrp && playerGrp.position) ? playerGrp.position.z : 0;
+            const targetWaterY = getWorldWaterHeight(playerX, playerZ) + globalWaterHeightOffset;
+            const currentWaterY = animeWaterSystem.waterLevel;
+            curWaterY = currentWaterY + (targetWaterY - currentWaterY) * Math.min(1.0, dt * 5.0);
+            animeWaterSystem.setHeight(curWaterY);
+            globalWaterParam.waterHeight = curWaterY;
+            if (waterHeightController) waterHeightController.updateDisplay();
+        }
 
         if (isGodMode && godControls) {
             updateGodMode(dt, keys, godControls, godCamera, curWaterY);
@@ -4679,6 +5242,34 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         if (playerPhysics) {
             playerPhysics.update(dt, inputState, isBraking, isBoosting, isFlightPaused, treeGrid);
             
+            // Floating origin recentering system (threshold: 5,000 meters)
+            const distFromOrigin = Math.hypot(playerGrp.position.x, playerGrp.position.z);
+            if (distFromOrigin > 5000.0) {
+                const shiftX = playerGrp.position.x;
+                const shiftZ = playerGrp.position.z;
+                
+                // Recenter player & camera base
+                playerGrp.position.x = 0;
+                playerGrp.position.z = 0;
+                cameraBase.position.x = 0;
+                cameraBase.position.z = 0;
+                
+                // Shift terrain grid trackers and mesh
+                lastTerrainGridX -= shiftX;
+                lastTerrainGridZ -= shiftZ;
+                terrain.position.x -= shiftX;
+                terrain.position.z -= shiftZ;
+                
+                // Shift all active instanced diorama props and clouds
+                shiftAllInstances(shiftX, shiftZ);
+                
+                // Accumulate global world origin offset
+                setWorldOriginOffset(worldOriginOffset.x + shiftX, worldOriginOffset.y + shiftZ);
+                
+                // Regenerate terrain geometry at new local origin
+                updateTerrainGeometry(playerGrp.position.x, playerGrp.position.z);
+            }
+
             if (cameraManager) {
                 cameraManager.update(dt, playerGrp, playerPhysics.currentYaw, isBoosting, curWaterY);
             }
@@ -5619,8 +6210,11 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         // so none of these controls can touch the locked Golden Hour Dusk look.
         if (typeof milkyWayParams !== 'undefined') {
             const mwPhoto = moonFolder.addFolder('Milky Way Photo');
-            mwPhoto.add(milkyWayParams, 'brightness', 0.0, 4.0, 0.05).name('Brightness');
-            mwPhoto.add(milkyWayParams, 'opacity', 0.0, 1.0, 0.05).name('Opacity');
+            mwPhoto.add(milkyWayParams, 'brightness',  0.0, 6.0, 0.05).name('Brightness');
+            mwPhoto.add(milkyWayParams, 'opacity',     0.0, 1.0, 0.05).name('Opacity');
+            mwPhoto.add(milkyWayParams, 'contrast',    0.0, 4.0, 0.05).name('Contrast');
+            mwPhoto.add(milkyWayParams, 'saturation',  0.0, 3.0, 0.05).name('Saturation');
+            mwPhoto.add(milkyWayParams, 'hue',       -180,  180,   1 ).name('Hue Shift (deg)');
             mwPhoto.add(milkyWayParams, 'tiltX', -180, 180, 1).name('Elevation (tip up/down)').onChange(applyMilkyWayTilt);
             mwPhoto.add(milkyWayParams, 'tiltY', -180, 180, 1).name('Azimuth (spin L/R)').onChange(applyMilkyWayTilt);
             mwPhoto.add(milkyWayParams, 'tiltZ', -180, 180, 1).name('Roll').onChange(applyMilkyWayTilt);
@@ -6173,6 +6767,10 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         presetsFolder.add({
             loadSelected: () => settingsManager.loadSetting()
         }, 'loadSelected').name('Load Selected Preset');
+
+        presetsFolder.add({
+            loadSaveFile: () => settingsManager.loadFromFile()
+        }, 'loadSaveFile').name('Load Save File from Disk (.json)');
         
         presetsFolder.add({
             deleteSelected: () => settingsManager.deleteSetting()
@@ -6219,9 +6817,69 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
 
         updateAllPresetDropdowns('Golden Hour Dusk (Default)');
 
+        // 13. Per-Biome Saves Folder
+        const biomeSavesFolder = gui.addFolder('Per-Biome Saves');
+        const getActiveBiomeName = () => {
+            if (typeof playerGrp !== 'undefined' && playerGrp.position) {
+                const b = getBiomeAt(playerGrp.position.x, playerGrp.position.z);
+                return b ? b.name : 'Unknown Biome';
+            }
+            return 'Unknown Biome';
+        };
+
+        biomeSavesFolder.add({
+            saveActive: () => {
+                const bName = getActiveBiomeName();
+                if (bName && bName !== 'Unknown Biome') {
+                    window.saveBiomeSettings(bName);
+                } else {
+                    showVisualToast('Cannot save: unknown biome');
+                }
+            }
+        }, 'saveActive').name('Save Current Biome');
+
+        biomeSavesFolder.add({
+            resetActive: () => {
+                const bName = getActiveBiomeName();
+                if (bName && bName !== 'Unknown Biome') {
+                    window.resetBiomeSettings(bName);
+                } else {
+                    showVisualToast('Cannot reset: unknown biome');
+                }
+            }
+        }, 'resetActive').name('Reset Current Biome');
+
+        biomeSavesFolder.add({
+            saveAll: () => {
+                localStorage.setItem('wanderlust_biome_fog_settings', JSON.stringify(window.biomeFogSettings || {}));
+                localStorage.setItem('wanderlust_biome_sky_configs', JSON.stringify(BIOME_SKY_CONFIGS));
+                showVisualToast('Saved all biome settings');
+            }
+        }, 'saveAll').name('Save All Biomes');
+
+        biomeSavesFolder.add({
+            resetAll: () => {
+                if (confirm('Are you sure you want to reset all biome settings to default?')) {
+                    localStorage.removeItem('wanderlust_biome_fog_settings');
+                    localStorage.removeItem('wanderlust_biome_sky_configs');
+                    window.biomeFogSettings = {};
+                    for (let key in window.ORIGINAL_BIOME_SKY_CONFIGS) {
+                        if (BIOME_SKY_CONFIGS[key]) {
+                            Object.assign(BIOME_SKY_CONFIGS[key], window.ORIGINAL_BIOME_SKY_CONFIGS[key]);
+                        }
+                        const cleanK = key.replace(/[^\w\s]/gi, '').trim();
+                        if (BIOME_SKY_CONFIGS[cleanK]) {
+                            Object.assign(BIOME_SKY_CONFIGS[cleanK], window.ORIGINAL_BIOME_SKY_CONFIGS[key]);
+                        }
+                    }
+                    showVisualToast('Reset all biomes to defaults');
+                }
+            }
+        }, 'resetAll').name('Reset All Biomes');
+
         // Reorder folders: most-used first
         const folderOrder = [
-            flightFolder, editorFolder, audioFolder, debugFolder, navFolder, perfFolder, envFolder, presetsFolder
+            flightFolder, editorFolder, audioFolder, debugFolder, navFolder, perfFolder, envFolder, presetsFolder, biomeSavesFolder
         ].filter(Boolean);
         const guiContainer = gui.$children || gui.domElement.querySelector('.children') || gui.domElement;
         folderOrder.forEach(f => {
@@ -6240,6 +6898,18 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
             }
         }
         // ---------------------------
+
+        // Load saved flight settings (disabled to match V1)
+        /*
+        try {
+            const savedSettings = localStorage.getItem('flightSettings');
+            if (savedSettings) {
+                gui.load(JSON.parse(savedSettings));
+            }
+        } catch (e) {
+            console.error('Failed to load flightSettings', e);
+        }
+        */
 
         isInitializingGui = false;
 

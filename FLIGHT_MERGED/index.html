@@ -99,18 +99,18 @@ console.error = function(...args) {
 
   
   <div id="top-bar" style="position: fixed; top: 16px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; z-index: 10; background: rgba(0,0,0,0.5); padding: 6px 12px; border-radius: 6px;">
-    <button id="pause-toggle" style="background: none; border: none; color: white; cursor: pointer; font-size: 16px; padding: 0;">⏸</button>
+    <button id="pause-toggle" style="background: none; border: none; color: white; cursor: pointer; font-size: 16px; padding: 0;">Pause</button>
     <div id="fps-counter" style="color: #fff; font-family: monospace; font-size: 13px; font-weight: bold; pointer-events: none;">0 FPS</div>
     <div id="biome-label" style="color: #ffe066; font-family: monospace; font-size: 13px; font-weight: bold; pointer-events: none; opacity: 0.9;"></div>
-    <button id="time-toggle" style="background: none; border: none; color: white; cursor: pointer; font-size: 16px; padding: 0;">☀️</button>
-    <button id="gui-toggle-btn" style="background: rgba(255,255,255,0.25); border: 1px solid rgba(255,255,255,0.5); color: white; cursor: pointer; font-size: 12px; font-weight: bold; padding: 3px 8px; border-radius: 4px; margin-left: 6px;">⚙️ Settings (H)</button>
+    <button id="time-toggle" style="background: none; border: none; color: white; cursor: pointer; font-size: 16px; padding: 0;">Day</button>
+    <button id="gui-toggle-btn" style="background: rgba(255,255,255,0.25); border: 1px solid rgba(255,255,255,0.5); color: white; cursor: pointer; font-size: 12px; font-weight: bold; padding: 3px 8px; border-radius: 4px; margin-left: 6px;">Settings (H)</button>
   </div>
 
   <!-- Mini-map overlay -->
   <div id="world-map" style="position: fixed; bottom: 20px; left: 20px; z-index: 15; background: rgba(0,0,0,0.85); backdrop-filter: blur(10px); border-radius: 12px; padding: 14px; border: 1px solid rgba(255,255,255,0.3); width: 380px; box-sizing: border-box; box-shadow: 0 8px 32px rgba(0,0,0,0.5);">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-      <div style="color: #ffe066; font-family: monospace; font-size: 12px; font-weight: bold; letter-spacing: 0.5px;">🗺️ WORLD MAP & TERRAIN SIZES</div>
-      <button id="close-map-btn" style="background: rgba(255,255,255,0.15); border: none; color: #ff6666; font-family: monospace; font-size: 13px; font-weight: bold; cursor: pointer; padding: 2px 7px; border-radius: 4px; line-height: 1;" title="Hide Map">✖</button>
+      <div style="color: #ffe066; font-family: monospace; font-size: 12px; font-weight: bold; letter-spacing: 0.5px;">WORLD MAP & TERRAIN SIZES</div>
+      <button id="close-map-btn" style="background: rgba(255,255,255,0.15); border: none; color: #ff6666; font-family: monospace; font-size: 13px; font-weight: bold; cursor: pointer; padding: 2px 7px; border-radius: 4px; line-height: 1;" title="Hide Map">X</button>
     </div>
     <canvas id="map-canvas" width="350" height="60" style="display: block; border-radius: 8px; margin: 0 auto; border: 1px solid rgba(255,255,255,0.35);"></canvas>
     <div id="map-info-text" style="color: #ffffff; font-family: monospace; font-size: 11px; margin-top: 8px; opacity: 0.95; text-align: center; font-weight: bold;">Z: 0m / 54,000m</div>
@@ -500,6 +500,7 @@ initMapUI();
     };
 
     const perfFolder = gui.addFolder('Performance');
+    perfFolder.close();
     perfFolder.add(params, 'quality', ['Regular', 'Low']).name('Quality').onChange(v => {
         localStorage.setItem('gfxQuality', v === 'Low' ? 'low' : 'regular');
         if (!isInitializingGui) location.reload();
@@ -508,7 +509,7 @@ initMapUI();
         isHD = v;
         renderer.setPixelRatio(isHD ? Math.min(window.devicePixelRatio, 2) : 0.5);
     });
-    perfFolder.add(params, 'exposure', 0.5, 4.0, 0.1).name('☀️ Global Brightness').onChange(v => {
+    perfFolder.add(params, 'exposure', 0.5, 4.0, 0.1).name('Global Brightness').onChange(v => {
         renderer.toneMappingExposure = v;
     });
     perfFolder.add(params, 'terrainRes', ['256', '128', '64']).name('Terrain Res').onChange(v => {
@@ -554,6 +555,7 @@ initMapUI();
     
     // Add Navigation folder (Go To Biome)
     const navFolder = gui.addFolder('Navigation');
+    navFolder.close();
     const navParams = { biome: ZONES[0].name };
     navFolder.add(navParams, 'biome', ZONES.map(z => z.name)).name('Go To Biome').onChange(v => {
         const zn = ZONES.find(z => z.name === v);
@@ -565,17 +567,19 @@ initMapUI();
 
     // Add Editor folder (Terrain Editor & Edit Crystals)
     const editorFolder = gui.addFolder('Editor');
+    editorFolder.close();
     editorFolder.add({ openTerrainEditor: () => {
         const btn = document.getElementById('editor-toggle');
         if (btn) btn.click();
-    }}, 'openTerrainEditor').name('🛠️ Terrain Editor');
+    }}, 'openTerrainEditor').name('Terrain Editor');
     editorFolder.add({ openCrystalEditor: () => {
         const crystalEditor = document.getElementById('crystal-editor');
         if (crystalEditor) crystalEditor.style.display = crystalEditor.style.display === 'none' ? 'block' : 'none';
-    }}, 'openCrystalEditor').name('💎 Edit Crystals');
+    }}, 'openCrystalEditor').name('Edit Crystals');
 
     // Add Game folder
     const gameFolder = gui.addFolder('Game');
+    gameFolder.close();
         gameFolder.add(guiActions, 'switchModel').name('Switch Character');
     gameFolder.add(guiActions, 'toggleMusic').name('Toggle Music');
     gameFolder.add(guiActions, 'nextTrack').name('Next Track');
@@ -584,6 +588,7 @@ initMapUI();
     gameFolder.add(guiActions, 'fullscreen').name('Fullscreen');
 
     const envFolder = gui.addFolder('Environment');
+    envFolder.close();
     envFolder.add(params, 'wind').name('Wind').onChange(v => { if(isWindOn !== v) document.getElementById('wind-toggle').click(); });
     envFolder.add(params, 'rain').name('Rain').onChange(v => { isRainOn = v; if(typeof rainSystem !== 'undefined') rainSystem.visible = v; });
     envFolder.add(params, 'fogPlane').name('Ground Fog').onChange(v => { if(typeof window.fogGroup !== 'undefined') window.fogGroup.visible = v; });
@@ -591,7 +596,8 @@ initMapUI();
     envFolder.add(params, 'godRayIntensity', 0, 2, 0.05).name('Ray Intensity').onChange(v => { godRaysPass.uniforms.uIntensity.value = v; });
     envFolder.add(params, 'trails').name('Wind Trails').onChange(v => isWindTrailsOn = v);
 
-    const debugFolder = gui.addFolder('🔧 Debug Render');
+    const debugFolder = gui.addFolder('Debug Render');
+    debugFolder.close();
     debugFolder.add(params, 'showTerrain').name('Terrain').onChange(v => { terrain.visible = v; });
     debugFolder.add(params, 'showWater').name('Water').onChange(v => { waterMesh.visible = v; });
     debugFolder.add(params, 'showTrees').name('Trees').onChange(v => { treeMeshes.forEach(m => m.visible = v); });
@@ -3286,9 +3292,9 @@ initMapUI();
     if (timeToggleBtn) {
         timeToggleBtn.addEventListener('click', () => {
             timePhase = (timePhase + 1) % 3;
-            if (timePhase === 0) timeToggleBtn.innerText = '☀️';
-            else if (timePhase === 1) timeToggleBtn.innerText = '🌇';
-            else timeToggleBtn.innerText = '🌙';
+            if (timePhase === 0) timeToggleBtn.innerText = 'Day';
+            else if (timePhase === 1) timeToggleBtn.innerText = 'Dusk';
+            else timeToggleBtn.innerText = 'Night';
         });
     }
 
@@ -3636,6 +3642,15 @@ initMapUI();
             if (atmoFolder) {
                 atmoFolder.controllers.forEach(c => c.updateDisplay());
             }
+            // Adjust folder collapse/open states based on timePhase
+            if (timePhase === 0 || timePhase === 1) {
+                if (typeof moonFolder !== 'undefined') moonFolder.close();
+                if (typeof glowFolder !== 'undefined') glowFolder.close();
+            } else if (timePhase === 2) {
+                if (typeof atmoFolder !== 'undefined') atmoFolder.close();
+                if (typeof moonFolder !== 'undefined') moonFolder.open();
+                if (typeof glowFolder !== 'undefined') glowFolder.open();
+            }
         }
         
         // Listen to phase changes
@@ -3644,7 +3659,8 @@ initMapUI();
             setTimeout(updateAtmoParamsFromPhase, 50);
         });
 
-        const atmoFolder = gui.addFolder('Atmosphere');
+        const atmoFolder = gui.addFolder('Atmosphere and Lighting');
+        atmoFolder.close();
         atmoFolder.addColor(atmoParams, 'skyColor').name('Sky Color').onChange(v => envConfigs[timePhase].bg = parseInt(v.replace('#',''), 16));
         atmoFolder.addColor(atmoParams, 'fogColor').name('Fog Color').onChange(v => envConfigs[timePhase].fog = parseInt(v.replace('#',''), 16));
         atmoFolder.addColor(atmoParams, 'ambColor').name('Ambient Light').onChange(v => envConfigs[timePhase].amb = parseInt(v.replace('#',''), 16));
@@ -3653,7 +3669,7 @@ initMapUI();
         atmoFolder.add(atmoParams, 'dirI', 0, 5).name('Sun Intensity').onChange(v => envConfigs[timePhase].dirI = v);
         atmoFolder.addColor(atmoParams, 'glintCol').name('Water Glint').onChange(v => envConfigs[timePhase].glintCol = parseInt(v.replace('#',''), 16));
         
-        // 🌙 Dedicated Moonlight & Night Editor
+        // Dedicated Moonlight & Night Editor
         const moonParams = {
             moonlightColor: '#' + envConfigs[2].dir.toString(16).padStart(6, '0'),
             moonlightIntensity: envConfigs[2].dirI,
@@ -3664,8 +3680,9 @@ initMapUI();
             moonAltitude: envConfigs[2].moonY
         };
 
-        const moonFolder = gui.addFolder('🌙 Moonlight & Night');
-        moonFolder.add(params, 'exposure', 0.5, 4.0, 0.1).name('☀️ Global Brightness').onChange(v => { renderer.toneMappingExposure = v; });
+        const moonFolder = gui.addFolder('Moonlight and Night');
+        moonFolder.close();
+        moonFolder.add(params, 'exposure', 0.5, 4.0, 0.1).name('Global Brightness').onChange(v => { renderer.toneMappingExposure = v; });
         moonFolder.addColor(moonParams, 'moonlightColor').name('Moonlight Color').onChange(v => envConfigs[2].dir = parseInt(v.replace('#',''), 16));
         moonFolder.add(moonParams, 'moonlightIntensity', 0, 10, 0.1).name('Moonlight Power').onChange(v => envConfigs[2].dirI = v);
         moonFolder.addColor(moonParams, 'nightAmbColor').name('Night Fill Color').onChange(v => envConfigs[2].amb = parseInt(v.replace('#',''), 16));
@@ -3674,14 +3691,15 @@ initMapUI();
         moonFolder.addColor(moonParams, 'nightFogColor').name('Night Fog Color').onChange(v => envConfigs[2].fog = parseInt(v.replace('#',''), 16));
         moonFolder.add(moonParams, 'moonAltitude', 200, 4000, 50).name('Moon Altitude').onChange(v => envConfigs[2].moonY = v);
 
-        // ✨ Kiki Warm Side Glow Editor
+        // Kiki Warm Side Glow Editor
         const kikiGlowParams = {
             intensity: 2.5,
             distance: 300,
             spread: 35,
             color: '#ffaa44'
         };
-        const glowFolder = gui.addFolder('✨ Kiki Warm Side Glow');
+        const glowFolder = gui.addFolder('Kiki Warm Side Glow');
+        glowFolder.close();
         glowFolder.add(kikiGlowParams, 'intensity', 0, 8, 0.1).name('Glow Power').onChange(v => {
             kikiLeftLight.intensity = v;
             kikiRightLight.intensity = v;
@@ -3699,6 +3717,21 @@ initMapUI();
             kikiLeftLight.color.copy(col);
             kikiRightLight.color.copy(col);
         });
+
+        if (typeof atmoFolder.onOpenClose === 'function') {
+            atmoFolder.onOpenClose(f => {
+                if (!f._closed) {
+                    if (timePhase === 0 || timePhase === 1) {
+                        if (typeof moonFolder !== 'undefined') moonFolder.close();
+                        if (typeof glowFolder !== 'undefined') glowFolder.close();
+                    } else if (timePhase === 2) {
+                        atmoFolder.close();
+                        if (typeof moonFolder !== 'undefined') moonFolder.open();
+                        if (typeof glowFolder !== 'undefined') glowFolder.open();
+                    }
+                }
+            });
+        }
         
         // Cloud Editor
         const cloudParams = {
@@ -3736,6 +3769,7 @@ initMapUI();
         }
 
         const cloudFolder = gui.addFolder('Cloud Editor');
+        cloudFolder.close();
         cloudFolder.addColor(cloudParams, 'c0').name('Color 1').onChange(v => updateCloudColorForIndex(0, v));
         cloudFolder.addColor(cloudParams, 'c1').name('Color 2').onChange(v => updateCloudColorForIndex(1, v));
         cloudFolder.addColor(cloudParams, 'c2').name('Color 3').onChange(v => updateCloudColorForIndex(2, v));
@@ -3771,6 +3805,7 @@ initMapUI();
         }
 
         const treeFolder = gui.addFolder('Tree Editor');
+        treeFolder.close();
         treeFolder.add(params, 'treeScale', 0.5, 4.0).name('Tree Scale').onChange(v => treeUniforms.uTreeScale.value = v);
         treeFolder.addColor(params, 'treeColor0').name('Color 1').onChange(v => updateTreeColorForIndex(0, v));
         treeFolder.addColor(params, 'treeColor1').name('Color 2').onChange(v => updateTreeColorForIndex(1, v));
@@ -3784,6 +3819,7 @@ initMapUI();
         // SYSTEM SETTINGS (SAVE/LOAD)
         // ==========================================
         const sysFolder = gui.addFolder('System Settings');
+        sysFolder.close();
         sysFolder.add({
             saveSettings: () => {
                 const data = gui.save();

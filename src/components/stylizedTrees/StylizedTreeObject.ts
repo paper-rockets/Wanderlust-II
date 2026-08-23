@@ -12,7 +12,7 @@ export interface StylizedTreeOptions {
   modelUrl?: string;
   trunkMaterialName?: string;
   leafMaterialName?: string;
-  preset?: "spring" | "autumn";
+  preset?: "spring" | "autumn" | "winter";
   barkTextures?: {
     color?: string;
     ao?: string;
@@ -28,7 +28,7 @@ export interface StylizedTreeOptions {
 export class StylizedTreeObject extends THREE.Group {
   public uniforms: TreeUniforms;
   public treeMeshGroup: THREE.Group | null = null;
-  public currentPreset: "spring" | "autumn" = "spring";
+  public currentPreset: "spring" | "autumn" | "winter" = "spring";
 
   constructor(options: StylizedTreeOptions = {}) {
     super();
@@ -59,7 +59,7 @@ export class StylizedTreeObject extends THREE.Group {
     );
   }
 
-  public setPreset(presetName: "spring" | "autumn") {
+  public setPreset(presetName: "spring" | "autumn" | "winter") {
     this.currentPreset = presetName;
     const p: TreePreset = TREE_PRESETS[presetName] || TREE_PRESETS.spring;
     const v = p.values;

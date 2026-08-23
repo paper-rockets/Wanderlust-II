@@ -618,11 +618,41 @@ export class WorldStudioOverlay {
                     <span class="ws-label">Cloud Wind Speed</span>
                     <input type="range" class="ws-slider" id="ws-sl-cloud-spd" min="0.001" max="0.08" step="0.002" value="${currentSky.speed || 0.02}">
                     <span class="ws-val" id="ws-v-cloud-spd">${Number(currentSky.speed || 0.02).toFixed(3)}</span>
+            </div>
+
+            <div class="ws-card">
+                <div class="ws-card-header">
+                    <span>${this.activeBiome} Profile Controls</span>
+                </div>
+                <div class="ws-grid-2">
+                    <button class="ws-btn ws-btn-primary" id="ws-btn-save-active-biome" style="font-weight: bold; padding: 4px;">Save Biome</button>
+                    <button class="ws-btn" id="ws-btn-reset-active-biome" style="padding: 4px;">Reset Biome</button>
                 </div>
             </div>
         `;
 
         content.innerHTML = html;
+
+        const saveActiveBtn = document.getElementById('ws-btn-save-active-biome');
+        if (saveActiveBtn) {
+            saveActiveBtn.onclick = () => {
+                if (typeof window.saveBiomeSettings === 'function') {
+                    window.saveBiomeSettings(this.activeBiome);
+                    this.showToast(`Saved ${this.activeBiome} Settings`);
+                }
+            };
+        }
+
+        const resetActiveBtn = document.getElementById('ws-btn-reset-active-biome');
+        if (resetActiveBtn) {
+            resetActiveBtn.onclick = () => {
+                if (typeof window.resetBiomeSettings === 'function') {
+                    window.resetBiomeSettings(this.activeBiome);
+                    this.showToast(`Reset ${this.activeBiome} to Default`);
+                    this.renderTab();
+                }
+            };
+        }
 
         const biomeBtns = content.querySelectorAll('.ws-biome-btn');
         biomeBtns.forEach(btn => {
@@ -653,6 +683,7 @@ export class WorldStudioOverlay {
                 if (fogV) fogV.innerText = Math.round(v) + 'm';
                 if (!window.biomeFogSettings) window.biomeFogSettings = {};
                 window.biomeFogSettings[this.activeBiome] = v;
+                localStorage.setItem('wanderlust_biome_fog_settings', JSON.stringify(window.biomeFogSettings));
                 if (typeof ctx.refreshScene === 'function') ctx.refreshScene();
             };
         }
@@ -664,6 +695,7 @@ export class WorldStudioOverlay {
                 if (!window.BIOME_SKY_CONFIGS) window.BIOME_SKY_CONFIGS = {};
                 if (!window.BIOME_SKY_CONFIGS[this.activeBiome]) window.BIOME_SKY_CONFIGS[this.activeBiome] = {};
                 window.BIOME_SKY_CONFIGS[this.activeBiome].skyHorizon = hexNum;
+                localStorage.setItem('wanderlust_biome_sky_configs', JSON.stringify(window.BIOME_SKY_CONFIGS));
                 if (typeof ctx.refreshScene === 'function') ctx.refreshScene();
             };
         }
@@ -675,6 +707,7 @@ export class WorldStudioOverlay {
                 if (!window.BIOME_SKY_CONFIGS) window.BIOME_SKY_CONFIGS = {};
                 if (!window.BIOME_SKY_CONFIGS[this.activeBiome]) window.BIOME_SKY_CONFIGS[this.activeBiome] = {};
                 window.BIOME_SKY_CONFIGS[this.activeBiome].skyZenith = hexNum;
+                localStorage.setItem('wanderlust_biome_sky_configs', JSON.stringify(window.BIOME_SKY_CONFIGS));
                 if (typeof ctx.refreshScene === 'function') ctx.refreshScene();
             };
         }
@@ -689,6 +722,7 @@ export class WorldStudioOverlay {
                 if (!window.BIOME_SKY_CONFIGS) window.BIOME_SKY_CONFIGS = {};
                 if (!window.BIOME_SKY_CONFIGS[this.activeBiome]) window.BIOME_SKY_CONFIGS[this.activeBiome] = {};
                 window.BIOME_SKY_CONFIGS[this.activeBiome][key] = v;
+                localStorage.setItem('wanderlust_biome_sky_configs', JSON.stringify(window.BIOME_SKY_CONFIGS));
                 if (typeof ctx.refreshScene === 'function') ctx.refreshScene();
             };
         };
