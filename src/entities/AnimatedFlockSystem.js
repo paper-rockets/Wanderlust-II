@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
 export class AnimatedFlockSystem {
-    constructor({ scene, gltfLoader, resolveAssetUrl, count = 25, modelPath, scale = 0.08, rotYOffset = 0, isWarmOnly = false, getBiomeAt, altitudeOffset = 60, flockRadius = 80 }) {
+    constructor({ scene, gltfLoader, resolveAssetUrl, count = 25, modelPath, scale = 0.08, rotYOffset = 0, isWarmOnly = false, dayOnly = false, getTimePhase = null, getBiomeAt, altitudeOffset = 60, flockRadius = 80 }) {
         this.scene = scene;
         this.gltfLoader = gltfLoader;
         this.resolveAssetUrl = resolveAssetUrl;
@@ -11,6 +11,8 @@ export class AnimatedFlockSystem {
         this.scale = scale;
         this.rotYOffset = rotYOffset;
         this.isWarmOnly = isWarmOnly;
+        this.dayOnly = dayOnly;
+        this.getTimePhase = getTimePhase;
         this.getBiomeAt = getBiomeAt;
         this.altitudeOffset = altitudeOffset;
         this.flockRadius = flockRadius;
@@ -86,8 +88,32 @@ export class AnimatedFlockSystem {
         );
     }
 
+    setScale(scale) {
+        this.scale = scale;
+        for (let i = 0; i < this.birds.length; i++) {
+            if (this.birds[i].mesh) {
+                this.birds[i].mesh.scale.setScalar(scale);
+            }
+        }
+    }
+
     update(playerPos, time, dt, velocity = 35) {
         if (!this.isReady) return;
+
+        if (this.dayOnly) {
+            let currentPhase = null;
+            if (typeof this.getTimePhase === 'function') {
+                currentPhase = this.getTimePhase();
+            } else if (typeof window !== 'undefined' && typeof window.getTimePhase === 'function') {
+                currentPhase = window.getTimePhase();
+            } else if (typeof window !== 'undefined' && window.timePhase !== undefined) {
+                currentPhase = window.timePhase;
+            }
+            if (currentPhase === 2) {
+                this.group.visible = false;
+                return;
+            }
+        }
 
         if (this.isWarmOnly && this.getBiomeAt && playerPos) {
             const biome = this.getBiomeAt(playerPos.x, playerPos.z);

@@ -13,7 +13,9 @@ export default defineConfig(() => {
       },
     },
     server: {
+      host: true,
       hmr: true,
+      allowedHosts: true as const,
     },
     build: {
       rollupOptions: {

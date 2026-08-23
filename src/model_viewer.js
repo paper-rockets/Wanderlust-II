@@ -111,6 +111,45 @@ class ModelViewerApp {
     this.controls.autoRotate = false;
     this.controls.autoRotateSpeed = 1.5;
     this.controls.maxPolarAngle = Math.PI / 2 + 0.05;
+    
+    // Add mobile touch handling for two-finger zoom (pinch gesture)
+    let initialTouchDistance = null;
+    let initialZoom = null;
+    this.renderer.domElement.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 2) {
+        initialTouchDistance = Math.hypot(
+          e.touches[0].pageX - e.touches[1].pageX,
+          e.touches[0].pageY - e.touches[1].pageY
+        );
+        // Get the current distance from camera to controls target (or camera position z)
+        initialZoom = this.camera.position.distanceTo(this.controls.target);
+      }
+    }, { passive: true });
+
+    this.renderer.domElement.addEventListener('touchmove', (e) => {
+      if (e.touches.length === 2 && initialTouchDistance !== null && initialZoom !== null) {
+        const currentTouchDistance = Math.hypot(
+          e.touches[0].pageX - e.touches[1].pageX,
+          e.touches[0].pageY - e.touches[1].pageY
+        );
+        if (initialTouchDistance > 0 && currentTouchDistance > 0) {
+          const factor = initialTouchDistance / currentTouchDistance;
+          const newDistance = initialZoom * factor;
+          
+          // Adjust camera position along the view vector
+          const dir = new THREE.Vector3().subVectors(this.camera.position, this.controls.target).normalize();
+          this.camera.position.copy(this.controls.target).addScaledVector(dir, newDistance);
+          this.controls.update();
+        }
+      }
+    }, { passive: true });
+
+    this.renderer.domElement.addEventListener('touchend', (e) => {
+      if (e.touches.length < 2) {
+        initialTouchDistance = null;
+        initialZoom = null;
+      }
+    }, { passive: true });
 
     // Lighting
     this.ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
