@@ -6,8 +6,8 @@ Welcome to **Wanderlust**, an infinite procedural 3D flying engine and explorati
 
 | Version | Link | Notes |
 |---|---|---|
-| 🚀 **WebGPU** (recommended) | [paper-rockets.github.io/Wanderlust](https://paper-rockets.github.io/Wanderlust/) | Best performance, Chrome/Edge 113+ |
-| 🌐 **WebGL** (compatible) | [paper-rockets.github.io/Wanderlust/webgl](https://paper-rockets.github.io/Wanderlust/webgl/) | Works on all modern browsers |
+| WebGPU (recommended) | [paper-rockets.github.io/Wanderlust-II](https://paper-rockets.github.io/Wanderlust-II/) | Best performance, Chrome/Edge 113+ |
+| WebGL (compatible) | [paper-rockets.github.io/Wanderlust-II/webgl](https://paper-rockets.github.io/Wanderlust-II/webgl/) | Works on all modern browsers |
 
 ---
 
