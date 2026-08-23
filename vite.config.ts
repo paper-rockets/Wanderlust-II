@@ -5,7 +5,7 @@ import { defineConfig } from 'vite';
 
 export default defineConfig(() => {
   return {
-    base: '/Wanderlust/',
+    base: '/Wanderlust-II/',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
@@ -16,14 +16,21 @@ export default defineConfig(() => {
       hmr: true,
     },
     build: {
+      target: 'esnext',
       rollupOptions: {
         input: {
           main: path.resolve(__dirname, 'index.html'),
+          wanderlust: path.resolve(__dirname, 'wanderlust.html'),
           model_viewer: path.resolve(__dirname, 'model_viewer.html'),
           tree_viewer: path.resolve(__dirname, 'tree_viewer.html'),
-          mobile_test: path.resolve(__dirname, 'mobile_test.html'),
         },
+      },
+    },
+    esbuild: {
+      supported: {
+        'top-level-await': true,
       },
     },
   };
 });
+

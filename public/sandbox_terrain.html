@@ -151,6 +151,30 @@
 
             <div class="control-item">
                 <div class="control-label">
+                    <span>Island Size</span>
+                    <span id="island-radius-val" class="control-val">80m</span>
+                </div>
+                <input type="range" id="island-radius" min="30" max="180" step="5" value="80">
+            </div>
+
+            <div class="control-item">
+                <div class="control-label">
+                    <span>Island Elevation</span>
+                    <span id="island-elevation-val" class="control-val">24.0</span>
+                </div>
+                <input type="range" id="island-elevation" min="5.0" max="60.0" step="1.0" value="24.0">
+            </div>
+
+            <div class="control-item">
+                <div class="control-label">
+                    <span>Hill Frequency</span>
+                    <span id="noise-frequency-val" class="control-val">1.0x</span>
+                </div>
+                <input type="range" id="noise-frequency" min="0.2" max="3.0" step="0.1" value="1.0">
+            </div>
+
+            <div class="control-item">
+                <div class="control-label">
                     <span>Tree Density</span>
                     <span id="trees-val" class="control-val">75</span>
                 </div>
@@ -255,7 +279,9 @@
         let targetTreeCount = 75;
         let isSunRotating = true;
 
-        const islandRadius = 80;
+        let islandRadius = 80;
+        let islandElevation = 24.0;
+        let noiseFrequency = 1.0;
         const colorSand = new THREE.Color(0xe2c489);
         const colorGrass = new THREE.Color(0x38b000);
         const colorRock = new THREE.Color(0x6e4a32);
@@ -330,9 +356,10 @@
         
         // Simple organic noise function using stacked waves
         function getNoise(x, z, s) {
-            let val = Math.sin(x * 0.045 + s) * Math.cos(z * 0.045 - s) * 8.0;
-            val += Math.cos(x * 0.12 - s * 1.5) * Math.sin(z * 0.12 + s) * 2.5;
-            val += Math.sin(x * 0.35 + s * 2) * Math.cos(z * 0.35 + s * 3) * 0.7;
+            const f = noiseFrequency;
+            let val = Math.sin(x * 0.045 * f + s) * Math.cos(z * 0.045 * f - s) * 8.0;
+            val += Math.cos(x * 0.12 * f - s * 1.5) * Math.sin(z * 0.12 * f + s) * 2.5;
+            val += Math.sin(x * 0.35 * f + s * 2) * Math.cos(z * 0.35 * f + s * 3) * 0.7;
             return val;
         }
 
@@ -341,7 +368,7 @@
             
             // Base circular gradient to shape it into an island
             const radialFalloff = Math.max(0.0, 1.0 - (dist / islandRadius));
-            let height = radialFalloff * 24.0;
+            let height = radialFalloff * islandElevation;
 
             // Apply noise for bumps/valleys
             if (radialFalloff > 0) {
@@ -400,7 +427,7 @@
                     tempCol.copy(colorRock).multiplyScalar(0.75 + Math.random() * 0.1);
                 } else {
                     // Grassy plains / peaks
-                    if (y > 16.0) {
+                    if (y > islandElevation * 0.67) {
                         // Snowy peaks
                         tempCol.copy(colorPeak).lerp(colorRock, 0.25);
                     } else {
@@ -674,6 +701,36 @@
                 waterVal.innerText = waterLevel.toFixed(1);
                 if (waterMesh) waterMesh.position.y = waterLevel;
                 buildTerrain(); // Color boundaries update relative to water line
+                spawnTrees();
+                updateModelTransform();
+            });
+
+            const radiusSlider = document.getElementById('island-radius');
+            const radiusVal = document.getElementById('island-radius-val');
+            radiusSlider.addEventListener('input', (e) => {
+                islandRadius = parseFloat(e.target.value);
+                radiusVal.innerText = `${islandRadius}m`;
+                buildTerrain();
+                spawnTrees();
+                updateModelTransform();
+            });
+
+            const elevationSlider = document.getElementById('island-elevation');
+            const elevationVal = document.getElementById('island-elevation-val');
+            elevationSlider.addEventListener('input', (e) => {
+                islandElevation = parseFloat(e.target.value);
+                elevationVal.innerText = islandElevation.toFixed(1);
+                buildTerrain();
+                spawnTrees();
+                updateModelTransform();
+            });
+
+            const freqSlider = document.getElementById('noise-frequency');
+            const freqVal = document.getElementById('noise-frequency-val');
+            freqSlider.addEventListener('input', (e) => {
+                noiseFrequency = parseFloat(e.target.value);
+                freqVal.innerText = `${noiseFrequency.toFixed(1)}x`;
+                buildTerrain();
                 spawnTrees();
                 updateModelTransform();
             });

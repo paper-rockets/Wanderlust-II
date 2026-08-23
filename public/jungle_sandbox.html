@@ -1,0 +1,3506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🏔️ Simple Procedural Terrain Generator</title>
+    <style>
+        * { box-sizing: border-box; }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #0f172a;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: #f8fafc;
+            user-select: none;
+        }
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        /* Pure Minimalist Dark Theme HUD Panel */
+        #hud {
+            position: absolute;
+            top: 18px;
+            left: 18px;
+            width: 440px;
+            height: calc(100vh - 36px);
+            max-height: calc(100vh - 36px);
+            background: #111215;
+            border: 1px solid #23252c;
+            border-radius: 8px;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 10px 35px rgba(0, 0, 0, 0.65);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-size: 13px;
+            color: #f4f4f5;
+        }
+
+        /* Header */
+        .hud-header {
+            padding: 14px 18px;
+            background: #18191f;
+            border-bottom: 1px solid #23252c;
+            border-radius: 8px 8px 0 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .hud-title {
+            font-size: 13.5px;
+            font-weight: 700;
+            color: #ffffff;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+        }
+
+        /* Clean Tab Bar */
+        .tab-bar {
+            display: flex;
+            background: #18191f;
+            border-bottom: 1px solid #23252c;
+        }
+        .tab-btn {
+            flex: 1;
+            padding: 11px 4px;
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid transparent;
+            color: #8e939d;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+            text-align: center;
+            text-transform: uppercase;
+            transition: all 0.15s ease;
+        }
+        .tab-btn:hover {
+            color: #f4f4f5;
+            background: rgba(255, 255, 255, 0.03);
+        }
+        .tab-btn.active {
+            color: #ffffff;
+            border-bottom-color: #3b82f6;
+            background: #111215;
+        }
+
+        /* Tab Content Body */
+        .tab-content {
+            padding: 16px 18px;
+            overflow-y: auto;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+        .tab-content::-webkit-scrollbar { width: 5px; }
+        .tab-content::-webkit-scrollbar-thumb { background: #2a2d36; border-radius: 3px; }
+
+        .tab-pane {
+            display: none;
+            flex-direction: column;
+            gap: 14px;
+        }
+        .tab-pane.active {
+            display: flex;
+        }
+
+        .section-label {
+            font-size: 11px;
+            font-weight: 700;
+            color: #717580;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            margin-bottom: 6px;
+        }
+
+        /* Flat Pure Dark Buttons */
+        .btn {
+            background: #1c1e24;
+            color: #e4e4e7;
+            border: 1px solid #2a2d36;
+            padding: 9px 12px;
+            border-radius: 5px;
+            font-size: 12.5px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+        }
+        .btn:hover {
+            background: #262932;
+            border-color: #393d49;
+            color: #ffffff;
+        }
+        .btn.active {
+            background: #2563eb;
+            border-color: #3b82f6;
+            color: #ffffff;
+        }
+        .btn-primary {
+            background: #2563eb;
+            border-color: #3b82f6;
+            color: #ffffff;
+            font-weight: 700;
+        }
+        .btn-primary:hover {
+            background: #1d4ed8;
+            border-color: #2563eb;
+        }
+        .btn-danger {
+            background: #2a1515;
+            border-color: #4a2020;
+            color: #fca5a5;
+        }
+        .btn-danger:hover {
+            background: #4a2020;
+            color: #ffffff;
+        }
+
+        .btn-grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+        }
+        .btn-grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 6px;
+        }
+        .btn-grid-4 {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+        }
+
+        .card-dark {
+            background: #18191f;
+            border: 1px solid #23252c;
+            border-radius: 6px;
+            padding: 12px;
+        }
+
+        .slider-row {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .slider-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #8e939d;
+        }
+        .slider-val {
+            color: #ffffff;
+            font-weight: 700;
+        }
+        input[type="range"] {
+            width: 100%;
+            accent-color: #3b82f6;
+            background: #18191f;
+            height: 6px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        select, input[type="number"], input[type="text"] {
+            background: #18191f;
+            border: 1px solid #2a2d36;
+            border-radius: 5px;
+            color: #ffffff;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 9px 12px;
+            outline: none;
+            width: 100%;
+        }
+
+        /* Tree Picker Bar & Grid */
+        .picker-category-bar {
+            display: flex;
+            gap: 5px;
+            overflow-x: auto;
+            padding-bottom: 2px;
+            margin-bottom: 6px;
+        }
+        .cat-chip {
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 11.5px;
+            font-weight: 600;
+            background: #18191f;
+            border: 1px solid #2a2d36;
+            color: #8e939d;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .cat-chip.active {
+            background: #2563eb;
+            color: #ffffff;
+            border-color: #3b82f6;
+        }
+        .tree-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+            max-height: 170px;
+            overflow-y: auto;
+            margin-bottom: 8px;
+        }
+        .tree-card {
+            background: #18191f;
+            border: 1px solid #23252c;
+            border-radius: 4px;
+            padding: 8px 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .tree-card:hover {
+            border-color: #393d49;
+        }
+        .tree-card.active {
+            border-color: #3b82f6;
+            background: #1e2538;
+        }
+        .tree-card-name {
+            font-size: 12px;
+            font-weight: 600;
+            color: #ffffff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Brush Ring */
+        #brush-ring {
+            position: absolute;
+            border: 2px dashed #3b82f6;
+            background: rgba(59, 130, 246, 0.12);
+            border-radius: 50%;
+            pointer-events: none;
+            display: none;
+            z-index: 5;
+            transform: translate(-50%, -50%);
+        }
+
+        /* Top-Right Stats Panel */
+        #stats-panel {
+            position: absolute;
+            top: 18px;
+            right: 18px;
+            background: #111215;
+            border: 1px solid #23252c;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 12px;
+            display: flex;
+            gap: 16px;
+            z-index: 10;
+        }
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .stat-num {
+            font-size: 14px;
+            font-weight: bold;
+            color: #ffffff;
+        }
+        .stat-lbl {
+            font-size: 9.5px;
+            color: #717580;
+            font-weight: 600;
+        }
+
+        /* Toast */
+        #toast {
+            position: absolute;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background: #18191f;
+            border: 1px solid #2a2d36;
+            color: #ffffff;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-size: 12.5px;
+            font-weight: 600;
+            z-index: 200;
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.25s ease;
+        }
+        #toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* Export Modal */
+        #code-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 300;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-content {
+            width: 660px;
+            max-width: 90vw;
+            max-height: 80vh;
+            background: #111215;
+            border: 1px solid #23252c;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .modal-header {
+            padding: 14px 18px;
+            background: #18191f;
+            border-bottom: 1px solid #23252c;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-body {
+            padding: 16px;
+            flex: 1;
+            overflow-y: auto;
+        }
+        textarea.code-box {
+            width: 100%;
+            height: 320px;
+            background: #18191f;
+            color: #e4e4e7;
+            border: 1px solid #2a2d36;
+            border-radius: 5px;
+            padding: 12px;
+            font-family: 'Consolas', monospace;
+            font-size: 12px;
+            resize: none;
+            outline: none;
+        }
+
+        /* Loading Overlay */
+        #loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #111215;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #23252c;
+            border-top-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s infinite linear;
+            margin-bottom: 12px;
+        }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+    </style>
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+    </script>
+    <script>
+        // Guaranteed safety dismiss for loading screen
+        setTimeout(function() {
+            var el = document.getElementById('loading-overlay');
+            if (el) el.style.display = 'none';
+        }, 300);
+    </script>
+</head>
+<body>
+    <div id="canvas-container"></div>
+
+    <!-- 3D Projected Brush Ring -->
+    <div id="brush-ring"></div>
+
+    <div id="loading-overlay">
+        <div class="spinner"></div>
+        <div style="font-size: 13px; font-weight: 700; color: #ffffff; letter-spacing: 0.5px;">LOADING TERRAIN STUDIO...</div>
+    </div>
+
+    <!-- Flat Stats Bar Top Right -->
+    <div id="stats-panel">
+        <div class="stat-item"><span id="fps-val" class="stat-num">60</span><span class="stat-lbl">FPS</span></div>
+        <div class="stat-item"><span id="chunk-count-val" class="stat-num">1</span><span class="stat-lbl">CHUNKS</span></div>
+        <div class="stat-item"><span id="tree-count-val" class="stat-num">0</span><span class="stat-lbl">TREES</span></div>
+        <div class="stat-item"><span id="tri-val" class="stat-num">0</span><span class="stat-lbl">TRIS</span></div>
+    </div>
+
+    <!-- Clean Flat Tabbed HUD -->
+    <div id="hud">
+        <div class="hud-header">
+            <div class="hud-title">Terrain Studio</div>
+            <div style="display: flex; gap: 6px;">
+                <button class="btn" id="btn-undo" style="width: auto; padding: 5px 12px; font-size: 11.5px;">Undo</button>
+                <button class="btn" id="btn-redo" style="width: auto; padding: 5px 12px; font-size: 11.5px;">Redo</button>
+            </div>
+        </div>
+
+        <!-- 6 Clean Top Tabs -->
+        <div class="tab-bar">
+            <button class="tab-btn active" data-tab="tab-load">Load</button>
+            <button class="tab-btn" data-tab="tab-generator">Generate</button>
+            <button class="tab-btn" data-tab="tab-sculpt">Sculpt</button>
+            <button class="tab-btn" data-tab="tab-biomes">Biomes</button>
+            <button class="tab-btn" data-tab="tab-trees">Trees</button>
+            <button class="tab-btn" data-tab="tab-world">World</button>
+        </div>
+
+        <div class="tab-content">
+            <!-- TAB 1: LOAD EXISTING TERRAINS & CUSTOM JS -->
+            <div class="tab-pane active" id="tab-load">
+                <div>
+                    <div class="section-label">Load Existing Terrain Algorithms</div>
+                    <div class="btn-grid-2" id="preset-terrain-btn-group">
+                        <button class="btn preset-terrain-btn" data-preset="ghibli">Ghibli Land</button>
+                        <button class="btn preset-terrain-btn" data-preset="jungle">Lush Jungle</button>
+                        <button class="btn preset-terrain-btn" data-preset="canyon">Badlands Canyon</button>
+                        <button class="btn preset-terrain-btn" data-preset="desert">Desert Dunes</button>
+                        <button class="btn preset-terrain-btn" data-preset="mountains">Misty Mountains</button>
+                        <button class="btn preset-terrain-btn" data-preset="northpole">North Pole Ice</button>
+                        <button class="btn preset-terrain-btn" data-preset="plains">Golden Plains</button>
+                        <button class="btn preset-terrain-btn" data-preset="crystal">Crystal Spires</button>
+                        <button class="btn preset-terrain-btn" data-preset="archipelago">Archipelago</button>
+                        <button class="btn preset-terrain-btn" data-preset="magical">Magical Realm</button>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="section-label">Custom Terrain Script</div>
+                    <input type="file" id="input-terrain-js" accept=".js" style="display: none;">
+                    <button class="btn btn-primary" id="btn-load-custom-js" style="padding: 10px;">Browse Custom Terrain File (.js)</button>
+                </div>
+
+                <div>
+                    <div class="section-label">Apply Scope</div>
+                    <div class="btn-grid-2">
+                        <button class="btn" id="btn-load-to-active">Active Chunk</button>
+                        <button class="btn active" id="btn-load-to-all">All Chunks</button>
+                    </div>
+                    <button class="btn" id="btn-load-generate-3x3" style="margin-top: 6px; padding: 9px;">Generate 3x3 Continent with this Algorithm</button>
+                </div>
+
+                <div class="card-dark">
+                    <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px;">
+                        <span style="color: #8e939d;">Active Terrain:</span>
+                        <span id="active-terrain-label" style="color: #ffffff; font-weight: 700;">Ghibli Land</span>
+                    </div>
+                    <div style="font-size: 11.5px; color: #717580; line-height: 1.4;">
+                        Tip: You can load a custom terrain onto your starting chunk, then expand and add new chunks with different biomes. The continent engine automatically blends them seamlessly together!
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 2: GENERATE CONTINENT -->
+            <div class="tab-pane" id="tab-generator">
+                <div>
+                    <div class="section-label">Continent Theme</div>
+                    <select id="auto-gen-theme">
+                        <option value="ghibli" selected>100% Pure Ghibli Land</option>
+                        <option value="jungle">100% Pure Lush Jungle</option>
+                        <option value="savana">100% Pure African Savanna</option>
+                        <option value="mountains">100% Pure Misty Mountains</option>
+                        <option value="canyon">100% Pure Badlands Canyon</option>
+                        <option value="plains">100% Pure Golden Plains</option>
+                        <option value="crystal">100% Pure Crystal Land</option>
+                        <option value="archipelago">100% Pure Archipelago</option>
+                        <option value="magical">100% Pure Magical Realm</option>
+                        <option value="eco">Mixed Multi-Biome Continent</option>
+                    </select>
+                </div>
+
+                <div>
+                    <div class="section-label">Continent Grid Dimensions</div>
+                    <div class="btn-grid-3" id="grid-size-btn-group">
+                        <button class="btn" data-gen-grid="2">2x2 (4)</button>
+                        <button class="btn active" data-gen-grid="3">3x3 (9)</button>
+                        <button class="btn" data-gen-grid="4">4x4 (16)</button>
+                        <button class="btn" data-gen-grid="5">5x5 (25)</button>
+                        <button class="btn" data-gen-grid="6">6x6 (36)</button>
+                        <button class="btn" id="btn-custom-size">Custom</button>
+                    </div>
+                </div>
+
+                <div class="slider-row" id="custom-grid-slider-row" style="display: none;">
+                    <div class="slider-header"><span>Custom Dimensions</span><span id="grid-dim-val" class="slider-val">3 x 3 (9 chunks)</span></div>
+                    <input type="range" id="grid-dim-slider" min="1" max="8" step="1" value="3">
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #8e939d;">
+                    <input type="checkbox" id="auto-gen-populate-trees" style="accent-color: #3b82f6; width: 16px; height: 16px; cursor: pointer;">
+                    <label for="auto-gen-populate-trees" style="cursor: pointer;">Auto-populate matching trees and flora</label>
+                </div>
+
+                <button class="btn btn-primary" id="btn-run-auto-gen" style="padding: 12px; font-size: 13px;">Generate Continent</button>
+            </div>
+
+            <!-- TAB 3: MANUAL SCULPT -->
+            <div class="tab-pane" id="tab-sculpt">
+                <div>
+                    <div class="section-label">Interaction Mode</div>
+                    <div class="btn-grid-2">
+                        <button class="btn" id="tool-sculpt">Sculpt Terrain</button>
+                        <button class="btn active" id="tool-orbit">Orbit Camera</button>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="section-label">Brush Action</div>
+                    <div class="btn-grid-4">
+                        <button class="btn active" id="sculpt-raise">Raise</button>
+                        <button class="btn" id="sculpt-lower">Dig</button>
+                        <button class="btn" id="sculpt-smooth">Smooth</button>
+                        <button class="btn" id="sculpt-flatten">Flatten</button>
+                    </div>
+                </div>
+
+                <div class="slider-row">
+                    <div class="slider-header"><span>Brush Radius</span><span id="sculpt-rad-val" class="slider-val">75m</span></div>
+                    <input type="range" id="sculpt-rad-slider" min="15" max="300" step="5" value="75">
+                </div>
+                <div class="slider-row">
+                    <div class="slider-header"><span>Sculpt Strength</span><span id="sculpt-str-val" class="slider-val">0.60</span></div>
+                    <input type="range" id="sculpt-str-slider" min="0.1" max="2.0" step="0.05" value="0.6">
+                </div>
+
+                <div class="card-dark">
+                    <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px;">
+                        <span style="color: #8e939d;">Active Selected Chunk:</span>
+                        <span id="selected-chunk-label" style="color: #ffffff; font-weight: 700;">[0, 0]</span>
+                    </div>
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px;">
+                        <span style="font-size: 12px; color: #8e939d;">Spawn Biome:</span>
+                        <select id="new-chunk-biome" style="padding: 6px 10px; font-size: 12px; flex: 1;">
+                            <option value="ghibli">Ghibli</option>
+                            <option value="mountains">Mountains</option>
+                            <option value="canyon">Canyon</option>
+                            <option value="jungle">Jungle</option>
+                            <option value="savana">Savanna</option>
+                            <option value="plains">Plains</option>
+                            <option value="crystal">Crystal</option>
+                            <option value="archipelago">Archipelago</option>
+                            <option value="magical">Magical</option>
+                        </select>
+                    </div>
+                    <div style="font-size: 11.5px; color: #717580;">
+                        Click any glowing border slot in 3D to expand your continent.
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 4: BIOMES & LIGHTING -->
+            <div class="tab-pane" id="tab-biomes">
+                <button class="btn btn-primary" id="btn-apply-all-chunks" style="padding: 10px;">Fill Entire Continent With Active Biome</button>
+
+                <div>
+                    <div class="section-label">Select Active Biome</div>
+                    <div class="btn-grid-2">
+                        <button class="btn active" id="biome-ghibli">Ghibli</button>
+                        <button class="btn" id="biome-mountains">Mountains</button>
+                        <button class="btn" id="biome-savana">Savanna</button>
+                        <button class="btn" id="biome-plains">Plains</button>
+                        <button class="btn" id="biome-crystal">Crystal</button>
+                        <button class="btn" id="biome-jungle">Jungle</button>
+                        <button class="btn" id="biome-archipelago">Archipelago</button>
+                        <button class="btn" id="biome-magical">Magical</button>
+                        <button class="btn" id="biome-canyon">Canyon</button>
+                        <button class="btn" id="biome-blend">Blend</button>
+                    </div>
+                </div>
+
+                <div style="border-top: 1px solid #23252c; padding-top: 10px;">
+                    <div class="section-label">Seed and Elevation</div>
+                    <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+                        <input type="number" id="seed-input" value="48291" style="flex: 1;">
+                        <button class="btn" id="btn-random-seed" style="flex: 1;">Randomize Seed</button>
+                    </div>
+                    <div class="slider-row">
+                        <div class="slider-header"><span>Height Multiplier</span><span id="height-scale-val" class="slider-val">1.2x</span></div>
+                        <input type="range" id="height-scale-slider" min="0.4" max="3.0" step="0.1" value="1.2">
+                    </div>
+                </div>
+
+                <div style="border-top: 1px solid #23252c; padding-top: 10px;">
+                    <div class="section-label">Lighting Preset</div>
+                    <div class="btn-grid-2">
+                        <button class="btn" id="btn-noon">Noon</button>
+                        <button class="btn" id="btn-sunset">Sunset</button>
+                        <button class="btn" id="btn-mist">Mist</button>
+                        <button class="btn" id="btn-night">Night</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 5: TREES & FOLIAGE -->
+            <div class="tab-pane" id="tab-trees">
+                <div>
+                    <div class="section-label">Tree Tool Mode</div>
+                    <div class="btn-grid-3">
+                        <button class="btn" id="tool-paint">Paint Trees</button>
+                        <button class="btn" id="tool-erase">Erase Trees</button>
+                        <button class="btn active" id="tool-orbit-trees">Orbit Camera</button>
+                    </div>
+                </div>
+
+                <button class="btn btn-primary" id="btn-snap-trees">Snap Trees to Ground</button>
+
+                <div class="card-dark">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="font-size: 12px; font-weight: 700; color: #ffffff;">Tree Foliage & Bark</span>
+                        <label style="display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: #8e939d; cursor: pointer;">
+                            <input type="checkbox" id="tree-auto-biome-color" checked style="accent-color: #3b82f6;">
+                            <span>Match Biome</span>
+                        </label>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; background: #111215; padding: 6px 10px; border-radius: 4px; border: 1px solid #2a2d36;">
+                            <span style="font-size: 11.5px; color: #8e939d;">Foliage:</span>
+                            <input type="color" id="tree-foliage-color" value="#4ade80" style="width: 24px; height: 20px; border: none; background: transparent; cursor: pointer;">
+                        </div>
+                        <div style="display: flex; align-items: center; justify-content: space-between; background: #111215; padding: 6px 10px; border-radius: 4px; border: 1px solid #2a2d36;">
+                            <span style="font-size: 11.5px; color: #8e939d;">Bark:</span>
+                            <input type="color" id="tree-bark-color" value="#78350f" style="width: 24px; height: 20px; border: none; background: transparent; cursor: pointer;">
+                        </div>
+                    </div>
+
+                    <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                        <button class="btn tree-pal-btn" data-fcol="#2d6a4f" data-bcol="#451a03" style="flex: 1; padding: 5px; font-size: 11px;">Pine</button>
+                        <button class="btn tree-pal-btn" data-fcol="#10b981" data-bcol="#78350f" style="flex: 1; padding: 5px; font-size: 11px;">Jungle</button>
+                        <button class="btn tree-pal-btn" data-fcol="#d97706" data-bcol="#713f12" style="flex: 1; padding: 5px; font-size: 11px;">Savanna</button>
+                        <button class="btn tree-pal-btn" data-fcol="#f472b6" data-bcol="#4c0519" style="flex: 1; padding: 5px; font-size: 11px;">Sakura</button>
+                        <button class="btn tree-pal-btn" data-fcol="#06b6d4" data-bcol="#083344" style="flex: 1; padding: 5px; font-size: 11px;">Crystal</button>
+                    </div>
+                </div>
+
+                <div class="slider-row">
+                    <div class="slider-header"><span>Brush Radius</span><span id="tree-rad-val" class="slider-val">45m</span></div>
+                    <input type="range" id="tree-rad-slider" min="10" max="180" step="5" value="45">
+                </div>
+
+                <div>
+                    <div class="picker-category-bar">
+                        <span class="cat-chip active" data-cat="all">All</span>
+                        <span class="cat-chip" data-cat="pines">Pines</span>
+                        <span class="cat-chip" data-cat="palms">Palms</span>
+                        <span class="cat-chip" data-cat="canopy">Canopy</span>
+                        <span class="cat-chip" data-cat="undergrowth">Flora</span>
+                    </div>
+                    <div class="tree-grid" id="tree-picker-grid"></div>
+                </div>
+
+                <button class="btn btn-danger" id="btn-clear-trees" style="font-size: 12px; padding: 10px;">Clear All Placed Trees</button>
+            </div>
+
+            <!-- TAB 6: WORLD PERSISTENCE & RESET -->
+            <div class="tab-pane" id="tab-world">
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px;">
+                    <span id="autosave-status" style="color: #4ade80; font-weight: 600;">Autosave Active</span>
+                    <button class="btn" id="btn-save-now" style="width: auto; padding: 5px 12px; font-size: 11.5px;">Save Now</button>
+                </div>
+
+                <input type="file" id="input-load-continent-json" accept=".json" style="display: none;">
+                <div class="btn-grid-2">
+                    <button class="btn btn-primary" id="btn-save-continent-json" style="padding: 10px;">Save World (JSON)</button>
+                    <button class="btn" id="btn-load-continent-json" style="padding: 10px;">Load World (JSON)</button>
+                </div>
+
+                <button class="btn" id="btn-export-continent-code" style="padding: 10px;">Export Progressive Streamer (JS)</button>
+
+                <div style="border-top: 1px solid #23252c; padding-top: 12px; margin-top: 6px;">
+                    <button class="btn btn-danger" id="btn-reset-world" style="padding: 12px; font-weight: 700; font-size: 13px;">Reset to Fresh Single Chunk</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Code Export Modal -->
+    <div id="code-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div style="font-weight: 700; color: #ffffff; font-size: 13px; text-transform: uppercase;">Export Progressive Streamer</div>
+                <button class="btn" id="btn-close-modal" style="width: auto; padding: 4px 10px;">Close</button>
+            </div>
+            <div class="modal-body">
+                <textarea class="code-box" id="code-export-box" readonly></textarea>
+                <button class="btn btn-primary" id="btn-copy-code" style="margin-top: 10px;">Copy Code to Clipboard</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Code Export Modal -->
+    <div id="code-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div style="font-weight: 700; color: #f8fafc; font-size: 13px;">💻 Export Progressive Streamer</div>
+                <button class="btn" id="btn-close-modal" style="width: auto; padding: 3px 8px;">✕ Close</button>
+            </div>
+            <div class="modal-body">
+                <textarea class="code-box" id="code-export-box" readonly></textarea>
+                <button class="btn btn-primary" id="btn-copy-code" style="margin-top: 8px;">📋 Copy to Clipboard</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast"></div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+
+        // Expose THREE globally for dynamic algorithm imports (like terrain-crystal.js)
+        window.THREE = THREE;
+
+        // Cleanse legacy trees so user starts with clean canvas (0 default trees)
+        try {
+            const rawAutosave = localStorage.getItem('wanderlust_continent_autosave');
+            if (rawAutosave) {
+                const parsed = JSON.parse(rawAutosave);
+                if (parsed && parsed.trees) {
+                    parsed.trees = [];
+                    localStorage.setItem('wanderlust_continent_autosave', JSON.stringify(parsed));
+                }
+            }
+        } catch (e) {}
+
+        // --- 1. Scene & Renderer Setup ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x7ec8ed);
+        scene.fog = null;
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1.0, 80000);
+        camera.position.set(0, 520, 1400);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(1.0);
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.3;
+        container.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxPolarAngle = Math.PI / 2 - 0.01;
+        controls.minDistance = 10;
+        controls.maxDistance = 60000;
+        controls.target.set(0, 40, 0);
+
+        // Default navigation: ORBIT IS ACTIVE ON START
+        controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
+
+        // --- 2. 2-Tone Toon Gradient Map (From Game 009) ---
+        let currentShadowStep = 160;
+        let gradientColors = new Uint8Array([
+            currentShadowStep, currentShadowStep, currentShadowStep, 255,
+            255, 255, 255, 255
+        ]);
+        const gradientMap = new THREE.DataTexture(gradientColors, 2, 1, THREE.RGBAFormat);
+        gradientMap.needsUpdate = true;
+        gradientMap.minFilter = THREE.NearestFilter;
+        gradientMap.magFilter = THREE.NearestFilter;
+        gradientMap.generateMipmaps = false;
+
+        function updateGradientMap(shadowVal) {
+            gradientColors[0] = shadowVal;
+            gradientColors[1] = shadowVal;
+            gradientColors[2] = shadowVal;
+            gradientMap.needsUpdate = true;
+        }
+
+        // --- 3. Lighting Setup ---
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x334e68, 1.4);
+        scene.add(hemiLight);
+
+        const ambLight = new THREE.AmbientLight(0xe0f2fe, 0.6);
+        scene.add(ambLight);
+
+        const sunLight = new THREE.DirectionalLight(0xfffbeb, 2.0);
+        sunLight.position.set(1200, 1800, 850);
+        scene.add(sunLight);
+
+        // --- 4. Simplex Noise Engine ---
+        const perm = new Uint8Array(512);
+        for (let i = 0; i < 512; i++) perm[i] = Math.floor((i * 181 + 79) % 256);
+        function snoise(x, z) {
+            let n0, n1, n2;
+            const F2 = 0.5 * (Math.sqrt(3.0) - 1.0);
+            const G2 = (3.0 - Math.sqrt(3.0)) / 6.0;
+            let s = (x + z) * F2;
+            let i = Math.floor(x + s), j = Math.floor(z + s);
+            let t = (i + j) * G2;
+            let X0 = i - t, Z0 = j - t;
+            let x0 = x - X0, z0 = z - Z0;
+            let i1, j1;
+            if (x0 > z0) { i1 = 1; j1 = 0; } else { i1 = 0; j1 = 1; }
+            let x1 = x0 - i1 + G2, z1 = z0 - j1 + G2;
+            let x2 = x0 - 1.0 + 2.0 * G2, z2 = z0 - 1.0 + 2.0 * G2;
+            let ii = i & 255, jj = j & 255;
+            let gi0 = perm[ii + perm[jj]] % 12;
+            let gi1 = perm[ii + i1 + perm[jj + j1]] % 12;
+            let gi2 = perm[ii + 1 + perm[jj + 1]] % 12;
+            let t0 = 0.5 - x0 * x0 - z0 * z0; if (t0 < 0) n0 = 0.0; else { t0 *= t0; n0 = t0 * t0 * (x0 * (gi0 > 5 ? 1 : -1) + z0 * (gi0 % 2 === 0 ? 1 : -1)); }
+            let t1 = 0.5 - x1 * x1 - z1 * z1; if (t1 < 0) n1 = 0.0; else { t1 *= t1; n1 = t1 * t1 * (x1 * (gi1 > 5 ? 1 : -1) + z1 * (gi1 % 2 === 0 ? 1 : -1)); }
+            let t2 = 0.5 - x2 * x2 - z2 * z2; if (t2 < 0) n2 = 0.0; else { t2 *= t2; n2 = t2 * t2 * (x2 * (gi2 > 5 ? 1 : -1) + z2 * (gi2 % 2 === 0 ? 1 : -1)); }
+            return 70.0 * (n0 + n1 + n2);
+        }
+
+        function smoothstep(edge0, edge1, x) {
+            const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+            return t * t * (3 - 2 * t);
+        }
+
+        let customTerrainModule = null;
+
+        const BIOME_PALETTES = {
+            canyon: {
+                name: "⛰️ Badlands Canyon",
+                sky: 0x60a5fa,
+                fog: 0x93c5fd,
+                water: 0x197486,
+                cRiverBed: new THREE.Color(0x2a4365),
+                cSandBar: new THREE.Color(0xd69e2e),
+                cTerracottaLow: new THREE.Color(0xc05621),
+                cOchreLayer: new THREE.Color(0xdd6b20),
+                cRedMesa: new THREE.Color(0x9c4221),
+                cCanyonRim: new THREE.Color(0x7b341e),
+                cPeakStone: new THREE.Color(0x4a5568),
+                getColor(h, x, z, col) {
+                    const stratum = Math.sin(h * 0.08 + snoise(x * 0.002, z * 0.002) * 2.0);
+                    if (h < 15.0) col.copy(this.cRiverBed);
+                    else if (h < 35.0) col.lerpColors(this.cRiverBed, this.cSandBar, smoothstep(15.0, 35.0, h));
+                    else if (h < 95.0) {
+                        const layer = (stratum > 0.0) ? this.cTerracottaLow : this.cOchreLayer;
+                        col.lerpColors(this.cSandBar, layer, smoothstep(35.0, 95.0, h));
+                    } else if (h < 220.0) {
+                        const layer = (stratum > 0.3) ? this.cRedMesa : this.cOchreLayer;
+                        col.lerpColors(this.cTerracottaLow, layer, smoothstep(95.0, 220.0, h));
+                    } else if (h < 340.0) {
+                        col.lerpColors(this.cRedMesa, this.cCanyonRim, smoothstep(220.0, 340.0, h));
+                    } else {
+                        col.lerpColors(this.cCanyonRim, this.cPeakStone, smoothstep(340.0, 480.0, h));
+                    }
+                }
+            },
+            ghibli: {
+                name: "🌳 Ghibli Land",
+                sky: 0x87ceeb,
+                fog: 0x87ceeb,
+                water: 0x1a4a8c,
+                cDeepWater: new THREE.Color(0x1a4a8c),
+                cSand: new THREE.Color(0xf2e1b8),
+                cIslandGrass: new THREE.Color(0x76d149),
+                cEmeraldGrass: new THREE.Color(0x56b847),
+                cOliveGrass: new THREE.Color(0x8cc440),
+                cHigh: new THREE.Color(0x89e05e),
+                cRock: new THREE.Color(0x8a725a),
+                cDirt: new THREE.Color(0xdcb58a),
+                getColor(h, x, z, col) {
+                    const meadowN = Math.sin(x * 0.002) * Math.cos(z * 0.002);
+                    const oliveN = Math.sin(x * 0.005 + 2.0) * Math.cos(z * 0.005 + 2.0);
+                    if (h < 6.0) col.copy(this.cDeepWater);
+                    else if (h < 22.0) col.lerpColors(this.cDeepWater, this.cSand, smoothstep(6.0, 22.0, h));
+                    else if (h < 35.0) col.copy(this.cSand);
+                    else if (h < 60.0) col.lerpColors(this.cSand, this.cIslandGrass, smoothstep(35.0, 60.0, h));
+                    else if (h < 200.0) {
+                        const patch = this.cIslandGrass.clone();
+                        if (meadowN > 0.1) patch.lerp(this.cEmeraldGrass, Math.min(1, (meadowN - 0.1) * 2.0));
+                        if (oliveN > 0.15) patch.lerp(this.cOliveGrass, Math.min(1, (oliveN - 0.15) * 2.0));
+                        col.lerpColors(patch, this.cHigh, smoothstep(60.0, 200.0, h));
+                    } else if (h < 320.0) {
+                        col.lerpColors(this.cHigh, this.cRock, smoothstep(200.0, 320.0, h));
+                    } else {
+                        col.lerpColors(this.cRock, this.cDirt, smoothstep(320.0, 480.0, h));
+                    }
+                }
+            },
+            mountains: {
+                name: "🏔️ Misty Mountains",
+                sky: 0x6b7280,
+                fog: 0x9ca3af,
+                water: 0x1e3a5f,
+                cDeepWater: new THREE.Color(0x1a4a8c),
+                cSand: new THREE.Color(0xf2e1b8),
+                cGrass: new THREE.Color(0x4b7043),
+                cRock: new THREE.Color(0x5a5e6b),
+                cSnow: new THREE.Color(0xf5f6fa),
+                getColor(h, x, z, col) {
+                    if (h < 6.0) col.copy(this.cDeepWater);
+                    else if (h < 22.0) col.lerpColors(this.cDeepWater, this.cSand, smoothstep(6.0, 22.0, h));
+                    else if (h < 35.0) col.copy(this.cSand);
+                    else if (h < 110.0) col.lerpColors(this.cSand, this.cGrass, smoothstep(35.0, 110.0, h));
+                    else if (h < 240.0) col.lerpColors(this.cGrass, this.cRock, smoothstep(110.0, 240.0, h));
+                    else col.lerpColors(this.cRock, this.cSnow, smoothstep(240.0, 390.0, h));
+                }
+            },
+            plains: {
+                name: "🌾 Golden Plains",
+                sky: 0x93c5fd,
+                fog: 0xbfdbfe,
+                water: 0x1d4ed8,
+                cDeepWater: new THREE.Color(0x1a4a8c),
+                cSand: new THREE.Color(0xf2e1b8),
+                cValleyGrass: new THREE.Color(0x55b847),
+                cCrestGold: new THREE.Color(0xe0a96d),
+                cPlainsRock: new THREE.Color(0x8d6e63),
+                cDirt: new THREE.Color(0xdcb58a),
+                getColor(h, x, z, col) {
+                    if (h < 6.0) col.copy(this.cDeepWater);
+                    else if (h < 22.0) col.lerpColors(this.cDeepWater, this.cSand, smoothstep(6.0, 22.0, h));
+                    else if (h < 35.0) col.copy(this.cSand);
+                    else if (h < 65.0) col.lerpColors(this.cSand, this.cValleyGrass, smoothstep(35.0, 65.0, h));
+                    else if (h < 150.0) col.lerpColors(this.cValleyGrass, this.cCrestGold, smoothstep(65.0, 150.0, h));
+                    else if (h < 260.0) col.lerpColors(this.cCrestGold, this.cPlainsRock, smoothstep(150.0, 260.0, h));
+                    else col.lerpColors(this.cPlainsRock, this.cDirt, smoothstep(260.0, 420.0, h));
+                }
+            },
+            crystal: {
+                name: "💎 Crystal Land",
+                sky: 0x5b8fa8,
+                fog: 0x7dd3fc,
+                water: 0x0d2d5a,
+                cDeepWater: new THREE.Color(0x0d2d5a),
+                cCrystalSea: new THREE.Color(0x2ab0c5),
+                cSand: new THREE.Color(0xc8e8f2),
+                cValleyFloor: new THREE.Color(0x4ecdc4),
+                cCrystalLow: new THREE.Color(0x7fffd4),
+                cCrystalMid: new THREE.Color(0xa78bfa),
+                cCrystalHigh: new THREE.Color(0xe0b0ff),
+                cSpire: new THREE.Color(0xffffff),
+                getColor(h, x, z, col) {
+                    const shimmer = Math.sin(x * 0.015) * Math.cos(z * 0.015) * 0.5 + 0.5;
+                    if (h < 2.0) col.copy(this.cDeepWater);
+                    else if (h < 20.0) col.lerpColors(this.cDeepWater, this.cCrystalSea, smoothstep(2.0, 20.0, h));
+                    else if (h < 38.0) col.copy(this.cSand);
+                    else if (h < 110.0) col.lerpColors(this.cSand, this.cValleyFloor, smoothstep(38.0, 110.0, h));
+                    else if (h < 200.0) col.lerpColors(this.cValleyFloor, this.cCrystalLow, smoothstep(110.0, 200.0, h));
+                    else if (h < 320.0) {
+                        col.lerpColors(this.cCrystalLow, this.cCrystalMid, smoothstep(200.0, 320.0, h));
+                        if (shimmer > 0.55) col.lerp(this.cCrystalHigh, (shimmer - 0.55) * 1.5);
+                    } else {
+                        col.lerpColors(this.cCrystalMid, this.cSpire, smoothstep(320.0, 480.0, h));
+                    }
+                }
+            },
+            jungle: {
+                name: "🌴 Lush Jungle",
+                sky: 0x0284c7,
+                fog: 0x0369a1,
+                water: 0x0e7490,
+                cDeepWater: new THREE.Color(0x1a4a8c),
+                cSand: new THREE.Color(0xf2e1b8),
+                cJungleGrass: new THREE.Color(0x389c45),
+                cJungleHigh: new THREE.Color(0x286330),
+                cRock: new THREE.Color(0x8a725a),
+                cDirt: new THREE.Color(0xdcb58a),
+                getColor(h, x, z, col) {
+                    if (h < 6.0) col.copy(this.cDeepWater);
+                    else if (h < 22.0) col.lerpColors(this.cDeepWater, this.cSand, smoothstep(6.0, 22.0, h));
+                    else if (h < 35.0) col.copy(this.cSand);
+                    else if (h < 65.0) col.lerpColors(this.cSand, this.cJungleGrass, smoothstep(35.0, 65.0, h));
+                    else if (h < 190.0) col.lerpColors(this.cJungleGrass, this.cJungleHigh, smoothstep(65.0, 190.0, h));
+                    else if (h < 320.0) col.lerpColors(this.cJungleHigh, this.cRock, smoothstep(190.0, 320.0, h));
+                    else col.lerpColors(this.cRock, this.cDirt, smoothstep(320.0, 480.0, h));
+                }
+            },
+            archipelago: {
+                name: "🌊 Archipelago",
+                sky: 0x38bdf8,
+                fog: 0x7dd3fc,
+                water: 0x0284c7,
+                cDeepWater: new THREE.Color(0x1a4a8c),
+                cSand: new THREE.Color(0xf2e1b8),
+                cIslandGrass: new THREE.Color(0x76d149),
+                cEmeraldGrass: new THREE.Color(0x56b847),
+                cHigh: new THREE.Color(0x89e05e),
+                cRock: new THREE.Color(0x8a725a),
+                cDirt: new THREE.Color(0xdcb58a),
+                getColor(h, x, z, col) {
+                    if (h < 6.0) col.copy(this.cDeepWater);
+                    else if (h < 22.0) col.lerpColors(this.cDeepWater, this.cSand, smoothstep(6.0, 22.0, h));
+                    else if (h < 35.0) col.copy(this.cSand);
+                    else if (h < 65.0) col.lerpColors(this.cSand, this.cIslandGrass, smoothstep(35.0, 65.0, h));
+                    else if (h < 180.0) col.lerpColors(this.cIslandGrass, this.cEmeraldGrass, smoothstep(65.0, 180.0, h));
+                    else if (h < 290.0) col.lerpColors(this.cEmeraldGrass, this.cRock, smoothstep(180.0, 290.0, h));
+                    else col.lerpColors(this.cRock, this.cDirt, smoothstep(290.0, 440.0, h));
+                }
+            },
+            magical: {
+                name: "✨ Magical Land",
+                sky: 0x701a75,
+                fog: 0x86198f,
+                water: 0x3b0764,
+                cDeepWater: new THREE.Color(0x1a4a8c),
+                cSand: new THREE.Color(0xf2e1b8),
+                cViolet: new THREE.Color(0xa855f7),
+                cPink: new THREE.Color(0xec4899),
+                cRock: new THREE.Color(0x7e22ce),
+                cDirt: new THREE.Color(0xdcb58a),
+                getColor(h, x, z, col) {
+                    if (h < 6.0) col.copy(this.cDeepWater);
+                    else if (h < 22.0) col.lerpColors(this.cDeepWater, this.cSand, smoothstep(6.0, 22.0, h));
+                    else if (h < 35.0) col.copy(this.cSand);
+                    else if (h < 65.0) col.lerpColors(this.cSand, this.cViolet, smoothstep(35.0, 65.0, h));
+                    else if (h < 190.0) col.lerpColors(this.cViolet, this.cPink, smoothstep(65.0, 190.0, h));
+                    else if (h < 310.0) col.lerpColors(this.cPink, this.cRock, smoothstep(190.0, 310.0, h));
+                    else col.lerpColors(this.cRock, this.cDirt, smoothstep(310.0, 480.0, h));
+                }
+            },
+            savana: {
+                name: "🦁 African Savanna",
+                sky: 0xf59e0b,
+                fog: 0xd97706,
+                water: 0x92400e,
+                cDeepWater: new THREE.Color(0x78350f),
+                cWateringHole: new THREE.Color(0x92400e),
+                cSand: new THREE.Color(0xfde047),
+                cDryGrass: new THREE.Color(0xca8a04),
+                cGoldenAcacia: new THREE.Color(0xa16207),
+                cRedKopje: new THREE.Color(0x9a3412),
+                cRock: new THREE.Color(0x571c0c),
+                getColor(h, x, z, col) {
+                    const dryPatch = Math.sin(x * 0.003) * Math.cos(z * 0.003);
+                    if (h < 10.0) col.copy(this.cDeepWater);
+                    else if (h < 24.0) col.lerpColors(this.cDeepWater, this.cWateringHole, smoothstep(10.0, 24.0, h));
+                    else if (h < 38.0) col.copy(this.cSand);
+                    else if (h < 85.0) {
+                        const grass = this.cDryGrass.clone();
+                        if (dryPatch > 0.1) grass.lerp(this.cGoldenAcacia, Math.min(1, (dryPatch - 0.1) * 2.0));
+                        col.lerpColors(this.cSand, grass, smoothstep(38.0, 85.0, h));
+                    } else if (h < 220.0) {
+                        col.lerpColors(this.cDryGrass, this.cRedKopje, smoothstep(85.0, 220.0, h));
+                    } else {
+                        col.lerpColors(this.cRedKopje, this.cRock, smoothstep(220.0, 400.0, h));
+                    }
+                }
+            },
+            desert: {
+                name: "Desert Dunes",
+                sky: 0xf59e0b,
+                fog: 0xd97706,
+                water: 0x0284c7,
+                cDeepWater: new THREE.Color(0x1a4a8c),
+                cSand: new THREE.Color(0xf2e1b8),
+                cDuneGold: new THREE.Color(0xeab308),
+                cOchre: new THREE.Color(0xd97706),
+                cRock: new THREE.Color(0x92400e),
+                cDirt: new THREE.Color(0x78350f),
+                getColor(h, x, z, col) {
+                    const ripple = Math.sin(x * 0.05 + z * 0.03) * 0.5 + 0.5;
+                    if (h < 6.0) col.copy(this.cDeepWater);
+                    else if (h < 22.0) col.lerpColors(this.cDeepWater, this.cSand, smoothstep(6.0, 22.0, h));
+                    else if (h < 35.0) col.copy(this.cSand);
+                    else if (h < 120.0) {
+                        col.lerpColors(this.cSand, this.cDuneGold, smoothstep(35.0, 120.0, h));
+                        if (ripple > 0.6) col.lerp(this.cOchre, (ripple - 0.6) * 0.8);
+                    } else if (h < 260.0) {
+                        col.lerpColors(this.cDuneGold, this.cRock, smoothstep(120.0, 260.0, h));
+                    } else {
+                        col.lerpColors(this.cRock, this.cDirt, smoothstep(260.0, 420.0, h));
+                    }
+                }
+            },
+            northpole: {
+                name: "North Pole Ice",
+                sky: 0x64748b,
+                fog: 0x94a3b8,
+                water: 0x0f172a,
+                cDeepWater: new THREE.Color(0x0f172a),
+                cIceShore: new THREE.Color(0x38bdf8),
+                cGlacierBlue: new THREE.Color(0x7dd3fc),
+                cPackedIce: new THREE.Color(0xbae6fd),
+                cSnow: new THREE.Color(0xf8fafc),
+                cDarkRock: new THREE.Color(0x334155),
+                getColor(h, x, z, col) {
+                    if (h < 6.0) col.copy(this.cDeepWater);
+                    else if (h < 20.0) col.lerpColors(this.cDeepWater, this.cIceShore, smoothstep(6.0, 20.0, h));
+                    else if (h < 60.0) col.lerpColors(this.cIceShore, this.cGlacierBlue, smoothstep(20.0, 60.0, h));
+                    else if (h < 180.0) col.lerpColors(this.cGlacierBlue, this.cPackedIce, smoothstep(60.0, 180.0, h));
+                    else if (h < 300.0) col.lerpColors(this.cPackedIce, this.cSnow, smoothstep(180.0, 300.0, h));
+                    else col.lerpColors(this.cSnow, this.cDarkRock, smoothstep(300.0, 420.0, h));
+                }
+            }
+        };
+
+        let activeChunkKey = '0_0';
+        let heightMultiplier = 1.25;
+        let currentSeed = 48291;
+
+        function seededRandom(offset = 0) {
+            let t = (currentSeed + offset * 1984913) | 0;
+            t = Math.imul(t ^ (t >>> 15), t | 1);
+            t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        }
+
+        let seedOffsets = {
+            ox1: 0.8, oz1: -0.4,
+            ox2: -1.2, oz2: 1.6,
+            ox3: 1.5, oz3: 2.3,
+            ox4: 2.1, oz4: 1.1,
+            ox5: 1.8, oz5: -0.9,
+            warpX: 0, warpZ: 0
+        };
+
+        function updateSeedOffsets(seed) {
+            currentSeed = parseInt(seed, 10) || 48291;
+            const inputEl = document.getElementById('seed-input');
+            if (inputEl) inputEl.value = currentSeed;
+
+            seedOffsets.ox1 = seededRandom(1) * 30.0 - 15.0;
+            seedOffsets.oz1 = seededRandom(2) * 30.0 - 15.0;
+            seedOffsets.ox2 = seededRandom(3) * 30.0 - 15.0;
+            seedOffsets.oz2 = seededRandom(4) * 30.0 - 15.0;
+            seedOffsets.ox3 = seededRandom(5) * 30.0 - 15.0;
+            seedOffsets.oz3 = seededRandom(6) * 30.0 - 15.0;
+            seedOffsets.ox4 = seededRandom(7) * 30.0 - 15.0;
+            seedOffsets.oz4 = seededRandom(8) * 30.0 - 15.0;
+            seedOffsets.ox5 = seededRandom(9) * 30.0 - 15.0;
+            seedOffsets.oz5 = seededRandom(10) * 30.0 - 15.0;
+            seedOffsets.warpX = (seededRandom(11) - 0.5) * 6000.0;
+            seedOffsets.warpZ = (seededRandom(12) - 0.5) * 6000.0;
+        }
+
+        function getBuiltinBiomeHeight(wx, wz, biomeKey) {
+            const pWx = wx + seedOffsets.warpX;
+            const pWz = wz + seedOffsets.warpZ;
+
+            if (biomeKey === 'mountains') {
+                const cosR = 0.8660254, sinR = 0.5;
+                const rx = pWx * cosR - pWz * sinR;
+                const rz = pWx * sinR + pWz * cosR;
+                const n1 = snoise(rx * 0.0008, rz * 0.0008);
+                const n2 = snoise(pWx * 0.0035 + 17.0, pWz * 0.0035 + 17.0);
+                const n3 = snoise(rx * 0.008, rz * 0.008);
+                let ridge = 1.0 - Math.abs(n1);
+                ridge = ridge * ridge * (3.0 - 2.0 * ridge);
+                const h = ridge * 165.0 + n2 * 22.0 + n3 * 6.0 + 8.0;
+                return Math.max(6.0, h * heightMultiplier);
+            } else if (biomeKey === 'canyon') {
+                const nMain = snoise(pWx * 0.0012, pWz * 0.0012);
+                const nDetail = snoise(pWx * 0.005 + 43.0, pWz * 0.005 - 19.0);
+                const nMicro = snoise(pWx * 0.015, pWz * 0.015);
+                let canyonBase = (nMain + 1.0) * 0.5;
+                let stepped = Math.floor(canyonBase * 6.0) / 6.0;
+                let cliffBand = smoothstep(0.0, 0.15, canyonBase - stepped);
+                let terracedH = (stepped + cliffBand * (1.0 / 6.0)) * 140.0;
+                let gorge = Math.abs(snoise(pWx * 0.0008 + 12.0, pWz * 0.0008 - 8.0));
+                let gorgeCut = smoothstep(0.18, 0.0, gorge) * 85.0;
+                const h = terracedH - gorgeCut + nDetail * 8.0 + nMicro * 2.0 + 12.0;
+                return Math.max(2.0, h * heightMultiplier);
+            } else if (biomeKey === 'jungle') {
+                const n1 = snoise(pWx * 0.0015, pWz * 0.0015);
+                const n2 = snoise(pWx * 0.004 + 5.0, pWz * 0.004 + 5.0);
+                const n3 = snoise(pWx * 0.012, pWz * 0.012);
+                const h = (n1 * 65.0 + n2 * 24.0 + n3 * 8.0 + 45.0) * heightMultiplier;
+                return Math.max(2.0, h);
+            } else if (biomeKey === 'desert') {
+                const d1 = Math.sin(pWx * 0.002 + Math.cos(pWz * 0.001) * 2.0) * 35.0;
+                const d2 = Math.sin(pWx * 0.006 + pWz * 0.004) * 8.0;
+                const d3 = snoise(pWx * 0.001, pWz * 0.001) * 20.0;
+                return Math.max(2.0, (d1 + d2 + d3 + 30.0) * heightMultiplier);
+            } else if (biomeKey === 'northpole') {
+                const ice1 = Math.abs(snoise(pWx * 0.0015, pWz * 0.0015)) * 90.0;
+                const ice2 = snoise(pWx * 0.006, pWz * 0.006) * 15.0;
+                return Math.max(1.0, (ice1 + ice2 + 10.0) * heightMultiplier);
+            } else if (biomeKey === 'plains') {
+                const n1 = snoise(pWx * 0.0006, pWz * 0.0006) * 20.0;
+                const n2 = snoise(pWx * 0.002, pWz * 0.002) * 6.0;
+                return Math.max(2.0, (n1 + n2 + 25.0) * heightMultiplier);
+            } else if (biomeKey === 'crystal') {
+                const spireN = Math.max(0, Math.sin(pWx * 0.004) * Math.cos(pWz * 0.004) - 0.45) / 0.55;
+                const spire = (spireN * spireN * spireN) * 220.0;
+                const plate = snoise(pWx * 0.001, pWz * 0.001) * 30.0 + 35.0;
+                return Math.max(2.0, (spire + plate) * heightMultiplier);
+            } else if (biomeKey === 'archipelago') {
+                const atoll = Math.sin(pWx * 0.002) * Math.sin(pWz * 0.002) * 55.0;
+                const n = snoise(pWx * 0.008, pWz * 0.008) * 10.0;
+                return Math.max(0.5, (atoll + n + 15.0) * heightMultiplier);
+            } else if (biomeKey === 'magical') {
+                const floatH = Math.pow(Math.abs(Math.sin(pWx * 0.0025 + pWz * 0.0025)), 3.0) * 180.0;
+                const n = snoise(pWx * 0.005, pWz * 0.005) * 25.0;
+                return Math.max(2.0, (floatH + n + 30.0) * heightMultiplier);
+            } else if (biomeKey === 'savana') {
+                const kopjeN = Math.max(0, Math.sin(pWx * 0.0012 + 1.8) * Math.cos(pWz * 0.0012 - 0.9) - 0.35) / 0.65;
+                const kopjePlateau = smoothstep(0.3, 0.7, kopjeN) * 190.0;
+                const plains = snoise(pWx * 0.0008, pWz * 0.0008) * 18.0 + 25.0;
+                return Math.max(2.0, (kopjePlateau + plains) * heightMultiplier);
+            } else {
+                // Default Ghibli rolling hills
+                const spineA = Math.sin(pWx * 0.0005 + seedOffsets.ox1) * Math.cos(pWz * 0.0005 + seedOffsets.oz1);
+                const spineB = Math.sin(pWx * 0.0009 + seedOffsets.ox2) * Math.cos(pWz * 0.0009 + seedOffsets.oz2);
+                const mountainSpine = Math.pow(Math.abs(spineA + spineB * 0.5), 1.6) * 260.0;
+                const hills = Math.sin(pWx * 0.0035 + seedOffsets.ox4) * Math.cos(pWz * 0.0035 + seedOffsets.oz4) * 45.0;
+                const micro = Math.sin(pWx * 0.008) * Math.sin(pWz * 0.008) * 14.0;
+                return Math.max(2.0, (mountainSpine + hills + micro + 50.0) * heightMultiplier);
+            }
+        }
+
+        function getChunkTerrainHeight(chunk, wx, wz) {
+            if (chunk && chunk.customModule && typeof chunk.customModule.getHeight === 'function') {
+                const rawH = chunk.customModule.getHeight(wx, wz, snoise, 1.0);
+                return Math.max(2.0, (typeof rawH === 'number' && !isNaN(rawH) ? rawH : 10.0) * heightMultiplier);
+            }
+            if (customTerrainModule && chunk && chunk.biome === 'custom') {
+                const rawH = customTerrainModule.getHeight(wx, wz, snoise, 1.0);
+                return Math.max(2.0, (typeof rawH === 'number' && !isNaN(rawH) ? rawH : 10.0) * heightMultiplier);
+            }
+            const bKey = chunk ? chunk.biome : 'ghibli';
+            return getBuiltinBiomeHeight(wx, wz, bKey);
+        }
+
+        function getBaseProceduralHeight(worldX, worldZ) {
+            if (continentChunks.size === 0) return 20.0;
+            if (continentChunks.size === 1) {
+                const firstChunk = continentChunks.values().next().value;
+                return getChunkTerrainHeight(firstChunk, worldX, worldZ);
+            }
+
+            let totalWeight = 0;
+            let blendedHeight = 0;
+
+            continentChunks.forEach(c => {
+                const centerX = c.cx * CHUNK_SIZE;
+                const centerZ = c.cz * CHUNK_SIZE;
+                const dx = worldX - centerX;
+                const dz = worldZ - centerZ;
+                const distSq = dx * dx + dz * dz;
+                const radius = CHUNK_SIZE * 1.5;
+                const radiusSq = radius * radius;
+
+                if (distSq < radiusSq) {
+                    const dist = Math.sqrt(distSq);
+                    const normDist = dist / radius;
+                    const w = Math.pow(1.0 - normDist, 2.5);
+                    const h = getChunkTerrainHeight(c, worldX, worldZ);
+                    blendedHeight += h * w;
+                    totalWeight += w;
+                }
+            });
+
+            if (totalWeight > 0.0001) {
+                return blendedHeight / totalWeight;
+            }
+            return 20.0;
+        }
+
+        function getChunkTerrainColor(chunk, sampleH, wx, wz, targetColor) {
+            if (chunk && chunk.customModule && typeof chunk.customModule.getColor === 'function') {
+                chunk.customModule.getColor(sampleH, wx, wz, snoise, targetColor, smoothstep);
+                return;
+            }
+            if (customTerrainModule && chunk && chunk.biome === 'custom' && typeof customTerrainModule.getColor === 'function') {
+                customTerrainModule.getColor(sampleH, wx, wz, snoise, targetColor, smoothstep);
+                return;
+            }
+            const pal = (chunk && BIOME_PALETTES[chunk.biome]) ? BIOME_PALETTES[chunk.biome] : BIOME_PALETTES.ghibli;
+            pal.getColor(sampleH, wx, wz, targetColor);
+        }
+
+        function getBlendedBiomeColor(sampleH, wx, wz, targetColor) {
+            if (continentChunks.size === 0) {
+                BIOME_PALETTES.ghibli.getColor(sampleH, wx, wz, targetColor);
+                return;
+            }
+            if (continentChunks.size === 1) {
+                const firstChunk = continentChunks.values().next().value;
+                getChunkTerrainColor(firstChunk, sampleH, wx, wz, targetColor);
+                return;
+            }
+
+            let totalWeight = 0;
+            let sumR = 0, sumG = 0, sumB = 0;
+            const tempC = new THREE.Color();
+
+            continentChunks.forEach(c => {
+                const centerX = c.cx * CHUNK_SIZE;
+                const centerZ = c.cz * CHUNK_SIZE;
+                const dx = wx - centerX;
+                const dz = wz - centerZ;
+                const distSq = dx * dx + dz * dz;
+                const radius = CHUNK_SIZE * 1.5;
+                const radiusSq = radius * radius;
+
+                if (distSq < radiusSq) {
+                    const dist = Math.sqrt(distSq);
+                    const normDist = dist / radius;
+                    const w = Math.pow(1.0 - normDist, 2.5);
+                    getChunkTerrainColor(c, sampleH, wx, wz, tempC);
+                    sumR += tempC.r * w;
+                    sumG += tempC.g * w;
+                    sumB += tempC.b * w;
+                    totalWeight += w;
+                }
+            });
+
+            if (totalWeight > 0.0001) {
+                targetColor.setRGB(sumR / totalWeight, sumG / totalWeight, sumB / totalWeight);
+            } else {
+                BIOME_PALETTES.ghibli.getColor(sampleH, wx, wz, targetColor);
+            }
+        }
+
+        // --- 5. Multi-Chunk Continent Engine ---
+        const CHUNK_SIZE = 3000;
+        const CHUNK_SEGS = 100;
+        const continentChunks = new Map();
+
+        const continentGroup = new THREE.Group();
+        scene.add(continentGroup);
+
+        // 3D Click-to-Expand Ghost Hologram Slots
+        const ghostExpansionGroup = new THREE.Group();
+        scene.add(ghostExpansionGroup);
+
+        const padBaseGeo = new THREE.PlaneGeometry(CHUNK_SIZE * 0.94, CHUNK_SIZE * 0.94);
+        padBaseGeo.rotateX(-Math.PI / 2);
+        const padEdgesGeo = new THREE.EdgesGeometry(padBaseGeo);
+
+        function updateGhostExpansionSlots() {
+            while (ghostExpansionGroup.children.length > 0) {
+                const child = ghostExpansionGroup.children[0];
+                ghostExpansionGroup.remove(child);
+            }
+
+            const existingKeys = new Set(continentChunks.keys());
+            const candidates = new Map();
+
+            continentChunks.forEach(chunk => {
+                const neighbors = [
+                    { cx: chunk.cx, cz: chunk.cz - 1 }, // North
+                    { cx: chunk.cx, cz: chunk.cz + 1 }, // South
+                    { cx: chunk.cx - 1, cz: chunk.cz }, // West
+                    { cx: chunk.cx + 1, cz: chunk.cz }  // East
+                ];
+                neighbors.forEach(n => {
+                    const nKey = `${n.cx}_${n.cz}`;
+                    if (!existingKeys.has(nKey)) {
+                        candidates.set(nKey, n);
+                    }
+                });
+            });
+
+            candidates.forEach(slot => {
+                const isExpandTool = (currentToolMode === 'expand');
+                const padMat = new THREE.MeshBasicMaterial({
+                    color: 0x0284c7,
+                    transparent: true,
+                    opacity: isExpandTool ? 0.38 : 0.18,
+                    depthWrite: false,
+                    side: THREE.DoubleSide
+                });
+                const mesh = new THREE.Mesh(padBaseGeo, padMat);
+                mesh.position.set(slot.cx * CHUNK_SIZE, 12.5, slot.cz * CHUNK_SIZE);
+                mesh.userData = { isExpansionPad: true, cx: slot.cx, cz: slot.cz };
+
+                const lineMat = new THREE.LineBasicMaterial({
+                    color: 0x38bdf8,
+                    transparent: true,
+                    opacity: isExpandTool ? 0.90 : 0.45
+                });
+                const line = new THREE.LineSegments(padEdgesGeo, lineMat);
+                mesh.add(line);
+
+                // Add 3D '+' cross indicator
+                const crossGeo = new THREE.BufferGeometry();
+                const s = 140;
+                const crossVerts = new Float32Array([
+                    -s, 0.5, 0,  s, 0.5, 0,
+                    0, 0.5, -s,  0, 0.5, s
+                ]);
+                crossGeo.setAttribute('position', new THREE.BufferAttribute(crossVerts, 3));
+                const crossLine = new THREE.LineSegments(crossGeo, new THREE.LineBasicMaterial({ color: 0x38bdf8 }));
+                mesh.add(crossLine);
+
+                ghostExpansionGroup.add(mesh);
+            });
+        }
+
+        function createChunk(cx, cz, biomeKey = 'ghibli', shouldRebuild = true) {
+            const key = `${cx}_${cz}`;
+            if (continentChunks.has(key)) return continentChunks.get(key);
+
+            const geo = new THREE.PlaneGeometry(CHUNK_SIZE, CHUNK_SIZE, CHUNK_SEGS, CHUNK_SEGS);
+            geo.rotateX(-Math.PI / 2);
+
+            const colAttr = new Float32Array(geo.attributes.position.count * 3);
+            geo.setAttribute('color', new THREE.BufferAttribute(colAttr, 3));
+
+            const mat = new THREE.MeshToonMaterial({
+                vertexColors: true,
+                gradientMap: gradientMap,
+                dithering: true
+            });
+            injectHeightFogShader(mat, false);
+
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(cx * CHUNK_SIZE, 0, cz * CHUNK_SIZE);
+            mesh.receiveShadow = true;
+            mesh.castShadow = false;
+            mesh.userData = { chunkKey: key, cx, cz };
+            continentGroup.add(mesh);
+
+            const chunkData = {
+                key,
+                cx, cz,
+                biome: biomeKey,
+                mesh,
+                geo,
+                offsets: new Float32Array(geo.attributes.position.count)
+            };
+
+            continentChunks.set(key, chunkData);
+            if (shouldRebuild) {
+                rebuildAllContinentChunks();
+                updateChunkMinimapUI();
+                updateGhostExpansionSlots();
+            }
+            return chunkData;
+        }
+
+        function rebuildChunkGeometry(chunk) {
+            const posAttr = chunk.geo.attributes.position;
+            const colAttr = chunk.geo.attributes.color;
+            const tmp = new THREE.Color();
+            const worldOffsetX = chunk.cx * CHUNK_SIZE;
+            const worldOffsetZ = chunk.cz * CHUNK_SIZE;
+
+            for (let i = 0; i < posAttr.count; i++) {
+                const lx = posAttr.getX(i);
+                const lz = posAttr.getZ(i);
+                const wx = lx + worldOffsetX;
+                const wz = lz + worldOffsetZ;
+
+                const baseH = getBaseProceduralHeight(wx, wz);
+                const finalH = baseH + chunk.offsets[i];
+                posAttr.setY(i, finalH);
+
+                // Organic noise break to eliminate geometric triangle diagonal saw-tooth patterns
+                const colorPerturb = snoise(wx * 0.005 + 100.0, wz * 0.005 - 100.0) * 3.5;
+                const sampleH = finalH + colorPerturb;
+
+                getBlendedBiomeColor(sampleH, wx, wz, tmp);
+                colAttr.setXYZ(i, tmp.r, tmp.g, tmp.b);
+            }
+
+            posAttr.needsUpdate = true;
+            colAttr.needsUpdate = true;
+            chunk.geo.computeVertexNormals();
+
+            document.getElementById('chunk-count-val').textContent = continentChunks.size;
+        }
+
+        function stitchAllChunkNormals() {
+            const vertexMap = new Map();
+            const halfSize = CHUNK_SIZE / 2;
+
+            continentChunks.forEach(chunk => {
+                const posAttr = chunk.geo.attributes.position;
+                const normAttr = chunk.geo.attributes.normal;
+                const worldOffsetX = chunk.cx * CHUNK_SIZE;
+                const worldOffsetZ = chunk.cz * CHUNK_SIZE;
+
+                for (let i = 0; i < posAttr.count; i++) {
+                    const lx = posAttr.getX(i);
+                    const lz = posAttr.getZ(i);
+
+                    if (Math.abs(Math.abs(lx) - halfSize) < 1.0 || Math.abs(Math.abs(lz) - halfSize) < 1.0) {
+                        const wx = Math.round((lx + worldOffsetX) * 10) / 10;
+                        const wz = Math.round((lz + worldOffsetZ) * 10) / 10;
+                        const key = `${wx}_${wz}`;
+
+                        if (!vertexMap.has(key)) vertexMap.set(key, []);
+                        vertexMap.get(key).push({ normAttr, index: i });
+                    }
+                }
+            });
+
+            vertexMap.forEach(entries => {
+                if (entries.length > 1) {
+                    let avgX = 0, avgY = 0, avgZ = 0;
+                    entries.forEach(e => {
+                        avgX += e.normAttr.getX(e.index);
+                        avgY += e.normAttr.getY(e.index);
+                        avgZ += e.normAttr.getZ(e.index);
+                    });
+                    const len = Math.hypot(avgX, avgY, avgZ) || 1.0;
+                    avgX /= len;
+                    avgY /= len;
+                    avgZ /= len;
+
+                    entries.forEach(e => {
+                        e.normAttr.setXYZ(e.index, avgX, avgY, avgZ);
+                        e.normAttr.needsUpdate = true;
+                    });
+                }
+            });
+        }
+
+        function rebuildAllContinentChunks() {
+            continentChunks.forEach(c => rebuildChunkGeometry(c));
+            stitchAllChunkNormals();
+        }
+
+        // Full Bilinear Height Interpolation (Prevents Floating Trees!)
+        function getContinentHeightAt(worldX, worldZ) {
+            const cx = Math.floor((worldX + CHUNK_SIZE / 2) / CHUNK_SIZE);
+            const cz = Math.floor((worldZ + CHUNK_SIZE / 2) / CHUNK_SIZE);
+            const key = `${cx}_${cz}`;
+            const chunk = continentChunks.get(key);
+            const baseH = getBaseProceduralHeight(worldX, worldZ);
+
+            if (chunk) {
+                const lx = worldX - chunk.cx * CHUNK_SIZE;
+                const lz = worldZ - chunk.cz * CHUNK_SIZE;
+                const u = THREE.MathUtils.clamp((lx + CHUNK_SIZE / 2) / CHUNK_SIZE, 0, 1) * CHUNK_SEGS;
+                const v = THREE.MathUtils.clamp((lz + CHUNK_SIZE / 2) / CHUNK_SIZE, 0, 1) * CHUNK_SEGS;
+                const col0 = Math.floor(u);
+                const col1 = Math.min(CHUNK_SEGS, col0 + 1);
+                const row0 = Math.floor(v);
+                const row1 = Math.min(CHUNK_SEGS, row0 + 1);
+                const fracX = u - col0;
+                const fracZ = v - row0;
+
+                const stride = CHUNK_SEGS + 1;
+                const o00 = chunk.offsets[row0 * stride + col0] || 0;
+                const o10 = chunk.offsets[row0 * stride + col1] || 0;
+                const o01 = chunk.offsets[row1 * stride + col0] || 0;
+                const o11 = chunk.offsets[row1 * stride + col1] || 0;
+
+                const sculptOffset = THREE.MathUtils.lerp(
+                    THREE.MathUtils.lerp(o00, o10, fracX),
+                    THREE.MathUtils.lerp(o01, o11, fracX),
+                    fracZ
+                );
+                return baseH + sculptOffset;
+            }
+            return baseH;
+        }
+
+        function snapAllTreesToGround() {
+            placedTrees.forEach(t => {
+                t.y = getContinentHeightAt(t.x, t.z);
+            });
+            updateAllTreeLODs(camera.position);
+            showToast(`🧲 Snapped ${placedTrees.length} Trees to Ground`);
+        }
+
+        // Global Water & Atmosphere (Disabled so it never creates duplicate floating diamond artifacts)
+        const waterMesh = null;
+
+        function injectHeightFogShader(mat, isInstanced = false) {
+            // Disabled for 60-144 FPS native performance
+        }
+
+        // Valley Mist Planes (Ultra-Fast 1-Pass Wave Shader - OFF by default)
+        let valleyMistEnabled = false;
+        let mistBaseAltitude = 120.0;
+        const MIST_LAYER_OFFSETS = [0.0];
+        const mistPlanes = [];
+
+        const mistUniforms = {
+            uTime: { value: 0 },
+            uColor: { value: new THREE.Color(0xdbeafe) },
+            uOpacity: { value: 0.75 },
+            uWindDir: { value: new THREE.Vector2(0.04, 0.02) }
+        };
+
+        const mistPlaneShaderMat = new THREE.ShaderMaterial({
+            uniforms: mistUniforms,
+            vertexShader: `
+                varying vec2 vUv;
+                varying vec3 vWorldPosition;
+                void main() {
+                    vUv = uv;
+                    vec4 worldPos = modelMatrix * vec4(position, 1.0);
+                    vWorldPosition = worldPos.xyz;
+                    gl_Position = projectionMatrix * viewMatrix * worldPos;
+                }
+            `,
+            fragmentShader: `
+                uniform float uTime;
+                uniform vec3 uColor;
+                uniform float uOpacity;
+                uniform vec2 uWindDir;
+                varying vec2 vUv;
+                varying vec3 vWorldPosition;
+
+                void main() {
+                    float distFromCenter = length(vUv - 0.5) * 2.0;
+                    float radialFade = smoothstep(1.0, 0.25, distFromCenter);
+                    if (radialFade <= 0.001) discard;
+
+                    vec2 motion = vWorldPosition.xz * 0.0006 + uWindDir * uTime;
+                    float wave1 = sin(motion.x * 2.2 + motion.y * 1.6);
+                    float wave2 = cos(motion.x * 3.4 - motion.y * 2.8 + uTime * 0.04);
+                    float billow = (wave1 + wave2) * 0.25 + 0.5;
+                    float density = smoothstep(0.25, 0.75, billow) * uOpacity * radialFade;
+                    gl_FragColor = vec4(uColor, density);
+                }
+            `,
+            transparent: true,
+            depthWrite: false,
+            depthTest: true,
+            side: THREE.DoubleSide
+        });
+
+        const valleyMistGroup = new THREE.Group();
+        valleyMistGroup.visible = false;
+        const mistPlaneGeo = new THREE.PlaneGeometry(CHUNK_SIZE * 4, CHUNK_SIZE * 4, 16, 16);
+        mistPlaneGeo.rotateX(-Math.PI / 2);
+
+        MIST_LAYER_OFFSETS.forEach((offset, idx) => {
+            const mesh = new THREE.Mesh(mistPlaneGeo, mistPlaneShaderMat);
+            mesh.position.y = mistBaseAltitude + offset;
+            mesh.renderOrder = 20 + idx;
+            valleyMistGroup.add(mesh);
+            mistPlanes.push(mesh);
+        });
+        // valleyMistGroup not added to scene to guarantee 0 fog / mist
+
+        function updateMistAltitudes(baseH) {
+            mistBaseAltitude = baseH;
+            mistPlanes.forEach((mesh, idx) => {
+                mesh.position.y = mistBaseAltitude + MIST_LAYER_OFFSETS[idx];
+            });
+        }
+
+        // --- 6. 3D Tree Catalog & Precision Base Ground Alignment ---
+        const dracoLoader = new DRACOLoader();
+        dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
+        const gltfLoader = new GLTFLoader();
+        gltfLoader.setDRACOLoader(dracoLoader);
+
+        function resolveAssetUrl(p) {
+            let base = window.location.pathname;
+            if (base.endsWith('.html') || base.includes('.html')) {
+                base = base.substring(0, base.lastIndexOf('/') + 1);
+            }
+            if (!base.endsWith('/')) base += '/';
+            return `${base}${p}`;
+        }
+
+        const TREE_CATALOG = [
+            { id: 'pine_ghibli_02', name: '🌲 Ghibli Pine 02', cat: 'pines', path: 'assets/Pines/Pine_Ghibli_02.glb', targetH: 30.0, scale: 1.0, selected: true },
+            { id: 'pine_a_2', name: '🌲 Pine A2 Tall', cat: 'pines', path: 'assets/Pines/Pine model  A (2).glb', targetH: 28.0, scale: 1.0, selected: true },
+            { id: 'pine_a_3', name: '🌲 Pine A3 Majestic', cat: 'pines', path: 'assets/Pines/Pine model  A (3).glb', targetH: 28.0, scale: 1.0, selected: true },
+            { id: 'pine_a_4', name: '🌲 Pine A4 Dense', cat: 'pines', path: 'assets/Pines/Pine model  A (4).glb', targetH: 28.0, scale: 1.0, selected: false },
+            { id: 'pine_a_7', name: '🌲 Pine A7 Slender', cat: 'pines', path: 'assets/Pines/Pine model  A (7).glb', targetH: 28.0, scale: 1.0, selected: false },
+            { id: 'pine_b_1', name: '🌲 Pine B1 Forest', cat: 'pines', path: 'assets/Pines/Pine model B (1).glb', targetH: 26.0, scale: 1.0, selected: false },
+            { id: 'pine_b_3', name: '🌲 Pine B3 Bushy', cat: 'pines', path: 'assets/Pines/Pine model B (3).glb', targetH: 26.0, scale: 1.0, selected: false },
+            { id: 'palm_cluster', name: '🌴 Palm Cluster 01', cat: 'palms', path: 'assets/Tropical/Palm_Cluster_All_01.glb', targetH: 24.0, scale: 1.0, selected: true },
+            { id: 'palm_trop_1', name: '🌴 Coconut Palm 01', cat: 'palms', path: 'assets/Tropical/Palm_Tropical_01.glb', targetH: 22.0, scale: 1.0, selected: false },
+            { id: 'palm_trop_3', name: '🌴 Coconut Palm 03', cat: 'palms', path: 'assets/Tropical/Palm_Tropical_03.glb', targetH: 22.0, scale: 1.0, selected: false },
+            { id: 'palm_gold_1', name: '🌴 Golden Palm 01', cat: 'palms', path: 'assets/Tropical/Palm_Tropical_Golden_01.glb', targetH: 22.0, scale: 1.0, selected: false },
+            { id: 'big_tree_c', name: '🌳 Giant Canopy C', cat: 'canopy', path: 'assets/Tropical/Big_tree_01_C_001.glb', targetH: 38.0, scale: 1.0, selected: false },
+            { id: 'big_tree_d', name: '🌳 Rainforest Tree D', cat: 'canopy', path: 'assets/Tropical/Big_tree_01_D.glb', targetH: 38.0, scale: 1.0, selected: false },
+            { id: 'big_tree_ivy', name: '🌳 Ivy Canopy Tree', cat: 'canopy', path: 'assets/Tropical/Big_tree_03_ivy.glb', targetH: 36.0, scale: 1.0, selected: false },
+            { id: 'fern_jungle', name: '🌿 Jungle Fern 01', cat: 'undergrowth', path: 'assets/Tropical/Fern_Jungle_01.glb', targetH: 8.0, scale: 1.0, selected: false },
+            { id: 'monstera_lush', name: '🌿 Monstera Plant', cat: 'undergrowth', path: 'assets/Tropical/Plant_Monstera_Lush_01.glb', targetH: 7.0, scale: 1.0, selected: false },
+            { id: 'bush_jungle_m', name: '🌿 Medium Jungle Bush', cat: 'undergrowth', path: 'assets/Tropical/Bush_Jungle_Medium_01.glb', targetH: 10.0, scale: 1.0, selected: false },
+            { id: 'flower_ginger', name: '🌺 Ginger Flower', cat: 'undergrowth', path: 'assets/Tropical/Flower_Ginger_Stalk_01.glb', targetH: 6.0, scale: 1.0, selected: false }
+        ];
+
+        function createDecimatedGeometry(origGeom, reductionFraction) {
+            const g = origGeom.clone();
+            if (g.index) {
+                const origIndices = g.index.array;
+                const newLen = Math.max(3, Math.floor((origIndices.length / 3) * (1.0 - reductionFraction)) * 3);
+                const step = origIndices.length / newLen;
+                const newArr = new Uint32Array(newLen);
+                for (let i = 0; i < newLen / 3; i++) {
+                    const src = Math.floor(i * step) * 3;
+                    newArr[i * 3] = origIndices[src];
+                    newArr[i * 3 + 1] = origIndices[src + 1];
+                    newArr[i * 3 + 2] = origIndices[src + 2];
+                }
+                g.setIndex(new THREE.BufferAttribute(newArr, 1));
+            }
+            return g;
+        }
+
+        const modelRegistry = new Map();
+        const MAX_INSTANCES_PER_MODEL = 2000;
+
+        async function preloadModel(entry) {
+            if (modelRegistry.has(entry.id)) return modelRegistry.get(entry.id);
+
+            try {
+                const fullUrl = resolveAssetUrl(entry.path);
+                const gltf = await gltfLoader.loadAsync(fullUrl);
+                gltf.scene.updateMatrixWorld(true);
+
+                const meshes = [];
+                gltf.scene.traverse(child => {
+                    if (child.isMesh) meshes.push(child);
+                });
+                if (meshes.length === 0) return null;
+
+                // 1. Bake submesh world matrices into each geometry to normalize GLTF scale
+                const bakedGeometries = meshes.map(m => {
+                    const g = m.geometry.clone();
+                    g.applyMatrix4(m.matrixWorld);
+                    return g;
+                });
+
+                // 2. Compute exact scene bounding box from baked geometries
+                const fullBBox = new THREE.Box3();
+                bakedGeometries.forEach(g => {
+                    g.computeBoundingBox();
+                    fullBBox.union(g.boundingBox);
+                });
+
+                const bottomY = fullBBox.min.y;
+                const modelH = Math.max(0.001, fullBBox.max.y - fullBBox.min.y);
+                const scaleMult = entry.targetH ? (entry.targetH / modelH) : 1.0;
+
+                const subMeshes = [];
+
+                meshes.forEach((m, idx) => {
+                    const geom0 = bakedGeometries[idx];
+                    // Translate so roots are anchored at Y = 0
+                    geom0.translate(0, -bottomY, 0);
+                    geom0.scale(scaleMult, scaleMult, scaleMult);
+                    geom0.computeVertexNormals();
+
+                    const geom1 = createDecimatedGeometry(geom0, 0.50);
+                    const geom2 = createDecimatedGeometry(geom0, 0.80);
+
+                    const mat = m.material.clone();
+                    mat.transparent = false;
+                    mat.alphaTest = 0.5;
+                    mat.depthWrite = true;
+                    mat.depthTest = true;
+                    mat.side = THREE.FrontSide;
+
+                    const instMesh0 = new THREE.InstancedMesh(geom0, mat, MAX_INSTANCES_PER_MODEL);
+                    instMesh0.count = 0;
+                    instMesh0.visible = false;
+                    scene.add(instMesh0);
+
+                    const instMesh1 = new THREE.InstancedMesh(geom1, mat, MAX_INSTANCES_PER_MODEL);
+                    instMesh1.count = 0;
+                    instMesh1.visible = false;
+                    scene.add(instMesh1);
+
+                    const instMesh2 = new THREE.InstancedMesh(geom2, mat, MAX_INSTANCES_PER_MODEL);
+                    instMesh2.count = 0;
+                    instMesh2.visible = false;
+                    scene.add(instMesh2);
+
+                    const tri0 = geom0.index ? geom0.index.count / 3 : geom0.attributes.position.count / 3;
+                    const tri1 = geom1.index ? geom1.index.count / 3 : geom1.attributes.position.count / 3;
+                    const tri2 = geom2.index ? geom2.index.count / 3 : geom2.attributes.position.count / 3;
+
+                    subMeshes.push({
+                        lod0: instMesh0,
+                        lod1: instMesh1,
+                        lod2: instMesh2,
+                        tri0: tri0,
+                        tri1: tri1,
+                        tri2: tri2
+                    });
+                });
+
+                const reg = { entry, subMeshes };
+                modelRegistry.set(entry.id, reg);
+                return reg;
+            } catch (err) {
+                console.error(`Failed loading ${entry.name}:`, err);
+                return null;
+            }
+        }
+
+        // --- 7. Autosave & Persistence Engine ---
+        let autosaveTimer = null;
+
+        function triggerAutosave() {
+            const statusEl = document.getElementById('autosave-status');
+            if (statusEl) {
+                statusEl.innerHTML = '💾 Saving...';
+                statusEl.style.color = '#fbbf24';
+            }
+            clearTimeout(autosaveTimer);
+            autosaveTimer = setTimeout(saveAutosaveNow, 800);
+        }
+
+        function saveAutosaveNow() {
+            try {
+                const chunksExport = [];
+                continentChunks.forEach(c => {
+                    chunksExport.push({
+                        cx: c.cx,
+                        cz: c.cz,
+                        biome: c.biome,
+                        offsets: Array.from(c.offsets)
+                    });
+                });
+
+                const saveData = {
+                    version: 1,
+                    timestamp: Date.now(),
+                    currentSeed,
+                    heightMultiplier,
+                    currentShadowStep,
+                    activeChunkKey,
+                    chunks: chunksExport,
+                    trees: placedTrees,
+                    customModuleCode: window.lastLoadedCustomCode || null,
+                    customModuleName: customTerrainModule ? (customTerrainModule.name || null) : null
+                };
+
+                localStorage.setItem('wanderlust_continent_autosave', JSON.stringify(saveData));
+                const d = new Date();
+                const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                const statusEl = document.getElementById('autosave-status');
+                if (statusEl) {
+                    statusEl.innerHTML = `🟢 Autosaved (${timeStr})`;
+                    statusEl.style.color = '#4ade80';
+                }
+            } catch (err) {
+                console.warn("Autosave storage note:", err);
+            }
+        }
+
+        async function restoreAutosave() {
+            try {
+                const raw = localStorage.getItem('wanderlust_continent_autosave');
+                if (!raw) return false;
+                const data = JSON.parse(raw);
+                if (!data || !data.chunks || !Array.isArray(data.chunks) || data.chunks.length === 0) return false;
+
+                if (data.currentSeed) updateSeedOffsets(data.currentSeed);
+                if (data.heightMultiplier) {
+                    heightMultiplier = data.heightMultiplier;
+                    const hmEl = document.getElementById('height-scale-slider');
+                    if (hmEl) hmEl.value = heightMultiplier;
+                    const hmVal = document.getElementById('height-scale-val');
+                    if (hmVal) hmVal.textContent = `${heightMultiplier.toFixed(1)}x`;
+                }
+                if (data.currentShadowStep) {
+                    currentShadowStep = data.currentShadowStep;
+                    updateGradientMap(currentShadowStep);
+                }
+
+                if (data.customModuleCode) {
+                    try {
+                        const blob = new Blob([data.customModuleCode], { type: 'application/javascript' });
+                        const blobUrl = URL.createObjectURL(blob);
+                        const mod = await import(blobUrl);
+                        customTerrainModule = mod.default || mod;
+                        window.lastLoadedCustomCode = data.customModuleCode;
+                        const loadBtn = document.getElementById('btn-load-custom-js');
+                        if (loadBtn) {
+                            loadBtn.textContent = `✓ Active: ${customTerrainModule.name || data.customModuleName || 'Custom'}`;
+                            loadBtn.style.background = '#38bdf8';
+                            loadBtn.style.color = '#082f49';
+                        }
+                    } catch (e) {}
+                }
+
+                while (continentGroup.children.length > 0) {
+                    const child = continentGroup.children[0];
+                    if (child.geometry) child.geometry.dispose();
+                    continentGroup.remove(child);
+                }
+                continentChunks.clear();
+
+                data.chunks.forEach(c => {
+                    const chunk = createChunk(c.cx, c.cz, c.biome, false);
+                    if (c.offsets && Array.isArray(c.offsets)) chunk.offsets.set(c.offsets);
+                });
+
+                rebuildAllContinentChunks();
+
+                if (data.trees && Array.isArray(data.trees)) placedTrees = data.trees;
+                if (data.activeChunkKey && continentChunks.has(data.activeChunkKey)) activeChunkKey = data.activeChunkKey;
+
+                updateChunkMinimapUI();
+                updateGhostExpansionSlots();
+                updateAllTreeLODs(camera.position);
+                showToast("✓ Restored Continent from Autosave!");
+                return true;
+            } catch (e) {
+                console.error("Failed to restore autosave:", e);
+                return false;
+            }
+        }
+
+        function resetWorldToDefault() {
+            if (!confirm("Are you sure you want to reset the continent to a fresh single chunk?")) return;
+            pushHistory();
+
+            localStorage.removeItem('wanderlust_continent_autosave');
+
+            customTerrainModule = null;
+            window.lastLoadedCustomCode = null;
+            const loadBtn = document.getElementById('btn-load-custom-js');
+            if (loadBtn) {
+                loadBtn.textContent = '📂 Load Custom terrain-*.js File';
+                loadBtn.style.background = '#0f172a';
+                loadBtn.style.color = '#ffffff';
+            }
+
+            heightMultiplier = 1.2;
+            const hmEl = document.getElementById('height-scale-slider');
+            if (hmEl) hmEl.value = 1.2;
+            const hmVal = document.getElementById('height-scale-val');
+            if (hmVal) hmVal.textContent = '1.2x';
+
+            updateSeedOffsets(48291);
+
+            while (continentGroup.children.length > 0) {
+                const child = continentGroup.children[0];
+                if (child.geometry) child.geometry.dispose();
+                continentGroup.remove(child);
+            }
+            continentChunks.clear();
+
+            placedTrees = [];
+            updateAllTreeLODs(camera.position);
+
+            activeChunkKey = '0_0';
+            createChunk(0, 0, 'ghibli');
+
+            camera.position.set(0, 520, 1400);
+            controls.target.set(0, 40, 0);
+            controls.update();
+
+            updateChunkMinimapUI();
+            updateGhostExpansionSlots();
+            triggerAutosave();
+            showToast("🗑️ Reset to Fresh Single Chunk");
+        }
+
+        // --- Continent Auto-Generator Engine ---
+        let autoGenGridSize = 3;
+
+        function autoGenerateContinent(theme = 'ghibli', gridSize = 3, populateTrees = false) {
+            pushHistory();
+
+            customTerrainModule = null;
+            window.lastLoadedCustomCode = null;
+            const loadBtn = document.getElementById('btn-load-custom-js');
+            if (loadBtn) {
+                loadBtn.textContent = '📂 Load Custom terrain-*.js File';
+                loadBtn.style.background = '#0f172a';
+                loadBtn.style.color = '#ffffff';
+            }
+
+            // Clear existing chunks from continentGroup
+            while (continentGroup.children.length > 0) {
+                const child = continentGroup.children[0];
+                if (child.geometry) child.geometry.dispose();
+                continentGroup.remove(child);
+            }
+            continentChunks.clear();
+            if (populateTrees) placedTrees = [];
+
+            const startX = -Math.floor(gridSize / 2);
+            const startZ = -Math.floor(gridSize / 2);
+            const newChunks = [];
+
+            for (let r = 0; r < gridSize; r++) {
+                for (let c = 0; c < gridSize; c++) {
+                    const cx = startX + c;
+                    const cz = startZ + r;
+                    const distFromCenter = Math.hypot(cx, cz) / Math.max(1, gridSize / 2);
+
+                    let assignedBiome = theme;
+
+                    // Only perform multi-biome regional assignment if user explicitly selects 'eco'
+                    if (theme === 'eco') {
+                        const distFromCenter = Math.hypot(cx, cz) / Math.max(1, gridSize / 2);
+                        if (distFromCenter < 0.35) {
+                            assignedBiome = 'mountains';
+                        } else if (cx > 0 && cz >= 0) {
+                            assignedBiome = 'jungle';
+                        } else if (cx <= 0 && cz > 0) {
+                            assignedBiome = 'savana';
+                        } else if (cx < 0 && cz <= 0) {
+                            assignedBiome = 'plains';
+                        } else if (cx >= 0 && cz < 0) {
+                            assignedBiome = 'crystal';
+                        }
+                    }
+
+                    const chunk = createChunk(cx, cz, assignedBiome, false);
+                    newChunks.push(chunk);
+                }
+            }
+
+            activeChunkKey = `${startX + Math.floor(gridSize / 2)}_${startZ + Math.floor(gridSize / 2)}`;
+            if (!continentChunks.has(activeChunkKey)) activeChunkKey = newChunks[0].key;
+
+            // Rebuild all chunk geometries and stitch normals once in batch
+            rebuildAllContinentChunks();
+
+            // Auto-populate thematic trees matching biomes
+            if (populateTrees) {
+                newChunks.forEach(chunk => {
+                    const worldCenterX = chunk.cx * CHUNK_SIZE;
+                    const worldCenterZ = chunk.cz * CHUNK_SIZE;
+                    const b = chunk.biome;
+
+                    let matchingModels = TREE_CATALOG.filter(t => {
+                        if (b === 'jungle' || b === 'archipelago') return t.cat === 'palms' || t.cat === 'undergrowth' || t.cat === 'canopy';
+                        if (b === 'savana' || b === 'canyon') return t.cat === 'canopy' || t.id.includes('gold');
+                        if (b === 'mountains') return t.cat === 'pines';
+                        if (b === 'crystal' || b === 'magical') return t.cat === 'undergrowth' || t.cat === 'canopy';
+                        return t.cat === 'pines' || t.cat === 'canopy';
+                    });
+                    if (matchingModels.length === 0) matchingModels = TREE_CATALOG;
+
+                    const numTrees = Math.floor(18 + Math.random() * 16);
+                    for (let i = 0; i < numTrees; i++) {
+                        const px = worldCenterX + (Math.random() - 0.5) * (CHUNK_SIZE * 0.85);
+                        const pz = worldCenterZ + (Math.random() - 0.5) * (CHUNK_SIZE * 0.85);
+                        const py = getContinentHeightAt(px, pz);
+                        if (py <= 14.0) continue;
+
+                        const model = matchingModels[Math.floor(Math.random() * matchingModels.length)];
+                        placedTrees.push({
+                            id: 'tree_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                            modelId: model.id,
+                            x: px, y: py, z: pz,
+                            rotX: (Math.random() - 0.5) * 0.08,
+                            rotY: Math.random() * Math.PI * 2,
+                            rotZ: (Math.random() - 0.5) * 0.08,
+                            scale: 0.8 + Math.random() * 0.4
+                        });
+                    }
+                });
+                updateAllTreeLODs(camera.position);
+            }
+
+            // Adjust water plane size if present
+            if (waterMesh) waterMesh.scale.set(gridSize * 1.5, 1, gridSize * 1.5);
+
+            // Reposition camera to frame continent majestically
+            const span = gridSize * CHUNK_SIZE;
+            camera.position.set(0, span * 0.55 + 600, span * 0.65 + 900);
+            controls.target.set(0, 50, 0);
+
+            updateChunkMinimapUI();
+            updateGhostExpansionSlots();
+            triggerAutosave();
+            showToast(`⚡ Generated ${gridSize * gridSize} Chunks (${gridSize}x${gridSize} ${theme.toUpperCase()} Continent)!`);
+        }
+
+        // --- 8. Placed Tree Database & History (Undo/Redo) ---
+        let placedTrees = [];
+        const undoHistory = [];
+        const redoHistory = [];
+        const MAX_HISTORY = 20;
+
+        function pushHistory() {
+            const snapshot = {
+                trees: JSON.parse(JSON.stringify(placedTrees)),
+                chunks: Array.from(continentChunks.entries()).map(([k, v]) => ({
+                    key: k, cx: v.cx, cz: v.cz, biome: v.biome, offsets: Array.from(v.offsets)
+                }))
+            };
+            undoHistory.push(snapshot);
+            if (undoHistory.length > MAX_HISTORY) undoHistory.shift();
+            redoHistory.length = 0;
+        }
+
+        function undo() {
+            if (undoHistory.length === 0) {
+                showToast("⚠️ Nothing to undo");
+                return;
+            }
+            const currentSnap = {
+                trees: JSON.parse(JSON.stringify(placedTrees)),
+                chunks: Array.from(continentChunks.entries()).map(([k, v]) => ({
+                    key: k, cx: v.cx, cz: v.cz, biome: v.biome, offsets: Array.from(v.offsets)
+                }))
+            };
+            redoHistory.push(currentSnap);
+
+            const prev = undoHistory.pop();
+            placedTrees = prev.trees;
+            prev.chunks.forEach(c => {
+                let chunk = continentChunks.get(c.key);
+                if (!chunk) chunk = createChunk(c.cx, c.cz, c.biome);
+                chunk.biome = c.biome;
+                chunk.offsets.set(c.offsets);
+                rebuildChunkGeometry(chunk);
+            });
+            snapAllTreesToGround();
+            showToast("↩️ Undo Action");
+        }
+
+        function redo() {
+            if (redoHistory.length === 0) {
+                showToast("⚠️ Nothing to redo");
+                return;
+            }
+            const currentSnap = {
+                trees: JSON.parse(JSON.stringify(placedTrees)),
+                chunks: Array.from(continentChunks.entries()).map(([k, v]) => ({
+                    key: k, cx: v.cx, cz: v.cz, biome: v.biome, offsets: Array.from(v.offsets)
+                }))
+            };
+            undoHistory.push(currentSnap);
+
+            const next = redoHistory.pop();
+            placedTrees = next.trees;
+            next.chunks.forEach(c => {
+                let chunk = continentChunks.get(c.key);
+                if (!chunk) chunk = createChunk(c.cx, c.cz, c.biome);
+                chunk.biome = c.biome;
+                chunk.offsets.set(c.offsets);
+                rebuildChunkGeometry(chunk);
+            });
+            snapAllTreesToGround();
+            showToast("↪️ Redo Action");
+        }
+
+        // Tree Color Studio State
+        let treeAutoBiomeColor = true;
+        let treeFoliageTintColor = new THREE.Color(0x4ade80);
+        let treeBarkTintColor = new THREE.Color(0x78350f);
+        let treeVibrancy = 1.0;
+        let treeColorVariance = 0.25;
+
+        const _treeColTemp = new THREE.Color();
+        const _treeBiomeTemp = new THREE.Color();
+
+        function computeTreeInstanceColor(tree) {
+            if (treeAutoBiomeColor) {
+                // Sample ground biome color at the tree's position
+                getBlendedBiomeColor(tree.y, tree.x, tree.z, _treeBiomeTemp);
+                _treeColTemp.copy(_treeBiomeTemp);
+                // Slight vibrancy boost for tree crowns
+                _treeColTemp.multiplyScalar(1.18 * treeVibrancy);
+            } else {
+                _treeColTemp.copy(treeFoliageTintColor);
+                _treeColTemp.multiplyScalar(treeVibrancy);
+            }
+
+            // Apply deterministic natural hue variance
+            if (treeColorVariance > 0.01) {
+                const varN = (snoise(tree.x * 0.015, tree.z * 0.015) + 1.0) * 0.5; // 0..1
+                const hsl = {};
+                _treeColTemp.getHSL(hsl);
+                hsl.h += (varN - 0.5) * (0.09 * (treeColorVariance / 0.25));
+                hsl.s = THREE.MathUtils.clamp(hsl.s + (varN - 0.5) * 0.2, 0.2, 1.0);
+                hsl.l = THREE.MathUtils.clamp(hsl.l + (varN - 0.5) * (0.15 * (treeColorVariance / 0.25)), 0.15, 0.88);
+                _treeColTemp.setHSL(hsl.h, hsl.s, hsl.l);
+            }
+
+            return _treeColTemp;
+        }
+
+        const _dummy = new THREE.Object3D();
+        const _vCam = new THREE.Vector3();
+        let hasResetEmptyTrees = false;
+
+        function updateAllTreeLODs(cameraPos) {
+            if (placedTrees.length === 0) {
+                if (!hasResetEmptyTrees) {
+                    modelRegistry.forEach((reg) => {
+                        reg.subMeshes.forEach(sm => {
+                            sm.lod0.count = 0;
+                            sm.lod1.count = 0;
+                            sm.lod2.count = 0;
+                        });
+                    });
+                    const treeCountEl = document.getElementById('tree-count-val');
+                    if (treeCountEl) treeCountEl.textContent = '0';
+                    let totalTerrainTris = 0;
+                    continentChunks.forEach(c => {
+                        totalTerrainTris += c.geo.index ? c.geo.index.count / 3 : 0;
+                    });
+                    const triEl = document.getElementById('tri-val');
+                    if (triEl) triEl.textContent = Math.round(totalTerrainTris).toLocaleString();
+                    const lod0El = document.getElementById('lod0-val');
+                    if (lod0El) lod0El.textContent = '0';
+                    const lod1El = document.getElementById('lod1-val');
+                    if (lod1El) lod1El.textContent = '0';
+                    hasResetEmptyTrees = true;
+                }
+                return;
+            }
+            hasResetEmptyTrees = false;
+            _vCam.copy(cameraPos);
+
+            const grouped = new Map();
+            placedTrees.forEach(t => {
+                if (!grouped.has(t.modelId)) grouped.set(t.modelId, []);
+                grouped.get(t.modelId).push(t);
+            });
+
+            let totalLod0 = 0, totalLod1 = 0, totalLod2 = 0;
+            let totalFoliageTris = 0;
+
+            modelRegistry.forEach((reg, modelId) => {
+                const trees = grouped.get(modelId) || [];
+                const lod0Instances = [];
+                const lod1Instances = [];
+                const lod2Instances = [];
+
+                trees.forEach(t => {
+                    const dx = t.x - _vCam.x;
+                    const dz = t.z - _vCam.z;
+                    const distSq = dx * dx + dz * dz;
+
+                    _dummy.position.set(t.x, t.y, t.z);
+                    _dummy.rotation.set(t.rotX, t.rotY, t.rotZ);
+                    _dummy.scale.set(t.scale, t.scale, t.scale);
+                    _dummy.updateMatrix();
+
+                    const col = computeTreeInstanceColor(t).clone();
+
+                    if (distSq < 550 * 550) {
+                        lod0Instances.push({ mat: _dummy.matrix.clone(), col });
+                    } else if (distSq < 1200 * 1200) {
+                        lod1Instances.push({ mat: _dummy.matrix.clone(), col });
+                    } else if (distSq < 3200 * 3200) {
+                        lod2Instances.push({ mat: _dummy.matrix.clone(), col });
+                    }
+                });
+
+                totalLod0 += lod0Instances.length;
+                totalLod1 += lod1Instances.length;
+                totalLod2 += lod2Instances.length;
+
+                reg.subMeshes.forEach(sm => {
+                    sm.lod0.count = lod0Instances.length;
+                    sm.lod0.visible = lod0Instances.length > 0;
+                    if (lod0Instances.length > 0) {
+                        for (let i = 0; i < lod0Instances.length; i++) {
+                            sm.lod0.setMatrixAt(i, lod0Instances[i].mat);
+                            sm.lod0.setColorAt(i, lod0Instances[i].col);
+                        }
+                        sm.lod0.instanceMatrix.needsUpdate = true;
+                        if (sm.lod0.instanceColor) sm.lod0.instanceColor.needsUpdate = true;
+                        totalFoliageTris += sm.tri0 * lod0Instances.length;
+                    }
+
+                    sm.lod1.count = lod1Instances.length;
+                    sm.lod1.visible = lod1Instances.length > 0;
+                    if (lod1Instances.length > 0) {
+                        for (let i = 0; i < lod1Instances.length; i++) {
+                            sm.lod1.setMatrixAt(i, lod1Instances[i].mat);
+                            sm.lod1.setColorAt(i, lod1Instances[i].col);
+                        }
+                        sm.lod1.instanceMatrix.needsUpdate = true;
+                        if (sm.lod1.instanceColor) sm.lod1.instanceColor.needsUpdate = true;
+                        totalFoliageTris += sm.tri1 * lod1Instances.length;
+                    }
+
+                    sm.lod2.count = lod2Instances.length;
+                    sm.lod2.visible = lod2Instances.length > 0;
+                    if (lod2Instances.length > 0) {
+                        for (let i = 0; i < lod2Instances.length; i++) {
+                            sm.lod2.setMatrixAt(i, lod2Instances[i].mat);
+                            sm.lod2.setColorAt(i, lod2Instances[i].col);
+                        }
+                        sm.lod2.instanceMatrix.needsUpdate = true;
+                        if (sm.lod2.instanceColor) sm.lod2.instanceColor.needsUpdate = true;
+                        totalFoliageTris += sm.tri2 * lod2Instances.length;
+                    }
+                });
+            });
+
+            const treeCountEl = document.getElementById('tree-count-val');
+            if (treeCountEl) treeCountEl.textContent = placedTrees.length.toLocaleString();
+            let totalTerrainTris = 0;
+            continentChunks.forEach(c => {
+                totalTerrainTris += c.geo.index ? c.geo.index.count / 3 : 0;
+            });
+            const triEl = document.getElementById('tri-val');
+            if (triEl) triEl.textContent = Math.round(totalTerrainTris + totalFoliageTris).toLocaleString();
+            const lod0El = document.getElementById('lod0-val');
+            if (lod0El) lod0El.textContent = totalLod0.toLocaleString();
+            const lod1El = document.getElementById('lod1-val');
+            if (lod1El) lod1El.textContent = totalLod1.toLocaleString();
+        }
+
+        // --- 8. Manual Terrain Sculpting & Tree Painting Tools ---
+        let currentToolMode = 'orbit'; // 'orbit', 'sculpt', 'paint', 'erase'
+        let sculptSubMode = 'raise'; // 'raise', 'lower', 'smooth', 'flatten'
+        let sculptRadius = 75.0;
+        let sculptStrength = 0.6;
+        let flattenTargetH = 0;
+
+        let treeBrushRadius = 45.0;
+        let treeSpacing = 16.0;
+        let isMouseDown = false;
+
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        let brushHitPoint = new THREE.Vector3();
+        let brushHitChunk = null;
+        let isBrushOnGround = false;
+
+        function getSelectedModelEntries() {
+            const selected = TREE_CATALOG.filter(t => t.selected);
+            return selected.length > 0 ? selected : [TREE_CATALOG[0]];
+        }
+
+        function applyTerrainSculpt(hitPoint) {
+            const r = sculptRadius;
+            const rSq = r * r;
+            let anyModified = false;
+
+            continentChunks.forEach(chunk => {
+                const pos = chunk.geo.attributes.position;
+                const worldOffsetX = chunk.cx * CHUNK_SIZE;
+                const worldOffsetZ = chunk.cz * CHUNK_SIZE;
+                let modified = false;
+
+                for (let i = 0; i < pos.count; i++) {
+                    const wx = pos.getX(i) + worldOffsetX;
+                    const wz = pos.getZ(i) + worldOffsetZ;
+                    const dx = wx - hitPoint.x;
+                    const dz = wz - hitPoint.z;
+                    const distSq = dx * dx + dz * dz;
+
+                    if (distSq < rSq) {
+                        const dist = Math.sqrt(distSq);
+                        const falloff = Math.cos((dist / r) * (Math.PI / 2));
+
+                        if (sculptSubMode === 'raise') {
+                            chunk.offsets[i] += sculptStrength * falloff * 4.0;
+                        } else if (sculptSubMode === 'lower') {
+                            chunk.offsets[i] -= sculptStrength * falloff * 4.0;
+                        } else if (sculptSubMode === 'flatten') {
+                            const targetOffset = flattenTargetH - getBaseProceduralHeight(wx, wz);
+                            chunk.offsets[i] = THREE.MathUtils.lerp(chunk.offsets[i], targetOffset, sculptStrength * falloff * 0.2);
+                        } else if (sculptSubMode === 'smooth') {
+                            const avgH = (hitPoint.y - getBaseProceduralHeight(wx, wz));
+                            chunk.offsets[i] = THREE.MathUtils.lerp(chunk.offsets[i], avgH, sculptStrength * falloff * 0.15);
+                        }
+                        modified = true;
+                    }
+                }
+
+                if (modified) {
+                    rebuildChunkGeometry(chunk);
+                    anyModified = true;
+                }
+            });
+
+            if (anyModified) {
+                stitchAllChunkNormals();
+            }
+
+            // Automatically snap all placed trees onto the modified surface
+            placedTrees.forEach(t => {
+                t.y = getContinentHeightAt(t.x, t.z);
+            });
+            updateAllTreeLODs(camera.position);
+            triggerAutosave();
+        }
+
+        function paintTreesAt(hitPoint) {
+            const r = treeBrushRadius;
+            const rSq = r * r;
+            const spacing = treeSpacing;
+            const models = getSelectedModelEntries();
+
+            const numSamples = Math.floor((Math.PI * rSq) / (spacing * spacing * 0.85));
+            let addedAny = false;
+
+            for (let i = 0; i < numSamples; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const dist = Math.sqrt(Math.random()) * r;
+                const px = hitPoint.x + Math.cos(angle) * dist;
+                const pz = hitPoint.z + Math.sin(angle) * dist;
+
+                let tooClose = false;
+                for (let k = 0; k < placedTrees.length; k++) {
+                    const other = placedTrees[k];
+                    const ddx = px - other.x;
+                    const ddz = pz - other.z;
+                    if (ddx * ddx + ddz * ddz < spacing * spacing) {
+                        tooClose = true;
+                        break;
+                    }
+                }
+
+                if (!tooClose) {
+                    const py = getContinentHeightAt(px, pz);
+                    if (py <= 12.0) continue;
+
+                    const pickedModel = models[Math.floor(Math.random() * models.length)];
+                    placedTrees.push({
+                        id: 'tree_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                        modelId: pickedModel.id,
+                        x: px, y: py, z: pz,
+                        rotX: (Math.random() - 0.5) * 0.08,
+                        rotY: Math.random() * Math.PI * 2,
+                        rotZ: (Math.random() - 0.5) * 0.08,
+                        scale: 0.8 + Math.random() * 0.4
+                    });
+                    addedAny = true;
+                }
+            }
+
+            if (addedAny) {
+                updateAllTreeLODs(camera.position);
+                triggerAutosave();
+            }
+        }
+
+        function eraseTreesAt(hitPoint) {
+            const r = treeBrushRadius;
+            const rSq = r * r;
+            const beforeLen = placedTrees.length;
+
+            placedTrees = placedTrees.filter(t => {
+                const dx = t.x - hitPoint.x;
+                const dz = t.z - hitPoint.z;
+                return (dx * dx + dz * dz) > rSq;
+            });
+
+            if (placedTrees.length !== beforeLen) {
+                updateAllTreeLODs(camera.position);
+                triggerAutosave();
+            }
+        }
+
+        // Starter Trees Generator
+        // --- 9. Initialization ---
+        async function initApp() {
+            try {
+                const subEl = document.getElementById('loading-sub');
+                if (subEl) subEl.textContent = 'Initializing Continent & Studio Controls...';
+
+                try { renderTreePickerUI(); } catch (e) { console.error("renderTreePickerUI error:", e); }
+                try { setupUI(); } catch (e) { console.error("setupUI error:", e); }
+                try { setupInteractions(); } catch (e) { console.error("setupInteractions error:", e); }
+
+                // Try restoring from autosave, otherwise create initial central chunk [0, 0]
+                let restored = false;
+                try {
+                    restored = await restoreAutosave();
+                } catch (e) {
+                    console.warn('Could not restore autosave:', e);
+                }
+
+                if (!restored || continentChunks.size === 0) {
+                    createChunk(0, 0, 'ghibli');
+                }
+
+                // Ensure 0 default trees on start
+                updateAllTreeLODs(camera.position);
+
+                // Preload models in background asynchronously without blocking page load
+                Promise.allSettled(TREE_CATALOG.map(entry => preloadModel(entry))).then(() => {
+                    try { renderTreePickerUI(); } catch (e) {}
+                    try { updateAllTreeLODs(camera.position); } catch (e) {}
+                });
+            } catch (err) {
+                console.error("Initialization critical error:", err);
+                if (continentChunks.size === 0) {
+                    createChunk(0, 0, 'ghibli');
+                }
+            } finally {
+                const overlay = document.getElementById('loading-overlay');
+                if (overlay) {
+                    overlay.style.opacity = '0';
+                    setTimeout(() => overlay.style.display = 'none', 200);
+                }
+            }
+        }
+
+        // --- 10. UI Helpers & Tree Picker Generator ---
+        function updateChunkMinimapUI() {
+            const container = document.getElementById('chunk-list-container');
+            if (!container) return;
+            container.innerHTML = '';
+
+            continentChunks.forEach((chunk, key) => {
+                const badge = document.createElement('div');
+                badge.className = 'chunk-badge' + (key === activeChunkKey ? ' active' : '');
+                badge.textContent = `[${chunk.cx}, ${chunk.cz}] ${chunk.biome}`;
+                badge.addEventListener('click', () => {
+                    activeChunkKey = key;
+                    document.getElementById('selected-chunk-label').textContent = `Chunk [${chunk.cx}, ${chunk.cz}] (${chunk.biome})`;
+                    updateChunkMinimapUI();
+                    camera.position.set(chunk.cx * CHUNK_SIZE, camera.position.y, chunk.cz * CHUNK_SIZE + 1200);
+                    controls.target.set(chunk.cx * CHUNK_SIZE, 40, chunk.cz * CHUNK_SIZE);
+                });
+                container.appendChild(badge);
+            });
+        }
+
+        function renderTreePickerUI(category = 'all') {
+            const grid = document.getElementById('tree-picker-grid');
+            if (!grid) return;
+            grid.innerHTML = '';
+
+            const filtered = TREE_CATALOG.filter(t => category === 'all' || t.cat === category);
+
+            filtered.forEach(entry => {
+                const card = document.createElement('div');
+                card.className = 'tree-card' + (entry.selected ? ' active' : '');
+                card.innerHTML = `
+                    <span class="tree-card-name" title="${entry.name}">${entry.name}</span>
+                    <input type="checkbox" ${entry.selected ? 'checked' : ''} style="accent-color: #38bdf8; cursor: pointer;">
+                `;
+
+                const checkbox = card.querySelector('input');
+                card.addEventListener('click', (e) => {
+                    if (e.target !== checkbox) checkbox.checked = !checkbox.checked;
+                    entry.selected = checkbox.checked;
+                    card.classList.toggle('active', entry.selected);
+                });
+
+                grid.appendChild(card);
+            });
+        }
+
+        let toastTimer;
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            if (!t) return;
+            t.innerText = msg;
+            t.classList.add('show');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+        }
+
+        // --- 11. Continent Progressive Streamer Exporter ---
+        function exportContinentProgressiveCode() {
+            const chunksData = [];
+            continentChunks.forEach(c => {
+                chunksData.push({
+                    cx: c.cx,
+                    cz: c.cz,
+                    biome: c.biome,
+                    offsetsCount: c.offsets.length
+                });
+            });
+
+            const code = `// ============================================================================
+// 🌍 Wanderlust Massive Continent Progressive Spatial Chunk Loader
+// Total Active Continent Chunks: ${continentChunks.size} (${continentChunks.size * CHUNK_SIZE}m span)
+// Total Trees: ${placedTrees.length} | Frame-Sliced Multi-LOD Streaming
+// ============================================================================
+
+import * as THREE from 'three';
+
+export class ContinentWorldEngine {
+    constructor(scene, camera) {
+        this.scene = scene;
+        this.camera = camera;
+        this.chunkSize = ${CHUNK_SIZE};
+        this.chunksMeta = ${JSON.stringify(chunksData, null, 2)};
+        this.placedTrees = ${JSON.stringify(placedTrees.slice(0, 100))};
+        this.activeChunks = new Map();
+    }
+
+    update(cameraPosition) {
+        const curCX = Math.floor((cameraPosition.x + this.chunkSize / 2) / this.chunkSize);
+        const curCZ = Math.floor((cameraPosition.z + this.chunkSize / 2) / this.chunkSize);
+
+        this.chunksMeta.forEach(meta => {
+            const distChunks = Math.max(Math.abs(meta.cx - curCX), Math.abs(meta.cz - curCZ));
+            if (distChunks <= 2) {
+                this.loadChunk(meta);
+            } else {
+                this.unloadChunk(meta);
+            }
+        });
+    }
+
+    loadChunk(meta) {
+        const key = meta.cx + '_' + meta.cz;
+        if (this.activeChunks.has(key)) return;
+        this.activeChunks.set(key, true);
+    }
+
+    unloadChunk(meta) {
+        const key = meta.cx + '_' + meta.cz;
+        if (!this.activeChunks.has(key)) return;
+        this.activeChunks.delete(key);
+    }
+}`;
+
+            const box = document.getElementById('code-export-box');
+            if (box) box.value = code;
+            const modal = document.getElementById('code-modal');
+            if (modal) modal.style.display = 'flex';
+        }
+
+        // --- 12. UI Setup & Event Listeners ---
+        function setupUI() {
+            let loadTargetScope = 'all';
+
+            // Core Tool Switching Function
+            function setTool(mode, activeBtn) {
+                currentToolMode = mode;
+
+                // Update camera orbit state
+                if (mode === 'orbit') {
+                    controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
+                    controls.enableRotate = true;
+                } else {
+                    controls.mouseButtons.LEFT = null;
+                    controls.enableRotate = false;
+                }
+
+                // Update active state on relevant buttons
+                const allToolBtns = [
+                    document.getElementById('tool-sculpt'),
+                    document.getElementById('tool-orbit'),
+                    document.getElementById('tool-paint'),
+                    document.getElementById('tool-erase'),
+                    document.getElementById('tool-orbit-trees')
+                ];
+                allToolBtns.forEach(b => { if (b) b.classList.remove('active'); });
+                if (activeBtn) activeBtn.classList.add('active');
+
+                const ring = document.getElementById('brush-ring');
+                if (ring && mode === 'orbit') ring.style.display = 'none';
+
+                updateGhostExpansionSlots();
+                if (activeBtn) showToast(`Mode: ${activeBtn.innerText.trim()}`);
+            }
+
+            // Tab Switching (All tabs default to Orbit Camera so left-click never blocks view navigation)
+            const tabBtns = document.querySelectorAll('.tab-bar .tab-btn');
+            const tabPanes = document.querySelectorAll('.tab-content .tab-pane');
+
+            tabBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    tabBtns.forEach(b => b.classList.remove('active'));
+                    tabPanes.forEach(p => p.classList.remove('active'));
+
+                    btn.classList.add('active');
+                    const tabId = btn.getAttribute('data-tab');
+                    const targetPane = document.getElementById(tabId);
+                    if (targetPane) targetPane.classList.add('active');
+
+                    if (tabId === 'tab-sculpt') {
+                        const orbitBtn = document.getElementById('tool-orbit');
+                        setTool('orbit', orbitBtn);
+                    } else if (tabId === 'tab-trees') {
+                        const orbitBtn = document.getElementById('tool-orbit-trees');
+                        setTool('orbit', orbitBtn);
+                    } else {
+                        setTool('orbit', null);
+                    }
+                });
+            });
+
+            // --- TAB 1: LOAD EXISTING TERRAINS & CUSTOM SCRIPTS ---
+            const btnLoadActive = document.getElementById('btn-load-to-active');
+            const btnLoadAll = document.getElementById('btn-load-to-all');
+            if (btnLoadActive && btnLoadAll) {
+                btnLoadActive.addEventListener('click', () => {
+                    loadTargetScope = 'active';
+                    btnLoadActive.classList.add('active');
+                    btnLoadAll.classList.remove('active');
+                    showToast(`Algorithm Scope: Active Chunk [${activeChunkKey.replace('_', ', ')}]`);
+                });
+                btnLoadAll.addEventListener('click', () => {
+                    loadTargetScope = 'all';
+                    btnLoadAll.classList.add('active');
+                    btnLoadActive.classList.remove('active');
+                    showToast("Algorithm Scope: All Continent Chunks");
+                });
+            }
+
+            const btnGen3x3 = document.getElementById('btn-load-generate-3x3');
+            if (btnGen3x3) {
+                btnGen3x3.addEventListener('click', () => {
+                    autoGenerateContinent('ghibli', 3, false);
+                    if (customTerrainModule) {
+                        continentChunks.forEach(c => {
+                            c.customModule = customTerrainModule;
+                            c.biome = 'custom';
+                        });
+                        rebuildAllContinentChunks();
+                    }
+                    showToast("Generated 3x3 Continent (9 Chunks) with Active Algorithm");
+                });
+            }
+
+            const TERRAIN_PRESET_FILES = {
+                'ghibli': 'terrain-ghibli.js',
+                'jungle': 'terrain-jungle.js',
+                'canyon': 'terrain-canyon.js',
+                'desert': 'terrain-desert.js',
+                'mountains': 'terrain-mountains.js',
+                'northpole': 'terrain-northpole.js',
+                'plains': 'terrain-plains.js',
+                'crystal': 'terrain-crystal.js',
+                'archipelago': 'terrain-archipelago.js',
+                'magical': 'terrain-magical.js'
+            };
+
+            async function loadTerrainPreset(presetKey) {
+                const filename = TERRAIN_PRESET_FILES[presetKey];
+                if (!filename) return;
+                try {
+                    const res = await fetch(filename);
+                    if (!res.ok) throw new Error(`Could not fetch ${filename} (HTTP ${res.status})`);
+                    let code = await res.text();
+                    code = code.replace(/import\s+\*\s+as\s+THREE\s+from\s+['"][^'"]+['"];?/g, 'const THREE = window.THREE;');
+                    code = code.replace(/import\s+THREE\s+from\s+['"][^'"]+['"];?/g, 'const THREE = window.THREE;');
+
+                    const blob = new Blob([code], { type: 'application/javascript' });
+                    const blobUrl = URL.createObjectURL(blob);
+                    const mod = await import(blobUrl);
+                    customTerrainModule = mod.default || mod;
+                    window.lastLoadedCustomCode = code;
+
+                    const labelEl = document.getElementById('active-terrain-label');
+                    if (labelEl) labelEl.textContent = customTerrainModule.name || filename;
+
+                    document.querySelectorAll('.preset-terrain-btn').forEach(b => {
+                        b.classList.toggle('active', b.getAttribute('data-preset') === presetKey);
+                    });
+
+                    pushHistory();
+                    if (loadTargetScope === 'active') {
+                        const chunk = continentChunks.get(activeChunkKey);
+                        if (chunk) {
+                            chunk.biome = presetKey;
+                            chunk.customModule = customTerrainModule;
+                        }
+                        showToast(`Applied ${customTerrainModule.name || filename} to Chunk [${activeChunkKey.replace('_', ', ')}]`);
+                    } else {
+                        continentChunks.forEach(c => {
+                            c.biome = presetKey;
+                            c.customModule = customTerrainModule;
+                        });
+                        showToast(`Applied ${customTerrainModule.name || filename} to All ${continentChunks.size} Chunks`);
+                    }
+
+                    rebuildAllContinentChunks();
+                    snapAllTreesToGround();
+                    triggerAutosave();
+                } catch (err) {
+                    console.error("Error loading terrain preset:", err);
+                    showToast(`Error loading ${filename}: ${err.message}`);
+                }
+            }
+
+            document.querySelectorAll('.preset-terrain-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const key = btn.getAttribute('data-preset');
+                    if (key) loadTerrainPreset(key);
+                });
+            });
+
+            // Custom JS Terrain File Loader
+            const jsInput = document.getElementById('input-terrain-js');
+            const loadJsBtn = document.getElementById('btn-load-custom-js');
+
+            async function loadCustomTerrainFile(file) {
+                try {
+                    let code = await file.text();
+                    code = code.replace(/import\s+\*\s+as\s+THREE\s+from\s+['"][^'"]+['"];?/g, 'const THREE = window.THREE;');
+                    code = code.replace(/import\s+THREE\s+from\s+['"][^'"]+['"];?/g, 'const THREE = window.THREE;');
+
+                    const blob = new Blob([code], { type: 'application/javascript' });
+                    const blobUrl = URL.createObjectURL(blob);
+                    const mod = await import(blobUrl);
+                    customTerrainModule = mod.default || mod;
+                    window.lastLoadedCustomCode = code;
+
+                    const labelEl = document.getElementById('active-terrain-label');
+                    if (labelEl) labelEl.textContent = customTerrainModule.name || file.name;
+
+                    document.querySelectorAll('.preset-terrain-btn').forEach(b => b.classList.remove('active'));
+
+                    pushHistory();
+                    if (loadTargetScope === 'active') {
+                        const chunk = continentChunks.get(activeChunkKey);
+                        if (chunk) {
+                            chunk.biome = 'custom';
+                            chunk.customModule = customTerrainModule;
+                        }
+                        showToast(`Applied ${customTerrainModule.name || file.name} to Chunk [${activeChunkKey.replace('_', ', ')}]`);
+                    } else {
+                        continentChunks.forEach(c => {
+                            c.biome = 'custom';
+                            c.customModule = customTerrainModule;
+                        });
+                        showToast(`Applied ${customTerrainModule.name || file.name} to All ${continentChunks.size} Chunks`);
+                    }
+
+                    rebuildAllContinentChunks();
+                    snapAllTreesToGround();
+                    triggerAutosave();
+                } catch (err) {
+                    console.error("Error loading custom terrain JS:", err);
+                    showToast("Failed to load script: " + err.message);
+                }
+            }
+
+            if (loadJsBtn && jsInput) {
+                loadJsBtn.addEventListener('click', () => jsInput.click());
+                jsInput.addEventListener('change', (e) => {
+                    if (e.target.files && e.target.files[0]) loadCustomTerrainFile(e.target.files[0]);
+                });
+            }
+
+            // Window Drag and Drop
+            window.addEventListener('dragover', (e) => e.preventDefault());
+            window.addEventListener('drop', (e) => {
+                e.preventDefault();
+                if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
+                    const file = e.dataTransfer.files[0];
+                    if (file.name.endsWith('.js')) {
+                        loadCustomTerrainFile(file);
+                    } else if (file.name.endsWith('.json')) {
+                        const reader = new FileReader();
+                        reader.onload = (ev) => {
+                            try {
+                                const data = JSON.parse(ev.target.result);
+                                if (data.chunks && Array.isArray(data.chunks)) {
+                                    pushHistory();
+                                    while (continentGroup.children.length > 0) {
+                                        const child = continentGroup.children[0];
+                                        if (child.geometry) child.geometry.dispose();
+                                        continentGroup.remove(child);
+                                    }
+                                    continentChunks.clear();
+                                    data.chunks.forEach(c => {
+                                        const chunk = createChunk(c.cx, c.cz, c.biome, false);
+                                        if (c.offsets) chunk.offsets.set(c.offsets);
+                                    });
+                                    rebuildAllContinentChunks();
+                                    if (data.trees) placedTrees = data.trees;
+                                    updateAllTreeLODs(camera.position);
+                                    triggerAutosave();
+                                    showToast(`Loaded Continent (${data.chunks.length} Chunks)`);
+                                }
+                            } catch (err) {
+                                showToast("Error loading JSON file");
+                            }
+                        };
+                        reader.readAsText(file);
+                    }
+                }
+            });
+
+            // --- TAB 2: CONTINENT GENERATOR CONTROLS ---
+            const gridBtns = document.querySelectorAll('#grid-size-btn-group button[data-gen-grid]');
+            const customGridBtn = document.getElementById('btn-custom-size');
+            const customGridRow = document.getElementById('custom-grid-slider-row');
+            const gridSlider = document.getElementById('grid-dim-slider');
+            const gridDimVal = document.getElementById('grid-dim-val');
+
+            gridBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    gridBtns.forEach(b => b.classList.remove('active'));
+                    if (customGridBtn) customGridBtn.classList.remove('active');
+                    btn.classList.add('active');
+                    autoGenGridSize = parseInt(btn.getAttribute('data-gen-grid'), 10);
+                    if (customGridRow) customGridRow.style.display = 'none';
+                });
+            });
+
+            if (customGridBtn && customGridRow && gridSlider) {
+                customGridBtn.addEventListener('click', () => {
+                    gridBtns.forEach(b => b.classList.remove('active'));
+                    customGridBtn.classList.add('active');
+                    customGridRow.style.display = 'block';
+                    autoGenGridSize = parseInt(gridSlider.value, 10);
+                    if (gridDimVal) gridDimVal.textContent = `${autoGenGridSize} x ${autoGenGridSize} (${autoGenGridSize * autoGenGridSize} chunks)`;
+                });
+
+                gridSlider.addEventListener('input', (e) => {
+                    autoGenGridSize = parseInt(e.target.value, 10);
+                    if (gridDimVal) gridDimVal.textContent = `${autoGenGridSize} x ${autoGenGridSize} (${autoGenGridSize * autoGenGridSize} chunks)`;
+                });
+            }
+
+            const runAutoBtn = document.getElementById('btn-run-auto-gen');
+            if (runAutoBtn) {
+                runAutoBtn.addEventListener('click', () => {
+                    const themeEl = document.getElementById('auto-gen-theme');
+                    const theme = themeEl ? themeEl.value : 'ghibli';
+                    const populateTreesEl = document.getElementById('auto-gen-populate-trees');
+                    const populateTrees = populateTreesEl ? populateTreesEl.checked : false;
+                    showToast(`Generating ${autoGenGridSize}x${autoGenGridSize} (${autoGenGridSize * autoGenGridSize}) Continent Chunks...`);
+                    setTimeout(() => {
+                        autoGenerateContinent(theme, autoGenGridSize, populateTrees);
+                    }, 20);
+                });
+            }
+
+            // --- TAB 3: MANUAL SCULPT CONTROLS ---
+            const toolSculptBtn = document.getElementById('tool-sculpt');
+            const toolOrbitBtn = document.getElementById('tool-orbit');
+            if (toolSculptBtn) toolSculptBtn.addEventListener('click', () => setTool('sculpt', toolSculptBtn));
+            if (toolOrbitBtn) toolOrbitBtn.addEventListener('click', () => setTool('orbit', toolOrbitBtn));
+
+            const sculptRaise = document.getElementById('sculpt-raise');
+            const sculptLower = document.getElementById('sculpt-lower');
+            const sculptSmooth = document.getElementById('sculpt-smooth');
+            const sculptFlatten = document.getElementById('sculpt-flatten');
+            const sculptBtns = [sculptRaise, sculptLower, sculptSmooth, sculptFlatten];
+
+            function setSculptMode(mode, btn) {
+                sculptSubMode = mode;
+                sculptBtns.forEach(b => { if (b) b.classList.remove('active'); });
+                if (btn) btn.classList.add('active');
+                if (currentToolMode !== 'sculpt') setTool('sculpt', toolSculptBtn);
+            }
+
+            if (sculptRaise) sculptRaise.addEventListener('click', () => setSculptMode('raise', sculptRaise));
+            if (sculptLower) sculptLower.addEventListener('click', () => setSculptMode('lower', sculptLower));
+            if (sculptSmooth) sculptSmooth.addEventListener('click', () => setSculptMode('smooth', sculptSmooth));
+            if (sculptFlatten) sculptFlatten.addEventListener('click', () => setSculptMode('flatten', sculptFlatten));
+
+            const sculptRadSlider = document.getElementById('sculpt-rad-slider');
+            if (sculptRadSlider) {
+                sculptRadSlider.addEventListener('input', (e) => {
+                    sculptRadius = parseFloat(e.target.value);
+                    const el = document.getElementById('sculpt-rad-val');
+                    if (el) el.textContent = `${sculptRadius}m`;
+                });
+            }
+
+            const sculptStrSlider = document.getElementById('sculpt-str-slider');
+            if (sculptStrSlider) {
+                sculptStrSlider.addEventListener('input', (e) => {
+                    sculptStrength = parseFloat(e.target.value);
+                    const el = document.getElementById('sculpt-str-val');
+                    if (el) el.textContent = sculptStrength.toFixed(2);
+                });
+            }
+
+            // --- TAB 4: BIOME & LIGHTING CONTROLS ---
+            const biomeButtons = {
+                'biome-ghibli': 'ghibli',
+                'biome-mountains': 'mountains',
+                'biome-savana': 'savana',
+                'biome-plains': 'plains',
+                'biome-crystal': 'crystal',
+                'biome-jungle': 'jungle',
+                'biome-archipelago': 'archipelago',
+                'biome-magical': 'magical',
+                'biome-canyon': 'canyon'
+            };
+
+            Object.entries(biomeButtons).forEach(([btnId, bKey]) => {
+                const el = document.getElementById(btnId);
+                if (el) {
+                    el.addEventListener('click', () => {
+                        Object.keys(biomeButtons).forEach(id => {
+                            const b = document.getElementById(id);
+                            if (b) b.classList.remove('active');
+                        });
+                        el.classList.add('active');
+
+                        const chunk = continentChunks.get(activeChunkKey);
+                        if (chunk) {
+                            pushHistory();
+                            chunk.biome = bKey;
+                            chunk.customModule = null;
+                            rebuildAllContinentChunks();
+                            updateChunkMinimapUI();
+                            snapAllTreesToGround();
+                            triggerAutosave();
+                            showToast(`Updated Chunk [${chunk.cx}, ${chunk.cz}] to ${bKey}`);
+                        }
+                    });
+                }
+            });
+
+            // Fill ENTIRE Continent With Active Biome Button
+            const applyAllBtn = document.getElementById('btn-apply-all-chunks');
+            if (applyAllBtn) {
+                applyAllBtn.addEventListener('click', () => {
+                    const chunk = continentChunks.get(activeChunkKey);
+                    const targetBiome = chunk ? chunk.biome : (document.getElementById('auto-gen-theme') ? document.getElementById('auto-gen-theme').value : 'ghibli');
+                    pushHistory();
+                    continentChunks.forEach(c => {
+                        c.biome = targetBiome;
+                        c.customModule = null;
+                    });
+                    rebuildAllContinentChunks();
+                    updateChunkMinimapUI();
+                    snapAllTreesToGround();
+                    triggerAutosave();
+                    showToast(`Converted All ${continentChunks.size} Chunks to ${targetBiome.toUpperCase()}`);
+                });
+            }
+
+            const seedInput = document.getElementById('seed-input');
+            const randomSeedBtn = document.getElementById('btn-random-seed');
+            if (randomSeedBtn) {
+                randomSeedBtn.addEventListener('click', () => {
+                    const s = Math.floor(Math.random() * 90000) + 10000;
+                    if (seedInput) seedInput.value = s;
+                    updateSeedOffsets(s);
+                    continentChunks.forEach(c => rebuildChunkGeometry(c));
+                    snapAllTreesToGround();
+                    triggerAutosave();
+                    showToast(`Generated New Seed: ${s}`);
+                });
+            }
+            if (seedInput) {
+                seedInput.addEventListener('change', (e) => {
+                    const s = parseInt(e.target.value, 10) || 48291;
+                    updateSeedOffsets(s);
+                    continentChunks.forEach(c => rebuildChunkGeometry(c));
+                    snapAllTreesToGround();
+                    triggerAutosave();
+                });
+            }
+
+            const heightSlider = document.getElementById('height-scale-slider');
+            if (heightSlider) {
+                heightSlider.addEventListener('input', (e) => {
+                    heightMultiplier = parseFloat(e.target.value);
+                    const hmVal = document.getElementById('height-scale-val');
+                    if (hmVal) hmVal.textContent = `${heightMultiplier.toFixed(1)}x`;
+                    continentChunks.forEach(c => rebuildChunkGeometry(c));
+                    snapAllTreesToGround();
+                    triggerAutosave();
+                });
+            }
+
+            // Sky Presets
+            const btnNoon = document.getElementById('btn-noon');
+            if (btnNoon) btnNoon.addEventListener('click', () => setSkyPreset('noon'));
+            const btnSunset = document.getElementById('btn-sunset');
+            if (btnSunset) btnSunset.addEventListener('click', () => setSkyPreset('sunset'));
+            const btnMist = document.getElementById('btn-mist');
+            if (btnMist) btnMist.addEventListener('click', () => setSkyPreset('mist'));
+            const btnNight = document.getElementById('btn-night');
+            if (btnNight) btnNight.addEventListener('click', () => setSkyPreset('night'));
+
+            // --- TAB 5: TREE CONTROLS ---
+            const toolPaintBtn = document.getElementById('tool-paint');
+            const toolEraseBtn = document.getElementById('tool-erase');
+            const toolOrbitTreesBtn = document.getElementById('tool-orbit-trees');
+            if (toolPaintBtn) toolPaintBtn.addEventListener('click', () => setTool('paint', toolPaintBtn));
+            if (toolEraseBtn) toolEraseBtn.addEventListener('click', () => setTool('erase', toolEraseBtn));
+            if (toolOrbitTreesBtn) toolOrbitTreesBtn.addEventListener('click', () => setTool('orbit', toolOrbitTreesBtn));
+
+            const snapTreesBtn = document.getElementById('btn-snap-trees');
+            if (snapTreesBtn) {
+                snapTreesBtn.addEventListener('click', () => {
+                    snapAllTreesToGround();
+                    triggerAutosave();
+                    showToast("Snapped All Trees to Ground");
+                });
+            }
+
+            const autoBiomeToggle = document.getElementById('tree-auto-biome-color');
+            const foliageColInput = document.getElementById('tree-foliage-color');
+            const barkColInput = document.getElementById('tree-bark-color');
+
+            if (autoBiomeToggle) {
+                autoBiomeToggle.addEventListener('change', (e) => {
+                    treeAutoBiomeColor = e.target.checked;
+                    updateAllTreeLODs(camera.position);
+                    triggerAutosave();
+                    showToast(treeAutoBiomeColor ? "Trees Auto-Matching Biome Colors" : "Custom Tree Palette Active");
+                });
+            }
+
+            if (foliageColInput) {
+                foliageColInput.addEventListener('input', (e) => {
+                    treeFoliageTintColor.set(e.target.value);
+                    if (autoBiomeToggle) autoBiomeToggle.checked = false;
+                    treeAutoBiomeColor = false;
+                    updateAllTreeLODs(camera.position);
+                    triggerAutosave();
+                });
+            }
+
+            if (barkColInput) {
+                barkColInput.addEventListener('input', (e) => {
+                    treeBarkTintColor.set(e.target.value);
+                    updateAllTreeLODs(camera.position);
+                    triggerAutosave();
+                });
+            }
+
+            document.querySelectorAll('.tree-pal-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const fCol = btn.getAttribute('data-fcol');
+                    const bCol = btn.getAttribute('data-bcol');
+                    if (fCol) {
+                        treeFoliageTintColor.set(fCol);
+                        if (foliageColInput) foliageColInput.value = fCol;
+                    }
+                    if (bCol) {
+                        treeBarkTintColor.set(bCol);
+                        if (barkColInput) barkColInput.value = bCol;
+                    }
+                    if (autoBiomeToggle) autoBiomeToggle.checked = false;
+                    treeAutoBiomeColor = false;
+                    updateAllTreeLODs(camera.position);
+                    triggerAutosave();
+                    showToast(`Applied ${btn.innerText.trim()} Tree Palette`);
+                });
+            });
+
+            const treeRadSlider = document.getElementById('tree-rad-slider');
+            if (treeRadSlider) {
+                treeRadSlider.addEventListener('input', (e) => {
+                    treeBrushRadius = parseFloat(e.target.value);
+                    const el = document.getElementById('tree-rad-val');
+                    if (el) el.textContent = `${treeBrushRadius}m`;
+                });
+            }
+
+            document.querySelectorAll('.cat-chip').forEach(chip => {
+                chip.addEventListener('click', () => {
+                    document.querySelectorAll('.cat-chip').forEach(c => c.classList.remove('active'));
+                    chip.classList.add('active');
+                    renderTreePickerUI(chip.getAttribute('data-cat'));
+                });
+            });
+
+            const clearTreesBtn = document.getElementById('btn-clear-trees');
+            if (clearTreesBtn) {
+                clearTreesBtn.addEventListener('click', () => {
+                    if (placedTrees.length === 0) return;
+                    pushHistory();
+                    placedTrees = [];
+                    updateAllTreeLODs(camera.position);
+                    triggerAutosave();
+                    showToast("All Placed Trees Cleared");
+                });
+            }
+
+            // --- TAB 6: WORLD PERSISTENCE & RESET ---
+            const saveNowBtn = document.getElementById('btn-save-now');
+            if (saveNowBtn) {
+                saveNowBtn.addEventListener('click', () => {
+                    saveAutosaveNow();
+                    showToast("Continent Autosaved");
+                });
+            }
+
+            const resetWorldBtn = document.getElementById('btn-reset-world');
+            if (resetWorldBtn) resetWorldBtn.addEventListener('click', resetWorldToDefault);
+
+            const saveJsonBtn = document.getElementById('btn-save-continent-json');
+            if (saveJsonBtn) {
+                saveJsonBtn.addEventListener('click', () => {
+                    const chunksExport = [];
+                    continentChunks.forEach(c => {
+                        chunksExport.push({
+                            cx: c.cx,
+                            cz: c.cz,
+                            biome: c.biome,
+                            offsets: Array.from(c.offsets)
+                        });
+                    });
+
+                    const continentData = {
+                        worldName: "Wanderlust Continent",
+                        timestamp: new Date().toISOString(),
+                        chunkSize: CHUNK_SIZE,
+                        chunks: chunksExport,
+                        trees: placedTrees
+                    };
+
+                    const blob = new Blob([JSON.stringify(continentData)], { type: 'application/json' });
+                    const link = document.createElement('a');
+                    link.download = `wanderlust-continent-${Date.now()}.json`;
+                    link.href = URL.createObjectURL(blob);
+                    link.click();
+                    showToast("Saved Complete Continent World (JSON)");
+                });
+            }
+
+            const loadJsonBtn = document.getElementById('btn-load-continent-json');
+            const loadInput = document.getElementById('input-load-continent-json');
+            if (loadJsonBtn && loadInput) {
+                loadJsonBtn.addEventListener('click', () => loadInput.click());
+                loadInput.addEventListener('change', (e) => {
+                    const file = e.target.files ? e.target.files[0] : null;
+                    if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (ev) => {
+                            try {
+                                const data = JSON.parse(ev.target.result);
+                                if (data.chunks && Array.isArray(data.chunks)) {
+                                    pushHistory();
+                                    while (continentGroup.children.length > 0) {
+                                        const child = continentGroup.children[0];
+                                        if (child.geometry) child.geometry.dispose();
+                                        continentGroup.remove(child);
+                                    }
+                                    continentChunks.clear();
+
+                                    data.chunks.forEach(c => {
+                                        const chunk = createChunk(c.cx, c.cz, c.biome, false);
+                                        if (c.offsets) chunk.offsets.set(c.offsets);
+                                    });
+
+                                    rebuildAllContinentChunks();
+
+                                    if (data.trees) placedTrees = data.trees;
+                                    updateAllTreeLODs(camera.position);
+                                    triggerAutosave();
+                                    showToast(`Loaded Continent (${data.chunks.length} Chunks)`);
+                                }
+                            } catch (err) {
+                                showToast("Error loading Continent JSON");
+                            }
+                        };
+                        reader.readAsText(file);
+                    }
+                });
+            }
+
+            const exportCodeBtn = document.getElementById('btn-export-continent-code');
+            if (exportCodeBtn) exportCodeBtn.addEventListener('click', exportContinentProgressiveCode);
+
+            const closeModalBtn = document.getElementById('btn-close-modal');
+            if (closeModalBtn) {
+                closeModalBtn.addEventListener('click', () => {
+                    const modal = document.getElementById('code-modal');
+                    if (modal) modal.style.display = 'none';
+                });
+            }
+
+            const copyCodeBtn = document.getElementById('btn-copy-code');
+            if (copyCodeBtn) {
+                copyCodeBtn.addEventListener('click', () => {
+                    const box = document.getElementById('code-export-box');
+                    if (box) {
+                        box.select();
+                        navigator.clipboard.writeText(box.value);
+                        showToast("Code Copied to Clipboard");
+                    }
+                });
+            }
+
+            // Undo / Redo
+            const undoBtn = document.getElementById('btn-undo');
+            if (undoBtn) undoBtn.addEventListener('click', () => { undo(); triggerAutosave(); });
+            const redoBtn = document.getElementById('btn-redo');
+            if (redoBtn) redoBtn.addEventListener('click', () => { redo(); triggerAutosave(); });
+
+            // Keyboard Shortcuts
+            window.addEventListener('keydown', (e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+                    e.preventDefault();
+                    if (e.shiftKey) redo();
+                    else undo();
+                } else if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+                    e.preventDefault();
+                    redo();
+                }
+            });
+
+            // Periodic autosave
+            setInterval(saveAutosaveNow, 20000);
+            window.addEventListener('beforeunload', saveAutosaveNow);
+        }
+
+        // --- 13. Pointer & 3D Brush Interactions ---
+        function setupInteractions() {
+            const ring = document.getElementById('brush-ring');
+
+            window.addEventListener('pointermove', (e) => {
+                if (currentToolMode === 'orbit') {
+                    if (isBrushOnGround) {
+                        isBrushOnGround = false;
+                        ring.style.display = 'none';
+                    }
+                    return;
+                }
+
+                mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+                mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+                raycaster.setFromCamera(mouse, camera);
+                const chunkMeshes = Array.from(continentChunks.values()).map(c => c.mesh);
+                const intersects = raycaster.intersectObjects(chunkMeshes);
+
+                if (intersects.length > 0) {
+                    brushHitPoint.copy(intersects[0].point);
+                    brushHitChunk = intersects[0].object;
+                    isBrushOnGround = true;
+
+                    if (currentToolMode === 'sculpt' || currentToolMode === 'paint' || currentToolMode === 'erase') {
+                        ring.style.display = 'block';
+                        ring.style.left = `${e.clientX}px`;
+                        ring.style.top = `${e.clientY}px`;
+
+                        const radius = (currentToolMode === 'sculpt') ? sculptRadius : treeBrushRadius;
+                        const dist = camera.position.distanceTo(brushHitPoint);
+                        const screenRadius = (radius / dist) * window.innerHeight * 0.85;
+                        ring.style.width = `${Math.max(16, screenRadius * 2)}px`;
+                        ring.style.height = `${Math.max(16, screenRadius * 2)}px`;
+
+                        if (currentToolMode === 'erase') {
+                            ring.style.borderColor = '#f87171';
+                            ring.style.background = 'rgba(239, 68, 68, 0.2)';
+                        } else if (currentToolMode === 'sculpt') {
+                            ring.style.borderColor = '#fbbf24';
+                            ring.style.background = 'rgba(251, 191, 36, 0.18)';
+                        } else {
+                            ring.style.borderColor = '#38bdf8';
+                            ring.style.background = 'rgba(56, 189, 248, 0.18)';
+                        }
+                    } else {
+                        ring.style.display = 'none';
+                    }
+
+                    if (isMouseDown) {
+                        if (currentToolMode === 'sculpt') applyTerrainSculpt(brushHitPoint);
+                        else if (currentToolMode === 'paint') paintTreesAt(brushHitPoint);
+                        else if (currentToolMode === 'erase') eraseTreesAt(brushHitPoint);
+                    }
+                } else {
+                    isBrushOnGround = false;
+                    ring.style.display = 'none';
+                }
+            });
+
+            window.addEventListener('pointerdown', (e) => {
+                if (e.target.closest('#hud') || e.target.closest('#stats-panel') || e.target.closest('#code-modal')) return;
+
+                // Check click on 3D Ghost Expansion Slots
+                if (e.button === 0) {
+                    mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+                    mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+                    raycaster.setFromCamera(mouse, camera);
+                    const ghostHits = raycaster.intersectObjects(ghostExpansionGroup.children, true);
+                    if (ghostHits.length > 0) {
+                        let hitObj = ghostHits[0].object;
+                        while (hitObj && !hitObj.userData.isExpansionPad) hitObj = hitObj.parent;
+                        if (hitObj && hitObj.userData && hitObj.userData.isExpansionPad) {
+                            const { cx, cz } = hitObj.userData;
+                            const newBiomeEl = document.getElementById('new-chunk-biome');
+                            const spawnBiome = newBiomeEl ? newBiomeEl.value : 'ghibli';
+                            pushHistory();
+                            createChunk(cx, cz, spawnBiome);
+                            snapAllTreesToGround();
+                            triggerAutosave();
+                            showToast(`Created & Blended Chunk [${cx}, ${cz}] (${spawnBiome})`);
+                            return;
+                        }
+                    }
+                }
+
+                if (e.button === 0 && isBrushOnGround && currentToolMode !== 'orbit') {
+                    pushHistory();
+                    isMouseDown = true;
+                    flattenTargetH = brushHitPoint.y;
+
+                    if (currentToolMode === 'sculpt') applyTerrainSculpt(brushHitPoint);
+                    else if (currentToolMode === 'paint') paintTreesAt(brushHitPoint);
+                    else if (currentToolMode === 'erase') eraseTreesAt(brushHitPoint);
+                }
+            });
+
+            window.addEventListener('pointerup', () => {
+                isMouseDown = false;
+            });
+        }
+
+        // --- 14. Animation Loop & Real-Time FPS Tracker ---
+        let lastLODTime = 0;
+        let frameCount = 0;
+        let lastFpsTime = performance.now();
+        const fpsEl = document.getElementById('fps-val');
+
+        function animate(time) {
+            requestAnimationFrame(animate);
+
+            try {
+                // High-precision live FPS calculation (updates every 500ms)
+                frameCount++;
+                const now = performance.now();
+                const delta = now - lastFpsTime;
+                if (delta >= 500) {
+                    const currentFps = Math.round((frameCount * 1000) / delta);
+                    if (fpsEl) {
+                        fpsEl.textContent = currentFps;
+                        if (currentFps >= 50) fpsEl.style.color = '#4ade80';
+                        else if (currentFps >= 30) fpsEl.style.color = '#fbbf24';
+                        else fpsEl.style.color = '#f87171';
+                    }
+                    frameCount = 0;
+                    lastFpsTime = now;
+                }
+
+                if (waterMesh) {
+                    waterMesh.position.y = 12.0 + Math.sin(time * 0.001) * 0.5;
+                }
+
+                if (typeof mistUniforms !== 'undefined' && mistUniforms && mistUniforms.uTime) {
+                    mistUniforms.uTime.value = time * 0.001;
+                }
+
+                controls.update();
+
+                if (placedTrees.length > 0 && (time - lastLODTime > 120)) {
+                    updateAllTreeLODs(camera.position);
+                    lastLODTime = time;
+                }
+
+                renderer.render(scene, camera);
+            } catch (err) {
+                console.error("Animate error:", err);
+            }
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Start render loop immediately so canvas is alive
+        requestAnimationFrame(animate);
+
+        initApp().catch(err => console.error("InitApp error:", err));
+    </script>
+</body>
+</html>

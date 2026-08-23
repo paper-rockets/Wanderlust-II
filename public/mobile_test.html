@@ -3,18 +3,24 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>📱 Wanderlust Mobile Simulator & Dev Testbench</title>
+  <title>Wanderlust Mobile Simulator & Dev Testbench</title>
   <style>
     :root {
-      --bg-dark: #07090e;
-      --panel-bg: rgba(14, 18, 28, 0.78);
-      --panel-border: rgba(255, 255, 255, 0.12);
+      --bg-dark: #0b0d13;
+      --panel-bg: #141720;
+      --panel-border: #232938;
+      --panel-border-light: #323b4e;
+      --control-bg: #1b202c;
+      --control-bg-hover: #252b3b;
+      --control-border: #2d3648;
       --accent: #38bdf8;
-      --accent-glow: rgba(56, 189, 248, 0.35);
+      --accent-active: #0284c7;
       --text: #f1f5f9;
       --text-dim: #94a3b8;
-      --device-bezel: #181d26;
-      --device-trim: #2a3342;
+      --text-muted: #64748b;
+      --device-bezel: #161922;
+      --device-trim: #2a3142;
+      --device-border: #384257;
     }
 
     * {
@@ -36,23 +42,12 @@
       flex-direction: column;
     }
 
-    /* Ambient glow background */
-    .ambient-glow {
-      position: fixed;
-      inset: 0;
-      background: radial-gradient(circle at 50% 40%, rgba(56, 189, 248, 0.08) 0%, transparent 65%);
-      pointer-events: none;
-      z-index: 0;
-    }
-
-    /* Top Navigation Toolbar */
+    /* Top Navigation Toolbar - Solid Non-Glassmorphic */
     #top-bar {
       position: relative;
       z-index: 10;
-      height: 58px;
+      height: 56px;
       background: var(--panel-bg);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
       border-bottom: 1px solid var(--panel-border);
       display: flex;
       align-items: center;
@@ -80,9 +75,9 @@
       letter-spacing: 0.08em;
       text-transform: uppercase;
       padding: 3px 8px;
-      border-radius: 999px;
-      background: rgba(56, 189, 248, 0.15);
-      border: 1px solid rgba(56, 189, 248, 0.4);
+      border-radius: 4px;
+      background: #172638;
+      border: 1px solid #1e3a5f;
       color: var(--accent);
     }
 
@@ -104,43 +99,41 @@
       font-family: inherit;
       font-size: 13px;
       color: var(--text);
-      background: rgba(255, 255, 255, 0.07);
-      border: 1px solid var(--panel-border);
+      background: var(--control-bg);
+      border: 1px solid var(--control-border);
       padding: 7px 14px;
-      border-radius: 8px;
+      border-radius: 6px;
       cursor: pointer;
       display: flex;
       align-items: center;
       gap: 6px;
-      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
     }
 
     select {
       padding-right: 28px;
       appearance: none;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='white'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
       background-repeat: no-repeat;
       background-position: right 8px center;
       background-size: 12px;
     }
 
     select:hover, button:hover {
-      background: rgba(255, 255, 255, 0.12);
-      border-color: rgba(255, 255, 255, 0.25);
+      background: var(--control-bg-hover);
+      border-color: var(--panel-border-light);
     }
 
     select:focus, button:focus {
       outline: none;
       border-color: var(--accent);
-      box-shadow: 0 0 0 2px var(--accent-glow);
     }
 
     button.active {
-      background: var(--accent);
-      color: #040d1a;
+      background: var(--accent-active);
+      color: #ffffff;
       font-weight: 600;
       border-color: var(--accent);
-      box-shadow: 0 0 16px var(--accent-glow);
     }
 
     .btn-icon-only {
@@ -167,16 +160,14 @@
       z-index: 1;
     }
 
-    /* Device Mockup Outer Shell */
+    /* Device Mockup Outer Shell - Solid Precision Frame */
     #device-shell {
       position: relative;
       background: var(--device-bezel);
       border-radius: 46px;
       padding: 12px;
-      box-shadow: 
-        0 0 0 2px var(--device-trim),
-        0 24px 64px rgba(0, 0, 0, 0.8),
-        0 4px 16px rgba(0, 0, 0, 0.6);
+      border: 2px solid var(--device-border);
+      box-shadow: 0 20px 48px rgba(0, 0, 0, 0.7);
       transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1), 
                   height 0.35s cubic-bezier(0.4, 0, 0.2, 1),
                   transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
@@ -194,33 +185,44 @@
       z-index: 50;
       pointer-events: none;
       transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .dynamic-island {
       width: 105px;
       height: 28px;
-      background: #000;
+      background: #000000;
       border-radius: 20px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       padding: 0 10px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+      border: 1px solid #1a1d26;
+    }
+
+    .punchhole-camera {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #000000;
+      border: 1.5px solid #1a1e27;
+      display: none;
     }
 
     .camera-lens {
       width: 11px;
       height: 11px;
       border-radius: 50%;
-      background: #0a0e14;
-      border: 1px solid #1c2430;
-      box-shadow: inset 0 0 4px #000;
+      background: #05070a;
+      border: 1px solid #151a24;
     }
 
     .speaker-slot {
       width: 42px;
       height: 4px;
-      background: #111;
+      background: #0e1117;
       border-radius: 2px;
     }
 
@@ -231,32 +233,31 @@
       height: 100%;
       border-radius: 36px;
       overflow: hidden;
-      background: #000;
+      background: #000000;
       display: flex;
-      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+      border: 1px solid #1f2533;
     }
 
     iframe#game-frame {
       width: 100%;
       height: 100%;
       border: none;
-      background: #000;
+      background: #000000;
       display: block;
     }
 
     /* Touch Visualizer Circle */
     #touch-cursor {
       position: absolute;
-      width: 36px;
-      height: 36px;
+      width: 34px;
+      height: 34px;
       border-radius: 50%;
-      background: rgba(56, 189, 248, 0.4);
-      border: 2px solid rgba(255, 255, 255, 0.9);
+      background: rgba(56, 189, 248, 0.3);
+      border: 2px solid #38bdf8;
       pointer-events: none;
       transform: translate(-50%, -50%) scale(0);
       transition: transform 0.15s ease-out, opacity 0.15s ease-out;
       z-index: 999;
-      box-shadow: 0 0 14px var(--accent);
       opacity: 0;
     }
 
@@ -273,20 +274,18 @@
       transform: translateX(-50%);
       width: 130px;
       height: 4px;
-      background: rgba(255, 255, 255, 0.45);
+      background: #475569;
       border-radius: 3px;
       z-index: 50;
       pointer-events: none;
     }
 
-    /* Bottom Info Status Bar */
+    /* Bottom Info Status Bar - Solid */
     #bottom-bar {
       position: relative;
       z-index: 10;
-      height: 38px;
+      height: 36px;
       background: var(--panel-bg);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
       border-top: 1px solid var(--panel-border);
       display: flex;
       align-items: center;
@@ -308,29 +307,28 @@
       height: 7px;
       border-radius: 50%;
       background: #22c55e;
-      box-shadow: 0 0 8px #22c55e;
     }
 
-    /* Interactive hint tooltip */
+    /* Interactive hint tooltip - Solid Card */
     .keyboard-hint {
       position: fixed;
-      bottom: 50px;
+      bottom: 48px;
       right: 20px;
-      background: rgba(14, 18, 28, 0.85);
+      background: var(--panel-bg);
       border: 1px solid var(--panel-border);
-      backdrop-filter: blur(12px);
-      border-radius: 12px;
+      border-radius: 8px;
       padding: 12px 16px;
       font-size: 12px;
       line-height: 1.6;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      box-shadow: 0 10px 24px rgba(0,0,0,0.6);
       z-index: 20;
       max-width: 290px;
       color: #cbd5e1;
     }
 
     .keyboard-hint kbd {
-      background: rgba(255, 255, 255, 0.15);
+      background: var(--control-bg);
+      border: 1px solid var(--control-border);
       padding: 2px 6px;
       border-radius: 4px;
       font-family: inherit;
@@ -341,12 +339,10 @@
   </style>
 </head>
 <body>
-  <div class="ambient-glow"></div>
-
   <!-- Top Navigation & Controls Toolbar -->
   <header id="top-bar">
     <div class="brand">
-      <span class="brand-icon">📱</span>
+      <span class="brand-icon"></span>
       <span>Wanderlust Mobile Lab</span>
       <span class="badge">Device Simulator</span>
     </div>
@@ -355,18 +351,20 @@
     <div class="toolbar-group">
       <span class="control-label">Device:</span>
       <select id="device-select">
-        <optgroup label="Apple iPhone">
-          <option value="iphone16pro" data-w="393" data-h="852" data-radius="46">iPhone 16 Pro (393 × 852)</option>
-          <option value="iphone16promax" data-w="430" data-h="932" data-radius="48">iPhone 16 Pro Max (430 × 932)</option>
-          <option value="iphonese" data-w="375" data-h="667" data-radius="32">iPhone SE Compact (375 × 667)</option>
-        </optgroup>
         <optgroup label="Android Flagships">
-          <option value="galaxys24" data-w="412" data-h="915" data-radius="40">Galaxy S24 Ultra (412 × 915)</option>
-          <option value="pixel8" data-w="412" data-h="892" data-radius="42">Google Pixel 8 Pro (412 × 892)</option>
+          <option value="galaxys25ultra" data-w="412" data-h="916" data-radius="26" data-camera="punchhole" selected>Galaxy S25 Ultra (412 × 916)</option>
+          <option value="galaxys24" data-w="412" data-h="915" data-radius="38" data-camera="punchhole">Galaxy S24 Ultra (412 × 915)</option>
+          <option value="pixel8" data-w="412" data-h="892" data-radius="42" data-camera="punchhole">Google Pixel 8 Pro (412 × 892)</option>
         </optgroup>
         <optgroup label="Tablets & Handhelds">
-          <option value="ipadair" data-w="820" data-h="1180" data-radius="32">iPad Air (820 × 1180)</option>
-          <option value="deck" data-w="1280" data-h="800" data-radius="24">Steam Deck / Handheld (1280 × 800)</option>
+          <option value="tabs6lite" data-w="800" data-h="1280" data-radius="22" data-camera="none">Galaxy Tab S6 Lite (800 × 1280 / 10.4")</option>
+          <option value="ipadair" data-w="820" data-h="1180" data-radius="32" data-camera="none">iPad Air (820 × 1180)</option>
+          <option value="deck" data-w="1280" data-h="800" data-radius="24" data-camera="none">Steam Deck / Handheld (1280 × 800)</option>
+        </optgroup>
+        <optgroup label="Apple iPhone">
+          <option value="iphone16pro" data-w="393" data-h="852" data-radius="46" data-camera="island">iPhone 16 Pro (393 × 852)</option>
+          <option value="iphone16promax" data-w="430" data-h="932" data-radius="48" data-camera="island">iPhone 16 Pro Max (430 × 932)</option>
+          <option value="iphonese" data-w="375" data-h="667" data-radius="32" data-camera="none">iPhone SE Compact (375 × 667)</option>
         </optgroup>
       </select>
 
@@ -374,10 +372,10 @@
 
       <!-- Orientation Toggle (Landscape default for game flight) -->
       <button id="btn-landscape" class="active" title="Landscape View (Flight Mode)">
-        🔄 Landscape
+        Landscape
       </button>
       <button id="btn-portrait" title="Portrait View">
-        📱 Portrait
+        Portrait
       </button>
 
       <div class="divider"></div>
@@ -397,7 +395,7 @@
     <div class="toolbar-group">
       <span class="control-label">Target:</span>
       <select id="target-page-select">
-        <option value="./index.html" selected>Main Game (Wanderlust)</option>
+        <option value="./wanderlust.html" selected>Main Game (Wanderlust)</option>
         <option value="./journey.html">Journey Sand Tribute</option>
         <option value="./toon_cloud_ocean.html">Toon Clouds & Ocean</option>
         <option value="./sandbox_terrain.html">Sandbox Terrain</option>
@@ -405,20 +403,22 @@
       </select>
 
       <button id="btn-reload" class="btn-icon-only" title="Reload Frame">
-        🔁
+        Reload
       </button>
     </div>
+
   </header>
 
   <!-- Simulator Presentation Stage -->
   <main id="stage">
     <div id="device-shell">
-      <!-- Camera Island / Notch -->
+      <!-- Camera Island / Notch / Punchhole -->
       <div id="island-container">
-        <div class="dynamic-island">
+        <div class="dynamic-island" id="camera-island">
           <div class="speaker-slot"></div>
           <div class="camera-lens"></div>
         </div>
+        <div class="punchhole-camera" id="camera-punchhole"></div>
       </div>
 
       <!-- Screen & Game Iframe -->
@@ -438,7 +438,7 @@
   <footer id="bottom-bar">
     <div class="status-badge">
       <div class="dot-green"></div>
-      <span id="resolution-status">852 × 393 px (Landscape 19.5:9)</span>
+      <span id="resolution-status">916 × 412 px (Landscape 2.22:1)</span>
     </div>
 
     <div>
@@ -470,6 +470,8 @@
     const deviceShell = document.getElementById('device-shell');
     const screenContainer = document.getElementById('screen-container');
     const islandContainer = document.getElementById('island-container');
+    const cameraIsland = document.getElementById('camera-island');
+    const cameraPunchhole = document.getElementById('camera-punchhole');
     const gameFrame = document.getElementById('game-frame');
     const resStatus = document.getElementById('resolution-status');
     const zoomStatus = document.getElementById('zoom-status');
@@ -482,6 +484,7 @@
       const baseW = parseInt(selectedOption.dataset.w, 10);
       const baseH = parseInt(selectedOption.dataset.h, 10);
       const radius = parseInt(selectedOption.dataset.radius || 46, 10);
+      const cameraType = selectedOption.dataset.camera || 'island';
 
       // Width and Height depending on landscape or portrait
       const width = isLandscape ? Math.max(baseW, baseH) : Math.min(baseW, baseH);
@@ -489,19 +492,22 @@
 
       screenContainer.style.width = `${width}px`;
       screenContainer.style.height = `${height}px`;
-      screenContainer.style.borderRadius = `${radius - 10}px`;
+      screenContainer.style.borderRadius = `${radius - 8}px`;
       deviceShell.style.borderRadius = `${radius}px`;
 
-      // Hide or reposition Dynamic island for tablets/handhelds
-      if (selectedOption.value === 'deck' || selectedOption.value === 'iphonese') {
+      // Camera cutout handling (Dynamic Island vs Punch hole vs None)
+      if (cameraType === 'none') {
         islandContainer.style.display = 'none';
+      } else if (cameraType === 'punchhole') {
+        islandContainer.style.display = 'flex';
+        if (cameraIsland) cameraIsland.style.display = 'none';
+        if (cameraPunchhole) cameraPunchhole.style.display = 'block';
+        islandContainer.style.top = isLandscape ? '10px' : '14px';
       } else {
-        islandContainer.style.display = 'block';
-        if (isLandscape) {
-          islandContainer.style.top = '12px';
-        } else {
-          islandContainer.style.top = '18px';
-        }
+        islandContainer.style.display = 'flex';
+        if (cameraIsland) cameraIsland.style.display = 'flex';
+        if (cameraPunchhole) cameraPunchhole.style.display = 'none';
+        islandContainer.style.top = isLandscape ? '12px' : '18px';
       }
 
       // Aspect ratio
