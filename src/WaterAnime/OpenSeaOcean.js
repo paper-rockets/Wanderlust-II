@@ -126,9 +126,12 @@ export function setWindDirection(angleDeg, spreadPercent = 45) {
   });
 }
 
-// phase: f = k * (dot(direction, xz) - time * c) + phase
-const wavePhase = (w, xz, time) =>
-  w.k.mul(dot(vec2(w.dx, w.dz), xz).sub(time.mul(w.c))).add(w.phase);
+// phase: f = k * (dot(direction, xz) - time * c) + phase (wrapped to [0, 2*PI) to avoid precision loss)
+const TWO_PI_NODE = float(Math.PI * 2.0);
+const wavePhase = (w, xz, time) => {
+  const rawPhase = w.k.mul(dot(vec2(w.dx, w.dz), xz).sub(time.mul(w.c))).add(w.phase);
+  return fract(rawPhase.div(TWO_PI_NODE)).mul(TWO_PI_NODE);
+};
 
 // displaced surface point for a given parametric xz (sampled in world space for true physical waves)
 const wavePosition = Fn(([localXz, time, sea]) => {
@@ -251,6 +254,11 @@ export const createOpenSeaMaterial = () => {
   const oceanMaterial = new THREE.MeshBasicNodeMaterial();
   oceanMaterial.transparent = true;
   oceanMaterial.side = THREE.DoubleSide;
+  oceanMaterial.depthWrite = true;
+  oceanMaterial.depthTest = true;
+  oceanMaterial.polygonOffset = true;
+  oceanMaterial.polygonOffsetFactor = 1.0;
+  oceanMaterial.polygonOffsetUnits = 1.0;
 
   const scaledTime = timeUniform.mul(speedUniform);
   const gerstnerP = wavePosition(positionLocal.xz, scaledTime, seaUniform);
@@ -336,10 +344,12 @@ export const createOpenSeaMaterial = () => {
 export function getWaterHeightAt(rawX, rawZ, time, sea) {
   const x = rawX * oceanScaleUniform.value;
   const z = rawZ * oceanScaleUniform.value;
+  const TWO_PI = Math.PI * 2.0;
   let y = 0;
   for (const w of WAVES) {
     const a = (w.steepness.value * sea * swellWavelengthUniform.value) / w.k.value;
-    const f = w.k.value * (w.dx.value * x + w.dz.value * z - time * speedUniform.value * w.c.value) + w.phase.value;
+    let f = w.k.value * (w.dx.value * x + w.dz.value * z - time * speedUniform.value * w.c.value) + w.phase.value;
+    f = ((f % TWO_PI) + TWO_PI) % TWO_PI;
     y += a * Math.sin(f) * waveHeightUniform.value;
   }
   return y;

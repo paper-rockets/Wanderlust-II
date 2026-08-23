@@ -18,7 +18,7 @@ import { TreeBillboardEditor } from './ui/TreeBillboardEditor.js';
 import { LOW_GFX, TERRAIN_RES } from './config/constants.js';
 import { snoise } from './world/Noise.js';
 import { ZONES, WORLD_LENGTH, BLEND_WIDTH } from './world/BiomeManager.js';
-import { getBiomeAt, getWorldHeight, getWorldColor, getIslandData } from './world/TerrainGenerator.js';
+import { getBiomeAt, getWorldHeight, getWorldColor, getIslandData, setWorldOriginOffset, worldOriginOffset } from './world/TerrainGenerator.js';
 
     import * as THREE from 'three';
 
@@ -320,8 +320,8 @@ import { AnimatedFlockSystem } from './entities/AnimatedFlockSystem.js';
         
         const infoText = document.getElementById('map-info-text');
         if (infoText) {
-            const rx = Math.round(px);
-            const rz = Math.round(pz);
+            const rx = Math.round(px + worldOriginOffset.x);
+            const rz = Math.round(pz + worldOriginOffset.y);
             const currentBiome = getBiomeAt(px, pz);
             const bName = currentBiome ? currentBiome.name : 'Unknown';
             const zoomStr = _mapZoomLevel >= 1.0 ? `${_mapZoomLevel.toFixed(1)}x` : `${_mapZoomLevel.toFixed(2)}x`;
@@ -1334,9 +1334,11 @@ import { AnimatedFlockSystem } from './entities/AnimatedFlockSystem.js';
     }
 
     function getPathStrength(x, z) {
+        const wx = x + worldOriginOffset.x;
+        const wz = z + worldOriginOffset.y;
         const scale = 0.002;
-        const n1 = snoise(x * scale, z * scale);
-        const n2 = snoise(x * scale * 2 + 1000, z * scale * 2 + 1000) * 0.3;
+        const n1 = snoise(wx * scale, wz * scale);
+        const n2 = snoise(wx * scale * 2 + 1000, wz * scale * 2 + 1000) * 0.3;
         let path = Math.abs(n1 + n2);
         let mask = smoothstep(0.15, 0.0, path); // wider, softer path
         return mask;
@@ -3912,13 +3914,52 @@ import { AnimatedFlockSystem } from './entities/AnimatedFlockSystem.js';
     let lastFpsTime = performance.now();
     let framesThisSecond = 0;
     let lastAnimTime = performance.now();
-    let smoothedDt = 0.0166;
 
+    function shiftInstancedMesh(mesh, count, shiftX, shiftZ) {
+        if (!mesh || !mesh.count) return;
+        const actualCount = count || mesh.count;
+        for (let i = 0; i < actualCount; i++) {
+            mesh.getMatrixAt(i, dummy.matrix);
+            dummy.matrix.decompose(dummy.position, dummy.quaternion, dummy.scale);
+            dummy.position.x -= shiftX;
+            dummy.position.z -= shiftZ;
+            dummy.updateMatrix();
+            mesh.setMatrixAt(i, dummy.matrix);
+        }
+        mesh.instanceMatrix.needsUpdate = true;
+    }
+
+    function shiftAllInstances(shiftX, shiftZ) {
+        if (typeof instCrystals !== 'undefined') shiftInstancedMesh(instCrystals, CRYSTAL_COUNT, shiftX, shiftZ);
+        if (typeof instIcebergs !== 'undefined') shiftInstancedMesh(instIcebergs, ICEBERG_COUNT, shiftX, shiftZ);
+        if (typeof instClouds !== 'undefined') shiftInstancedMesh(instClouds, CLOUD_COUNT, shiftX, shiftZ);
+        if (typeof instHighClouds !== 'undefined') shiftInstancedMesh(instHighClouds, HIGH_CLOUD_COUNT, shiftX, shiftZ);
+        if (typeof instWispyClouds !== 'undefined') shiftInstancedMesh(instWispyClouds, WISPY_CLOUD_COUNT, shiftX, shiftZ);
+        if (typeof instMegaClouds !== 'undefined') shiftInstancedMesh(instMegaClouds, MEGA_CLOUD_COUNT, shiftX, shiftZ);
+        if (typeof instRocks !== 'undefined') shiftInstancedMesh(instRocks, ROCK_COUNT, shiftX, shiftZ);
+        if (typeof instBushes !== 'undefined') shiftInstancedMesh(instBushes, BUSH_COUNT, shiftX, shiftZ);
+        if (typeof instFlowers !== 'undefined') shiftInstancedMesh(instFlowers, FLOWER_COUNT, shiftX, shiftZ);
+        if (typeof instBirds !== 'undefined') shiftInstancedMesh(instBirds, BIRD_COUNT, shiftX, shiftZ);
+        if (typeof instHighBirds !== 'undefined') shiftInstancedMesh(instHighBirds, HIGH_BIRD_COUNT, shiftX, shiftZ);
+        if (typeof treeMeshes !== 'undefined') {
+            for (const tm of Object.values(treeMeshes)) {
+                shiftInstancedMesh(tm, tm.count, shiftX, shiftZ);
+            }
+        }
+        if (typeof window.instPalmTreeParts !== 'undefined' && Array.isArray(window.instPalmTreeParts)) {
+            for (const pm of window.instPalmTreeParts) {
+                shiftInstancedMesh(pm, pm.count, shiftX, shiftZ);
+            }
+        }
+        if (typeof window.instOakTreeParts !== 'undefined' && Array.isArray(window.instOakTreeParts)) {
+            for (const om of window.instOakTreeParts) {
+                shiftInstancedMesh(om, om.count, shiftX, shiftZ);
+            }
+        }
+    }
 
     let playerPhysics;
     let cameraManager;
-    
-
 
     async function animate() {
         if (proceduralSkyMesh) {
@@ -3935,27 +3976,28 @@ import { AnimatedFlockSystem } from './entities/AnimatedFlockSystem.js';
         }
         lastAnimTime = nowAnimTime;
         if (rawDt > 0.1 || rawDt <= 0) rawDt = 0.0166;
-        smoothedDt = smoothedDt * 0.7 + rawDt * 0.3;
-        let dt = smoothedDt;
+        let dt = Math.min(rawDt, 0.066);
 
         const time = clock.getElapsedTime();
+        const SHADER_TIME_PERIOD = 3600.0;
+        const wrappedTime = time % SHADER_TIME_PERIOD;
 
         if (starMaterial.userData.shader) {
-            starMaterial.userData.shader.uniforms.time.value = time;
+            starMaterial.userData.shader.uniforms.time.value = wrappedTime;
         }
 
         if (animeWaterSystem && animeWaterSystem.visible) {
             const activeCam = isGodMode ? godCamera : camera;
-            animeWaterSystem.update(dt, time, activeCam, playerGrp ? playerGrp.position : null, dirLight ? dirLight.position : null);
+            animeWaterSystem.update(dt, wrappedTime, activeCam, playerGrp ? playerGrp.position : null, dirLight ? dirLight.position : null);
         }
         if (typeof terrainUniforms !== 'undefined') {
-            terrainUniforms.uTime.value = time;
+            terrainUniforms.uTime.value = wrappedTime;
             if (typeof dirLight !== 'undefined') {
                 terrainUniforms.uSunDir.value.copy(dirLight.position).normalize();
             }
         }
         if (skyUniforms) {
-            skyUniforms.uTime.value = time;
+            skyUniforms.uTime.value = wrappedTime;
             if (typeof dirLight !== 'undefined' && typeof playerGrp !== 'undefined') {
                 skyUniforms.uSunPosition.value.copy(dirLight.position).sub(playerGrp.position).normalize();
             }
@@ -3965,10 +4007,10 @@ import { AnimatedFlockSystem } from './entities/AnimatedFlockSystem.js';
         }
         if (window.rainSystem) {
             const activeCam = isGodMode ? godCamera : camera;
-            window.rainSystem.update(time, activeCam, params);
+            window.rainSystem.update(wrappedTime, activeCam, params);
         }
         if (typeof window.fogUniforms !== 'undefined' && window.fogGroup) {
-            window.fogUniforms.uTime.value = time;
+            window.fogUniforms.uTime.value = wrappedTime;
             const bName = getBiomeAt(playerGrp.position.x, playerGrp.position.z).name;
             const biomeFogOffset = (window.biomeFogSettings && window.biomeFogSettings[bName]) ? window.biomeFogSettings[bName] : 0;
             const currentGroundY = getWorldHeight(playerGrp.position.x, playerGrp.position.z);
@@ -4087,7 +4129,7 @@ import { AnimatedFlockSystem } from './entities/AnimatedFlockSystem.js';
 
         if (inCrystalLand) {
             if (typeof matCrystal !== 'undefined' && matCrystal.userData.shader) {
-                matCrystal.userData.shader.uniforms.uTime.value = time;
+                matCrystal.userData.shader.uniforms.uTime.value = wrappedTime;
             }
 
             for (let i = 0; i < CRYSTAL_COUNT; i++) {
@@ -4181,6 +4223,34 @@ import { AnimatedFlockSystem } from './entities/AnimatedFlockSystem.js';
         if (playerPhysics) {
             playerPhysics.update(dt, inputState, isBraking, isBoosting, isFlightPaused, treeGrid);
             
+            // Floating origin recentering system (threshold: 5,000 meters)
+            const distFromOrigin = Math.hypot(playerGrp.position.x, playerGrp.position.z);
+            if (distFromOrigin > 5000.0) {
+                const shiftX = playerGrp.position.x;
+                const shiftZ = playerGrp.position.z;
+                
+                // Recenter player & camera base
+                playerGrp.position.x = 0;
+                playerGrp.position.z = 0;
+                cameraBase.position.x = 0;
+                cameraBase.position.z = 0;
+                
+                // Shift terrain grid trackers and mesh
+                lastTerrainGridX -= shiftX;
+                lastTerrainGridZ -= shiftZ;
+                terrain.position.x -= shiftX;
+                terrain.position.z -= shiftZ;
+                
+                // Shift all active instanced diorama props and clouds
+                shiftAllInstances(shiftX, shiftZ);
+                
+                // Accumulate global world origin offset
+                setWorldOriginOffset(worldOriginOffset.x + shiftX, worldOriginOffset.y + shiftZ);
+                
+                // Regenerate terrain geometry at new local origin
+                updateTerrainGeometry(playerGrp.position.x, playerGrp.position.z);
+            }
+
             if (cameraManager) {
                 cameraManager.update(dt, playerGrp, playerPhysics.currentYaw, isBoosting);
             }

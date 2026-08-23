@@ -33,9 +33,8 @@ export class CameraManager {
         this.cameraBase.quaternion.slerp(this.baseTargetQuat, decayCameraBaseQuat); 
         this.camera.quaternion.slerp(this.quatIdentity, decayCameraQuat);
         
-        // Single unified cameraBase tracking pass per frame (exponential lerp)
-        const decayCamPos = 1.0 - Math.exp(-22.0 * delta);
-        this.cameraBase.position.lerp(playerGrp.position, decayCamPos);
+        // Anchor camera base directly to player position to eliminate translational lag jitter during framerate fluctuations
+        this.cameraBase.position.copy(playerGrp.position);
         
         // Speed zoom effect
         this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, isBoosting ? this.BASE_FOV + 12 : this.BASE_FOV, 1.0 - Math.exp(-5.0 * delta));

@@ -103,7 +103,17 @@ export function computeIslandData(worldX, worldZ) {
     };
 }
 
-export function getIslandData(worldX, worldZ) {
+export const worldOriginOffset = new THREE.Vector2(0, 0);
+
+export function setWorldOriginOffset(x, z) {
+    worldOriginOffset.set(x, z);
+    _cacheIslandX = NaN;
+    _cacheIslandZ = NaN;
+}
+
+export function getIslandData(rawX, rawZ) {
+    const worldX = rawX + worldOriginOffset.x;
+    const worldZ = rawZ + worldOriginOffset.y;
     if (worldX === _cacheIslandX && worldZ === _cacheIslandZ && _cacheIslandResult) {
         return _cacheIslandResult;
     }
@@ -120,16 +130,18 @@ export function getBiomeAt(worldX, worldZ) {
     return data.mainBiome;
 }
 
-export function getWorldHeight(worldX, worldZ) {
-    const data = getIslandData(worldX, worldZ);
+export function getWorldHeight(rawX, rawZ) {
+    const wx = rawX + worldOriginOffset.x;
+    const wz = rawZ + worldOriginOffset.y;
+    const data = getIslandData(rawX, rawZ);
     const oceanFloor = -5.0;
     if (data.mask === 0) return oceanFloor;
 
-    let h1 = data.b1.module.getHeight(worldX, worldZ, snoise);
-    if (data.b1.archT) h1 = data.b1.module.getHeight(worldX, worldZ, snoise, data.b1.archT(1.0));
+    let h1 = data.b1.module.getHeight(wx, wz, snoise);
+    if (data.b1.archT) h1 = data.b1.module.getHeight(wx, wz, snoise, data.b1.archT(1.0));
     
-    let h2 = data.b2.module.getHeight(worldX, worldZ, snoise);
-    if (data.b2.archT) h2 = data.b2.module.getHeight(worldX, worldZ, snoise, data.b2.archT(1.0));
+    let h2 = data.b2.module.getHeight(wx, wz, snoise);
+    if (data.b2.archT) h2 = data.b2.module.getHeight(wx, wz, snoise, data.b2.archT(1.0));
 
     const smoothW = data.w2 * data.w2 * (3.0 - 2.0 * data.w2);
 
@@ -145,15 +157,17 @@ export function getWorldHeight(worldX, worldZ) {
     return Math.max(oceanFloor, h);
 }
 
-export function getWorldColor(h, worldX, worldZ, targetColor) {
-    const data = getIslandData(worldX, worldZ);
+export function getWorldColor(h, rawX, rawZ, targetColor) {
+    const wx = rawX + worldOriginOffset.x;
+    const wz = rawZ + worldOriginOffset.y;
+    const data = getIslandData(rawX, rawZ);
     if (data.mask === 0) {
-        ZONE_OCEAN.module.getColor(h, worldX, worldZ, snoise, targetColor, smoothstep);
+        ZONE_OCEAN.module.getColor(h, wx, wz, snoise, targetColor, smoothstep);
         return;
     }
 
-    data.b1.module.getColor(h, worldX, worldZ, snoise, _tempC1, smoothstep);
-    data.b2.module.getColor(h, worldX, worldZ, snoise, _tempC2, smoothstep);
+    data.b1.module.getColor(h, wx, wz, snoise, _tempC1, smoothstep);
+    data.b2.module.getColor(h, wx, wz, snoise, _tempC2, smoothstep);
 
     const smoothW = data.w2 * data.w2 * (3.0 - 2.0 * data.w2);
     targetColor.copy(_tempC1).lerp(_tempC2, smoothW);

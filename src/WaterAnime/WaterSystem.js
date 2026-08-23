@@ -109,12 +109,14 @@ export class WaterSystem {
             sunDirUniform.value.copy(sunDir).normalize();
         }
 
-        // Ocean plane follows camera in XZ for infinite horizon
+        // Ocean plane follows camera in XZ for infinite horizon, quantized to mesh cell size to eliminate vertex swimming and popping
         if (this.openSeaMesh && camera) {
             if (!this._tempCamPos) this._tempCamPos = new THREE.Vector3();
             camera.getWorldPosition(this._tempCamPos);
-            this.openSeaMesh.position.x = this._tempCamPos.x;
-            this.openSeaMesh.position.z = this._tempCamPos.z;
+            const segments = parseInt(this.meshResolution, 10) || 512;
+            const cellSize = 16000.0 / segments;
+            this.openSeaMesh.position.x = Math.floor(this._tempCamPos.x / cellSize) * cellSize;
+            this.openSeaMesh.position.z = Math.floor(this._tempCamPos.z / cellSize) * cellSize;
         }
 
         // Player tracking
