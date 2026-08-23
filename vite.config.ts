@@ -18,6 +18,7 @@ export default defineConfig(() => {
       allowedHosts: true as const,
     },
     build: {
+      target: 'esnext',
       rollupOptions: {
         input: {
           main: path.resolve(__dirname, 'index.html'),

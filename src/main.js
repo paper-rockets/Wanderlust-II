@@ -2736,16 +2736,16 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
     // Golden Hour Dusk look is provably untouched (neutral value at dusk).
     // ==========================================
     const uMilkyWayOpacity = uniform(0.0);
-    const uMilkyWayBrightness = uniform(1.5);
+    const uMilkyWayBrightness = uniform(2.2);
     let milkyWayMesh = null;
     // Live-tunable so the look can be perfected from the GUI (Environment > Moonlight & Night
     // > Milky Way Photo). Configured to produce a dramatic diagonal galactic arc across the night sky.
     const milkyWayParams = {
-        brightness: 1.5,   // multiplies texture colour naturally
+        brightness: 2.2,   // multiplies texture colour naturally
         opacity: 1.0,      // max blend at full night
-        tiltX: 0,          // degrees — positions galactic core at optimal elevation
-        tiltY: -25,        // degrees — swings the core across the diagonal view
-        tiltZ: 18          // degrees — diagonal lean matching starry night photography
+        tiltX: -18,        // degrees — positions galactic core at optimal elevation
+        tiltY: 42,         // degrees — swings the core across the diagonal view
+        tiltZ: 42          // degrees — diagonal lean matching starry night photography
     };
     const applyMilkyWayTilt = () => {
         if (!milkyWayMesh) return;
@@ -2759,24 +2759,61 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         // Equirectangular Milky Way panorama (built from the galactic-home cubemap). Using a
         // single 2D texture on a sphere — the same proven setup as the procedural sky dome —
         // instead of a samplerCube node, which dropped the WebGPU device on this renderer.
-        const mwTex = new THREE.TextureLoader().load('assets/skybox/milkyway_equirect.png');
+        const loader = new THREE.TextureLoader();
+        const mwTex = new THREE.Texture();
         mwTex.colorSpace = THREE.SRGBColorSpace;
         mwTex.anisotropy = 4;
+        mwTex.wrapS = THREE.RepeatWrapping;
+        mwTex.wrapT = THREE.ClampToEdgeWrapping;
+
+        const candidates = [
+            resolveAssetUrl('assets/skybox/milkyway_equirect.png'),
+            resolveAssetUrl('assets/Skybox/milkyway_equirect.png'),
+            'assets/skybox/milkyway_equirect.png',
+            'assets/Skybox/milkyway_equirect.png',
+            '/assets/skybox/milkyway_equirect.png',
+            '/assets/Skybox/milkyway_equirect.png',
+            'public/assets/skybox/milkyway_equirect.png',
+            'public/assets/Skybox/milkyway_equirect.png'
+        ];
+
+        let attemptIdx = 0;
+        function tryLoadNext() {
+            if (attemptIdx >= candidates.length) {
+                console.error('[MilkyWay] All candidate paths failed to load Milky Way texture:', candidates);
+                return;
+            }
+            const path = candidates[attemptIdx++];
+            loader.load(
+                path,
+                (loadedTex) => {
+                    mwTex.image = loadedTex.image;
+                    mwTex.needsUpdate = true;
+                    console.log('[MilkyWay] Successfully loaded Milky Way texture from:', path);
+                },
+                undefined,
+                (err) => {
+                    console.warn(`[MilkyWay] Failed to load from: ${path}, trying next fallback...`);
+                    tryLoadNext();
+                }
+            );
+        }
+        tryLoadNext();
 
         const mwMat = new MeshBasicNodeMaterial({
             side: THREE.BackSide,
             depthWrite: false,
+            depthTest: false,
             transparent: true,
             fog: false,
             // Additive: the panorama's near-black sky adds nothing, so the procedural starfield
             // underneath stays visible — we only ADD the Milky Way band/glow on top of it.
-            // depthTest=true (default) ensures it doesn't bleed through the water surface.
             blending: THREE.AdditiveBlending
         });
         // Standard sphere UVs map the equirect panorama seamlessly.
         const mwSample = texture(mwTex);
-        const mwRaw = mwSample.rgb.mul(mwSample.a);
-        mwMat.colorNode = mwRaw.mul(uMilkyWayBrightness);
+        const mwColor = mwSample.rgb.mul(uMilkyWayBrightness).mul(uMilkyWayOpacity);
+        mwMat.colorNode = mwColor;
         mwMat.opacityNode = uMilkyWayOpacity;
 
         const mwGeo = new THREE.SphereGeometry(16000, 64, 32);
