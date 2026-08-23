@@ -1,0 +1,1549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wanderlust WebGPU — Water Shader Test Lab & Wave Movement Comparison</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-base: #030712;
+            --bg-card: rgba(15, 23, 42, 0.85);
+            --border: rgba(255, 255, 255, 0.12);
+            --border-hover: rgba(56, 189, 248, 0.4);
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent: #0284c7;
+            --accent-light: #38bdf8;
+            --accent-glow: rgba(56, 189, 248, 0.3);
+            --sidebar-width: 420px;
+        }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: var(--bg-base);
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            color: var(--text-primary);
+        }
+        #app-layout {
+            display: flex;
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+        #viewport {
+            flex: 1;
+            height: 100%;
+            position: relative;
+            background: #020617;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: grab;
+        }
+        canvas:active {
+            cursor: grabbing;
+        }
+        .top-header {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            right: 16px;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            pointer-events: none;
+        }
+        .glass-pill {
+            background: rgba(11, 19, 41, 0.88);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border);
+            border-radius: 9999px;
+            padding: 8px 18px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            pointer-events: auto;
+        }
+        .app-logo {
+            width: 26px;
+            height: 26px;
+            background: linear-gradient(135deg, #38bdf8, #0284c7);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 14px;
+            color: #fff;
+            box-shadow: 0 2px 8px var(--accent-glow);
+        }
+        .header-title {
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+            color: #fff;
+        }
+        .header-badge {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--accent-light);
+            background: rgba(56, 189, 248, 0.15);
+            padding: 2px 8px;
+            border-radius: 9999px;
+            border: 1px solid rgba(56, 189, 248, 0.3);
+        }
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            pointer-events: auto;
+        }
+        .btn {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 7px 14px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s ease;
+            font-family: inherit;
+        }
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.16);
+            border-color: rgba(255, 255, 255, 0.25);
+            color: #fff;
+        }
+        .btn:active {
+            transform: scale(0.97);
+        }
+        .btn.active {
+            background: var(--accent);
+            border-color: var(--accent-light);
+            color: #fff;
+        }
+        .preset-pill {
+            padding: 5px 10px;
+            font-size: 11px;
+            font-weight: 600;
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .preset-pill:hover {
+            background: rgba(56, 189, 248, 0.2);
+            color: #fff;
+            border-color: var(--accent-light);
+        }
+        .bottom-hud {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            background: rgba(11, 19, 41, 0.88);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 10px 18px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+        }
+        .stat-badge {
+            font-size: 12px;
+            color: var(--text-secondary);
+            font-family: 'JetBrains Mono', monospace;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .stat-badge strong {
+            color: var(--accent-light);
+        }
+        .divider {
+            width: 1px;
+            height: 20px;
+            background: var(--border);
+        }
+        #sidebar {
+            width: var(--sidebar-width);
+            height: 100%;
+            background: rgba(11, 19, 41, 0.95);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-left: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            z-index: 20;
+            box-shadow: -8px 0 32px rgba(0, 0, 0, 0.5);
+            overflow-y: auto;
+        }
+        #sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+        #sidebar::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 3px;
+        }
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
+        }
+        .sidebar-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 4px;
+        }
+        .sidebar-subtitle {
+            font-size: 12px;
+            color: var(--text-secondary);
+            line-height: 1.4;
+        }
+        .section-title {
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: var(--accent-light);
+            padding: 16px 20px 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .control-group {
+            padding: 0 20px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .presets-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            padding: 0 20px 12px;
+        }
+        .control-item {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .control-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .control-val-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .num-input {
+            width: 64px;
+            background: rgba(0, 0, 0, 0.45);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--accent-light);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            padding: 2px 6px;
+            text-align: right;
+            outline: none;
+            user-select: text;
+        }
+        .num-input:focus {
+            border-color: var(--accent-light);
+        }
+        .slider-input {
+            width: 100%;
+            accent-color: var(--accent-light);
+            height: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            outline: none;
+            cursor: pointer;
+        }
+        .engine-card {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 10px 14px;
+            margin: 0 20px 8px;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .engine-card:hover {
+            background: rgba(30, 41, 59, 0.8);
+            border-color: var(--border-hover);
+            transform: translateY(-1px);
+        }
+        .engine-card.active {
+            background: rgba(2, 132, 199, 0.18);
+            border-color: var(--accent-light);
+            box-shadow: 0 0 16px rgba(56, 189, 248, 0.25);
+        }
+        .engine-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #fff;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 3px;
+        }
+        .engine-desc {
+            font-size: 11px;
+            color: var(--text-secondary);
+            line-height: 1.35;
+        }
+        .select-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(255, 255, 255, 0.04);
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            font-size: 12px;
+        }
+        .select-dropdown {
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid var(--border);
+            color: #fff;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 12px;
+            outline: none;
+            cursor: pointer;
+        }
+        .color-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(255, 255, 255, 0.04);
+            padding: 6px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+        .color-picker {
+            width: 32px;
+            height: 24px;
+            padding: 0;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background: transparent;
+        }
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(255, 255, 255, 0.04);
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            font-size: 12px;
+            cursor: pointer;
+        }
+        #error-overlay {
+            position: absolute;
+            top: 70px;
+            left: 20px;
+            right: 20px;
+            max-width: 600px;
+            background: rgba(153, 27, 27, 0.95);
+            border: 1px solid #f87171;
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-family: monospace;
+            font-size: 12px;
+            color: #fff;
+            display: none;
+            z-index: 100;
+        }
+    </style>
+    <!-- Standalone Three.js + OrbitControls (100% Zero-CORS, works everywhere via file:///) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+    <div id="app-layout">
+        <div id="viewport">
+            <div id="error-overlay"></div>
+            <div class="top-header">
+                <div class="glass-pill">
+                    <div class="app-logo">🌊</div>
+                    <span class="header-title">Wanderlust Water Shader Test Lab</span>
+                    <span class="header-badge" id="active-engine-badge">Engine 1: TDM Seascape</span>
+                </div>
+                <div class="header-actions">
+                    <button class="btn" id="camera-surface-btn" title="View water at eye-level horizon">👀 Surface View</button>
+                    <button class="btn" id="camera-bird-btn" title="View wave crest topology from above">🦅 Top-Down</button>
+                    <button class="btn" id="camera-orbit-btn" title="Free orbit camera">🎥 Free Orbit</button>
+                </div>
+            </div>
+
+            <div class="bottom-hud">
+                <div class="stat-badge">FPS: <strong id="fps-val">60</strong></div>
+                <div class="stat-badge">Time: <strong id="time-val">0.0s</strong></div>
+                <div class="stat-badge">Grid: <strong id="grid-stat-val">128×128 (32k Triangles)</strong></div>
+                <div class="divider"></div>
+                <button class="btn" id="play-btn">⏸ Pause</button>
+                <button class="btn" id="reset-btn">↺ Reset</button>
+            </div>
+        </div>
+
+        <div id="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-title">Wave Movement Engines (11 Models)</div>
+                <div class="sidebar-subtitle">Compare, tweak, and fine-tune 11 distinct wave motion systems extracted from the shaders.</div>
+            </div>
+
+            <!-- ONE-CLICK PRESETS -->
+            <div class="section-title">
+                <span>Quick Sea State Presets</span>
+            </div>
+            <div class="presets-grid">
+                <button class="preset-pill" data-preset="calm">🏖 Calm Breeze</button>
+                <button class="preset-pill" data-preset="coastal">⛵ Coastal Swell</button>
+                <button class="preset-pill" data-preset="open">🌊 Choppy Open Sea</button>
+                <button class="preset-pill" data-preset="heavy">⚓ Heavy Swell</button>
+                <button class="preset-pill" data-preset="storm">⛈ Tempest Storm</button>
+                <button class="preset-pill" data-preset="anime">✨ Anime Ghibli</button>
+            </div>
+
+            <div class="section-title">Select Wave Engine</div>
+
+            <div class="engine-card" data-engine="0">
+                <div class="engine-title">
+                    <span>0. Baseline Gerstner Swell</span>
+                    <span class="header-badge">8 Waves</span>
+                </div>
+                <div class="engine-desc">Current Wanderlust 8-component directional Gerstner wave spectrum.</div>
+            </div>
+
+            <div class="engine-card active" data-engine="1">
+                <div class="engine-title">
+                    <span>1. TDM Seascape Matrix Waves</span>
+                    <span class="header-badge">Top Pick</span>
+                </div>
+                <div class="engine-desc">Multi-octave matrix rotation with bidirectional phase offsets and sharp peak power shaping.</div>
+            </div>
+
+            <div class="engine-card" data-engine="2">
+                <div class="engine-title">
+                    <span>2. Dave Hoskins Rough Seas</span>
+                    <span class="header-badge">Stormy</span>
+                </div>
+                <div class="engine-desc">Turbulent rotating harmonic wave synthesis creating rolling stormy whitecap swells.</div>
+            </div>
+
+            <div class="engine-card" data-engine="3">
+                <div class="engine-title">
+                    <span>3. Sharp Trochoidal Gerstner</span>
+                    <span class="header-badge">Peak Pull</span>
+                </div>
+                <div class="engine-desc">Physical trochoidal peak pinching with horizontal vertex drag pulling water toward crests.</div>
+            </div>
+
+            <div class="engine-card" data-engine="4">
+                <div class="engine-title">
+                    <span>4. Directional Exponential Waves</span>
+                    <span class="header-badge">Fast ACES</span>
+                </div>
+                <div class="engine-desc">Exponential wave steepening with coordinate drag along wave propagation vectors.</div>
+            </div>
+
+            <div class="engine-card" data-engine="5">
+                <div class="engine-title">
+                    <span>5. Derivative Crest Curling</span>
+                    <span class="header-badge">Dynamic</span>
+                </div>
+                <div class="engine-desc">Multi-derivative wave slope accumulation generating wind-leaning curling crest geometry.</div>
+            </div>
+
+            <div class="engine-card" data-engine="6">
+                <div class="engine-title">
+                    <span>6. German 4-Way Diagonal Ocean</span>
+                    <span class="header-badge">Ship Ocean</span>
+                </div>
+                <div class="engine-desc">4-way diagonal wave train interference with wind angle alignment and hydrodynamic phase propagation.</div>
+            </div>
+
+            <div class="engine-card" data-engine="7">
+                <div class="engine-title">
+                    <span>7. Code-Golf Folded Waves</span>
+                    <span class="header-badge">Compact</span>
+                </div>
+                <div class="engine-desc">Harmonic wave folding with iterative matrix domain rotations creating crisp diamond wave ridges.</div>
+            </div>
+
+            <div class="engine-card" data-engine="8">
+                <div class="engine-title">
+                    <span>8. Multi-Harmonic Anti-Aliased</span>
+                    <span class="header-badge">High Fidelity</span>
+                </div>
+                <div class="engine-desc">Multi-harmonic wave synthesis with frequency power decay and cross-swell interference.</div>
+            </div>
+
+            <div class="engine-card" data-engine="9">
+                <div class="engine-title">
+                    <span>9. Directional Wind Vector Waves</span>
+                    <span class="header-badge">Wind Vectors</span>
+                </div>
+                <div class="engine-desc">Wind vector steered ocean displacement aligned with customizable atmospheric wind directions.</div>
+            </div>
+
+            <div class="engine-card" data-engine="10">
+                <div class="engine-title">
+                    <span>10. Stylized Domain Warped Flow</span>
+                    <span class="header-badge">Stylized Flow</span>
+                </div>
+                <div class="engine-desc">Multi-octave sine domain warping generating stylized, anime-flowing fluid geometry.</div>
+            </div>
+
+            <!-- SCALE & FREQUENCY CONTROLS -->
+            <div class="section-title">
+                <span>Scale & Domain</span>
+                <span class="header-badge" style="font-size: 10px;">Sliders + Direct Typing</span>
+            </div>
+            <div class="control-group">
+                <div class="control-item">
+                    <div class="control-label">
+                        <span>Wave Wavelength / Frequency Scale</span>
+                        <div class="control-val-wrapper">
+                            <input type="number" class="num-input" id="num-scale" step="0.05" min="0.01" max="10.0" value="1.00">
+                        </div>
+                    </div>
+                    <input type="range" class="slider-input" id="slider-scale" min="0.05" max="5.0" step="0.02" value="1.0">
+                </div>
+
+                <div class="control-item">
+                    <div class="control-label">
+                        <span>Ocean World Coordinate Scale</span>
+                        <div class="control-val-wrapper">
+                            <input type="number" class="num-input" id="num-oceanscale" step="0.05" min="0.01" max="10.0" value="1.00">
+                        </div>
+                    </div>
+                    <input type="range" class="slider-input" id="slider-oceanscale" min="0.05" max="5.0" step="0.02" value="1.0">
+                </div>
+
+                <div class="control-item">
+                    <div class="control-label">
+                        <span>Wave Amplitude (Height)</span>
+                        <div class="control-val-wrapper">
+                            <input type="number" class="num-input" id="num-height" step="0.05" min="0.01" max="10.0" value="1.20">
+                        </div>
+                    </div>
+                    <input type="range" class="slider-input" id="slider-height" min="0.05" max="4.0" step="0.05" value="1.2">
+                </div>
+
+                <div class="control-item">
+                    <div class="control-label">
+                        <span>Boat / Object Scale</span>
+                        <div class="control-val-wrapper">
+                            <input type="number" class="num-input" id="num-boatscale" step="0.1" min="0.1" max="10.0" value="1.00">
+                        </div>
+                    </div>
+                    <input type="range" class="slider-input" id="slider-boatscale" min="0.2" max="4.0" step="0.05" value="1.0">
+                </div>
+
+                <div class="select-row">
+                    <span>Ocean Plane Dimension</span>
+                    <select class="select-dropdown" id="select-planesize">
+                        <option value="150">150m (Close-Up)</option>
+                        <option value="300" selected>300m (Standard)</option>
+                        <option value="600">600m (Wide Sea)</option>
+                        <option value="1200">1200m (Horizon Expansive)</option>
+                    </select>
+                </div>
+
+                <div class="select-row">
+                    <span>Mesh Grid Density</span>
+                    <select class="select-dropdown" id="select-density">
+                        <option value="64">64×64 (Ultra Fast)</option>
+                        <option value="128" selected>128×128 (Balanced 60 FPS)</option>
+                        <option value="256">256×256 (High Density)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- WAVE DYNAMICS & WIND -->
+            <div class="section-title">Dynamics & Wind Direction</div>
+            <div class="control-group">
+                <div class="control-item">
+                    <div class="control-label">
+                        <span>Wind Angle (Degrees)</span>
+                        <div class="control-val-wrapper">
+                            <input type="number" class="num-input" id="num-wind" step="5" min="0" max="360" value="45">
+                        </div>
+                    </div>
+                    <input type="range" class="slider-input" id="slider-wind" min="0" max="360" step="5" value="45">
+                </div>
+
+                <div class="control-item">
+                    <div class="control-label">
+                        <span>Wave Choppiness / Sharpness</span>
+                        <div class="control-val-wrapper">
+                            <input type="number" class="num-input" id="num-choppy" step="0.1" min="0.5" max="8.0" value="3.5">
+                        </div>
+                    </div>
+                    <input type="range" class="slider-input" id="slider-choppy" min="0.5" max="6.0" step="0.1" value="3.5">
+                </div>
+
+                <div class="control-item">
+                    <div class="control-label">
+                        <span>Horizontal Drag / Trochoid Pull</span>
+                        <div class="control-val-wrapper">
+                            <input type="number" class="num-input" id="num-drag" step="0.05" min="0.0" max="2.0" value="0.45">
+                        </div>
+                    </div>
+                    <input type="range" class="slider-input" id="slider-drag" min="0.0" max="1.5" step="0.05" value="0.45">
+                </div>
+
+                <div class="control-item">
+                    <div class="control-label">
+                        <span>Simulation Speed</span>
+                        <div class="control-val-wrapper">
+                            <input type="number" class="num-input" id="num-speed" step="0.1" min="0.0" max="5.0" value="1.00">
+                        </div>
+                    </div>
+                    <input type="range" class="slider-input" id="slider-speed" min="0.0" max="3.0" step="0.05" value="1.0">
+                </div>
+            </div>
+
+            <!-- VISUAL SHADING & LIGHTING -->
+            <div class="section-title">Visual Shading & Environment</div>
+            <div class="control-group">
+                <div class="select-row">
+                    <span>Lighting Atmosphere</span>
+                    <select class="select-dropdown" id="select-sky">
+                        <option value="day" selected>☀️ Clear Midday</option>
+                        <option value="sunset">🌅 Golden Sunset</option>
+                        <option value="storm">⛈ Stormy Dusk</option>
+                        <option value="night">🌙 Moonlit Midnight</option>
+                    </select>
+                </div>
+
+                <div class="control-item">
+                    <div class="control-label">
+                        <span>Capillary Micro-Detail</span>
+                        <div class="control-val-wrapper">
+                            <input type="number" class="num-input" id="num-detail" step="0.1" min="0.0" max="5.0" value="1.00">
+                        </div>
+                    </div>
+                    <input type="range" class="slider-input" id="slider-detail" min="0.0" max="3.0" step="0.05" value="1.0">
+                </div>
+
+                <div class="control-item">
+                    <div class="control-label">
+                        <span>Foam Intensity</span>
+                        <div class="control-val-wrapper">
+                            <input type="number" class="num-input" id="num-foam" step="0.1" min="0.0" max="5.0" value="1.00">
+                        </div>
+                    </div>
+                    <input type="range" class="slider-input" id="slider-foam" min="0.0" max="3.0" step="0.05" value="1.0">
+                </div>
+
+                <div class="color-row">
+                    <span style="font-size: 12px; font-weight: 500;">Deep Ocean Color</span>
+                    <input type="color" class="color-picker" id="color-deep" value="#04171c">
+                </div>
+
+                <div class="color-row">
+                    <span style="font-size: 12px; font-weight: 500;">Shallow Crest Color</span>
+                    <input type="color" class="color-picker" id="color-shallow" value="#0f525c">
+                </div>
+            </div>
+
+            <!-- PHYSICS & INSPECTION TOOLS -->
+            <div class="section-title">Physics & Inspection Tools</div>
+            <div class="control-group">
+                <label class="toggle-row">
+                    <span>Auto-Rotate Orbit Camera</span>
+                    <input type="checkbox" id="check-autorotate">
+                </label>
+
+                <label class="toggle-row">
+                    <span>Wireframe Mesh Mode</span>
+                    <input type="checkbox" id="check-wireframe">
+                </label>
+
+                <label class="toggle-row">
+                    <span>Buoyancy Physics Boat</span>
+                    <input type="checkbox" id="check-buoy" checked>
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <!-- GLSL Vertex & Fragment Shaders for All 11 Wave Engines -->
+    <script>
+        const waterVertexShader = `
+            uniform float uTime;
+            uniform int uEngine;
+            uniform float uWaveHeight;
+            uniform float uChoppiness;
+            uniform float uSpeed;
+            uniform float uOceanScale;
+            uniform float uSwellWavelength;
+            uniform float uWindAngle;
+            uniform float uDrag;
+
+            varying vec3 vWorldPos;
+            varying vec3 vNormal;
+            varying vec3 vViewDir;
+            varying float vWaveCrest;
+
+            float fastNoise(vec2 p) {
+                return sin(p.x * 1.5 + sin(p.y * 1.2)) * cos(p.y * 1.5 + cos(p.x * 1.2));
+            }
+
+            // Rotate vector by wind angle in radians
+            vec2 rotateWind(vec2 v, float angleRad) {
+                float c = cos(angleRad);
+                float s = sin(angleRad);
+                return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+            }
+
+            // Engine 0: Baseline 8-Gerstner Waves
+            vec3 calcEngine0(vec2 rawXZ, float time) {
+                vec2 xz = rawXZ * uOceanScale;
+                vec3 p = vec3(0.0);
+                float wavelengths[8] = float[8](220.0, 130.0, 75.0, 45.0, 28.0, 16.0, 9.0, 5.5);
+                float steepnesses[8] = float[8](0.18, 0.22, 0.16, 0.13, 0.10, 0.07, 0.04, 0.03);
+                vec2 dirs[8] = vec2[8](
+                    vec2(0.95, 0.31), vec2(0.82, 0.57), vec2(0.25, 0.97), vec2(-0.55, 0.84),
+                    vec2(-0.72, 0.69), vec2(0.68, -0.73), vec2(-0.88, -0.47), vec2(0.42, -0.91)
+                );
+
+                float wRad = radians(uWindAngle);
+                for(int i = 0; i < 8; i++) {
+                    float wl = (wavelengths[i] * 0.4) / uSwellWavelength;
+                    float k = 6.2831853 / max(wl, 0.5);
+                    float c = sqrt(9.8 * k);
+                    vec2 d = rotateWind(normalize(dirs[i]), wRad);
+                    float a = (steepnesses[i] / k) * uWaveHeight;
+                    float f = k * (dot(d, xz) - time * c * uSpeed) + float(i) * 1.1;
+                    p.x += a * d.x * cos(f) * uDrag;
+                    p.y += a * sin(f);
+                    p.z += a * d.y * cos(f) * uDrag;
+                }
+                return p;
+            }
+
+            // Engine 1: TDM Seascape Multi-Octave Matrix Waves
+            float seaOctaveTDM(vec2 uv, float choppy) {
+                uv += fastNoise(uv) * 0.25;
+                vec2 wv = 1.0 - abs(sin(uv));
+                vec2 swv = abs(cos(uv));
+                wv = mix(wv, swv, wv);
+                return pow(1.0 - pow(wv.x * wv.y, 0.65), choppy);
+            }
+
+            vec3 calcEngine1(vec2 rawXZ, float time) {
+                vec2 xz = rotateWind(rawXZ * uOceanScale, radians(uWindAngle));
+                vec3 p = vec3(0.0);
+                vec2 uv = xz * 0.04 * uSwellWavelength;
+                uv.x *= 0.75;
+                float seaTime = time * 0.9 * uSpeed;
+                float freq = 0.18;
+                float amp = 1.6 * uWaveHeight;
+                float choppy = uChoppiness;
+                float h = 0.0;
+
+                mat2 octMat = mat2(1.6, 1.2, -1.2, 1.6);
+                for(int i = 0; i < 4; i++) {
+                    float d1 = seaOctaveTDM((uv + seaTime) * freq, choppy);
+                    float d2 = seaOctaveTDM((uv - seaTime) * freq, choppy);
+                    h += (d1 + d2) * amp;
+                    uv = octMat * uv;
+                    freq *= 1.9;
+                    amp *= 0.25;
+                    choppy = mix(choppy, 1.0, 0.2);
+                }
+                p.x += sin(xz.x * 0.15 * uSwellWavelength + seaTime) * uDrag * uWaveHeight;
+                p.y = h;
+                p.z += cos(xz.y * 0.15 * uSwellWavelength + seaTime) * uDrag * uWaveHeight;
+                return p;
+            }
+
+            // Engine 2: Dave Hoskins Rough Seas
+            vec3 calcEngine2(vec2 rawXZ, float time) {
+                vec2 xz = rotateWind(rawXZ * uOceanScale, radians(uWindAngle));
+                vec3 p = vec3(0.0);
+                vec2 uv = xz * 0.02 * uSwellWavelength;
+                float tim = time * 0.6 * uSpeed;
+                uv.x -= tim * 2.0;
+                float a = 2.2 * uWaveHeight;
+                float h = 0.0;
+                mat2 rot = mat2(0.9089, 0.4969, -0.4969, 0.9089) * 1.38;
+
+                for(int i = 0; i < 4; i++) {
+                    float t = (1.08 - float(i) * 0.16) * tim;
+                    float r = fastNoise(uv * 2.1 + t) * float(i) * 0.18;
+                    float y1 = cos(uv.x - t) + 1.0;
+                    float y2 = 1.0 - abs(sin(uv.x - t));
+                    float s = mix(y1, y2, clamp(r, 0.0, 1.0));
+                    float y1z = cos(uv.y - t) + 1.0;
+                    float y2z = 1.0 - abs(sin(uv.y - t));
+                    float sz = mix(y1z, y2z, clamp(r, 0.0, 1.0));
+                    h += (s + sz) * a;
+                    a *= 0.58;
+                    uv = rot * uv + vec2(19.9);
+                }
+                p.y = h - 2.0;
+                return p;
+            }
+
+            // Engine 3: Sharp Trochoidal Gerstner with Peak Drag
+            vec3 calcEngine3(vec2 rawXZ, float time) {
+                vec2 xz = rawXZ * uOceanScale;
+                vec3 p = vec3(0.0);
+                float angles[5] = float[5](0.35, 1.12, 2.45, 3.89, 5.02);
+                float wls[5] = float[5](180.0, 95.0, 52.0, 26.0, 13.0);
+                float amps[5] = float[5](1.4, 0.8, 0.45, 0.25, 0.12);
+
+                float wRad = radians(uWindAngle);
+                for(int i = 0; i < 5; i++) {
+                    float wl = (wls[i] * 0.4) / uSwellWavelength;
+                    float k = 6.2831853 / max(wl, 0.5);
+                    float c = sqrt(9.8 * k) * 0.7;
+                    vec2 dir = rotateWind(vec2(cos(angles[i]), sin(angles[i])), wRad);
+                    float amp = amps[i] * uWaveHeight;
+                    float f = k * dot(dir, xz) + time * c * uSpeed;
+                    float s = sin(f);
+                    float co = cos(f);
+                    float sharpness = uChoppiness * 0.35 + 1.0;
+                    float waveShape = mix(s, pow(abs(s), sharpness), 0.5) * amp;
+                    float drag = amp * uDrag * co;
+                    p.x += dir.x * drag;
+                    p.y += waveShape;
+                    p.z += dir.y * drag;
+                }
+                return p;
+            }
+
+            // Engine 4: Directional Exponential Waves
+            vec3 calcEngine4(vec2 rawXZ, float time) {
+                vec2 xz = rotateWind(rawXZ * uOceanScale, radians(uWindAngle));
+                vec3 p = vec3(0.0);
+                vec2 pos = xz * 0.03 * uSwellWavelength;
+                float h = 0.0;
+                float iterAmp = 1.4 * uWaveHeight;
+                float iterFreq = 1.0;
+                float speed = 0.7 * uSpeed;
+                float dragMult = 0.048 * (uChoppiness * 0.2) * (uDrag * 2.0);
+
+                for(int i = 0; i < 5; i++) {
+                    float angle = float(i) * 1.25;
+                    vec2 dir = vec2(cos(angle), sin(angle));
+                    float x = dot(dir, pos) * iterFreq + time * speed;
+                    float wave = exp(sin(x) - 1.0);
+                    float dx = wave * cos(x);
+                    h += wave * iterAmp;
+                    pos += dir * dx * dragMult;
+                    iterAmp *= 0.55;
+                    iterFreq *= 1.85;
+                }
+                p.y = h - 1.5;
+                return p;
+            }
+
+            // Engine 5: Multi-Derivative Curling Wave Model
+            vec3 calcEngine5(vec2 rawXZ, float time) {
+                vec2 xz = rotateWind(rawXZ * uOceanScale, radians(uWindAngle));
+                vec3 p = vec3(0.0);
+                vec2 pos = xz * 0.035 * uSwellWavelength;
+                float timeScale = time * 1.5 * uSpeed;
+                float freq = 0.6;
+                float amp = 1.3 * uWaveHeight;
+                float sum = 0.0;
+                vec2 derivative = vec2(0.0);
+
+                for(int i = 0; i < 5; i++) {
+                    float angle = float(i) * 0.95;
+                    vec2 dir = normalize(vec2(cos(angle), sin(angle)));
+                    float dotP = dot(dir, pos + derivative);
+                    float waveExp = exp(sin(dotP * freq + timeScale) - 0.8);
+                    float wave = amp * (waveExp - 0.2);
+                    vec2 lastD = freq * amp * waveExp * dir * cos(dotP * freq + timeScale);
+                    derivative += lastD * 0.35;
+                    freq *= 1.35;
+                    amp *= 0.65;
+                    sum += wave;
+                }
+                p.x += derivative.x * uDrag * 1.2;
+                p.y = sum - 1.2;
+                p.z += derivative.y * uDrag * 1.2;
+                return p;
+            }
+
+            // Engine 6: German 4-Way Diagonal Ocean Waves
+            vec3 calcEngine6(vec2 rawXZ, float time) {
+                vec2 xz = rawXZ * uOceanScale;
+                vec3 p = vec3(0.0);
+                float h = 0.0;
+                float wRad = radians(uWindAngle);
+                float speed = time * 1.8 * uSpeed;
+
+                // 4 diagonal wave trains
+                vec2 d1 = rotateWind(vec2(1.0, 0.3), wRad);
+                vec2 d2 = rotateWind(vec2(0.3, 1.0), wRad);
+                vec2 d3 = rotateWind(vec2(-0.8, 0.6), wRad);
+                vec2 d4 = rotateWind(vec2(0.7, -0.7), wRad);
+
+                float f1 = dot(d1, xz) * (0.08 * uSwellWavelength) - speed * 1.0;
+                float f2 = dot(d2, xz) * (0.14 * uSwellWavelength) - speed * 1.3;
+                float f3 = dot(d3, xz) * (0.22 * uSwellWavelength) - speed * 1.7;
+                float f4 = dot(d4, xz) * (0.35 * uSwellWavelength) - speed * 2.2;
+
+                h += sin(f1) * 1.2;
+                h += sin(f2) * 0.7 * (1.0 + cos(f1 * 0.5) * 0.3);
+                h += sin(f3) * 0.4;
+                h += sin(f4) * 0.2;
+
+                p.x += (d1.x * cos(f1) + d2.x * cos(f2)) * 0.4 * uDrag * uWaveHeight;
+                p.y = h * uWaveHeight;
+                p.z += (d1.y * cos(f1) + d2.y * cos(f2)) * 0.4 * uDrag * uWaveHeight;
+                return p;
+            }
+
+            // Engine 7: Code-Golf Folded Sinusoidal Waves
+            vec3 calcEngine7(vec2 rawXZ, float time) {
+                vec2 xz = rotateWind(rawXZ * uOceanScale, radians(uWindAngle));
+                vec3 p = vec3(0.0);
+                vec2 uv = xz * 0.05 * uSwellWavelength;
+                float t = time * 1.2 * uSpeed;
+                float h = 0.0;
+                float a = 1.5 * uWaveHeight;
+
+                mat2 rot = mat2(0.8, 0.6, -0.6, 0.8);
+                for(int i = 0; i < 4; i++) {
+                    uv = rot * uv;
+                    float s = sin(uv.x + t) * cos(uv.y + t * 0.7);
+                    h += abs(s) * a;
+                    a *= 0.55;
+                    t *= 1.3;
+                }
+                p.y = (h - 1.2) * 1.2;
+                return p;
+            }
+
+            // Engine 8: Multi-Harmonic Anti-Aliased Waves
+            vec3 calcEngine8(vec2 rawXZ, float time) {
+                vec2 xz = rawXZ * uOceanScale;
+                vec3 p = vec3(0.0);
+                float h = 0.0;
+                float wRad = radians(uWindAngle);
+                float t = time * 1.1 * uSpeed;
+                float amp = 1.4 * uWaveHeight;
+                float freq = 0.05 * uSwellWavelength;
+
+                for(int i = 0; i < 5; i++) {
+                    float ang = wRad + float(i) * 0.65;
+                    vec2 d = vec2(cos(ang), sin(ang));
+                    float phase = dot(d, xz) * freq + t * sqrt(freq * 30.0);
+                    float wave = pow(0.5 + 0.5 * sin(phase), uChoppiness * 0.5);
+                    h += wave * amp;
+                    p.x += d.x * cos(phase) * amp * uDrag * 0.3;
+                    p.z += d.y * cos(phase) * amp * uDrag * 0.3;
+                    amp *= 0.55;
+                    freq *= 1.75;
+                }
+                p.y = h - 1.2;
+                return p;
+            }
+
+            // Engine 9: Directional Wind Vector Waves
+            vec3 calcEngine9(vec2 rawXZ, float time) {
+                vec2 xz = rawXZ * uOceanScale;
+                vec3 p = vec3(0.0);
+                float wRad = radians(uWindAngle);
+                vec2 windDir = vec2(cos(wRad), sin(wRad));
+                vec2 crossDir = vec2(-windDir.y, windDir.x);
+
+                float mainSwell = sin(dot(windDir, xz) * 0.08 * uSwellWavelength - time * 2.0 * uSpeed);
+                float crossChop = cos(dot(crossDir, xz) * 0.16 * uSwellWavelength - time * 2.8 * uSpeed);
+                float windDetail = sin((dot(windDir, xz) + dot(crossDir, xz)) * 0.35 * uSwellWavelength - time * 4.0 * uSpeed);
+
+                float h = (mainSwell * 1.5 + crossChop * 0.6 + windDetail * 0.25) * uWaveHeight;
+                p.x += windDir.x * cos(dot(windDir, xz) * 0.08 * uSwellWavelength) * 0.6 * uDrag * uWaveHeight;
+                p.y = h;
+                p.z += windDir.y * cos(dot(windDir, xz) * 0.08 * uSwellWavelength) * 0.6 * uDrag * uWaveHeight;
+                return p;
+            }
+
+            // Engine 10: Stylized Domain Warped Flow (Anime / Ghibli Style)
+            vec3 calcEngine10(vec2 rawXZ, float time) {
+                vec2 xz = rawXZ * uOceanScale;
+                vec3 p = vec3(0.0);
+                float t = time * 0.8 * uSpeed;
+                vec2 uv = xz * 0.035 * uSwellWavelength;
+
+                // Domain warp
+                vec2 warp = vec2(
+                    sin(uv.y * 2.0 + t) + sin(uv.x * 1.5 + t * 0.7),
+                    cos(uv.x * 2.0 + t * 0.8) + cos(uv.y * 1.5 + t * 0.6)
+                ) * 0.4;
+
+                vec2 warpedUV = uv + warp;
+                float wave1 = sin(warpedUV.x * 2.5 + t);
+                float wave2 = cos(warpedUV.y * 2.0 - t * 0.8);
+                float h = (wave1 * 0.7 + wave2 * 0.5 + pow(0.5 + 0.5 * sin(warpedUV.x * 4.0 + t * 1.5), 3.0) * 0.4) * uWaveHeight * 1.4;
+
+                p.x += warp.x * 1.5 * uDrag;
+                p.y = h;
+                p.z += warp.y * 1.5 * uDrag;
+                return p;
+            }
+
+            vec3 getDisplacement(vec2 xz, float time) {
+                if (uEngine == 1) return calcEngine1(xz, time);
+                if (uEngine == 2) return calcEngine2(xz, time);
+                if (uEngine == 3) return calcEngine3(xz, time);
+                if (uEngine == 4) return calcEngine4(xz, time);
+                if (uEngine == 5) return calcEngine5(xz, time);
+                if (uEngine == 6) return calcEngine6(xz, time);
+                if (uEngine == 7) return calcEngine7(xz, time);
+                if (uEngine == 8) return calcEngine8(xz, time);
+                if (uEngine == 9) return calcEngine9(xz, time);
+                if (uEngine == 10) return calcEngine10(xz, time);
+                return calcEngine0(xz, time);
+            }
+
+            void main() {
+                vec3 displaced = position;
+                vec3 disp = getDisplacement(position.xz, uTime);
+                displaced += disp;
+
+                // Finite difference normal
+                float eps = 0.35;
+                vec3 pC = disp;
+                vec3 pR = getDisplacement(position.xz + vec2(eps, 0.0), uTime) + vec3(eps, 0.0, 0.0);
+                vec3 pF = getDisplacement(position.xz + vec2(0.0, eps), uTime) + vec3(0.0, 0.0, eps);
+                vec3 normal = normalize(cross(pF - pC, pR - pC));
+
+                vWaveCrest = disp.y;
+                vNormal = normalMatrix * normal;
+                vec4 worldPos = modelMatrix * vec4(displaced, 1.0);
+                vWorldPos = worldPos.xyz;
+                vViewDir = normalize(cameraPosition - worldPos.xyz);
+
+                gl_Position = projectionMatrix * viewMatrix * worldPos;
+            }
+        `;
+
+        const waterFragmentShader = `
+            uniform vec3 uDeepColor;
+            uniform vec3 uShallowColor;
+            uniform vec3 uSunDir;
+            uniform vec3 uSunColor;
+            uniform float uDetailAmount;
+            uniform float uFoamAmount;
+
+            varying vec3 vWorldPos;
+            varying vec3 vNormal;
+            varying vec3 vViewDir;
+            varying float vWaveCrest;
+
+            float hash12(vec2 p) {
+                return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+            }
+
+            void main() {
+                vec3 N = normalize(vNormal);
+                vec3 V = normalize(vViewDir);
+
+                // Micro detail normal bump
+                float micro = hash12(vWorldPos.xz * 2.5) * 0.15 * uDetailAmount;
+                N = normalize(N + vec3(micro, 0.0, micro));
+
+                // Sun Specular
+                vec3 H = normalize(uSunDir + V);
+                float spec = pow(max(dot(N, H), 0.0), 64.0) * 2.5;
+
+                // Fresnel Reflection
+                float fresnel = pow(1.0 - max(dot(V, N), 0.0), 4.0) * 0.75;
+
+                // Deep vs Shallow Water Color by wave crest height
+                float crestFactor = clamp(vWaveCrest * 0.35 + 0.45, 0.0, 1.0);
+                vec3 waterColor = mix(uDeepColor, uShallowColor, crestFactor);
+
+                // Sky reflection
+                vec3 skyColor = mix(vec3(0.5, 0.65, 0.8), vec3(0.1, 0.25, 0.5), max(N.y, 0.0));
+                waterColor = mix(waterColor, skyColor, fresnel);
+
+                // Wave crest foam
+                float foam = smoothstep(0.65, 1.3, vWaveCrest * 0.4 + micro) * uFoamAmount;
+                waterColor = mix(waterColor, vec3(0.95, 0.98, 1.0), foam);
+
+                // Add sun highlight
+                waterColor += uSunColor * spec;
+
+                gl_FragColor = vec4(waterColor, 0.92);
+            }
+        `;
+    </script>
+
+    <!-- Main Application Logic -->
+    <script>
+        window.addEventListener('DOMContentLoaded', () => {
+            const viewport = document.getElementById('viewport');
+            const errorOverlay = document.getElementById('error-overlay');
+
+            function showError(msg) {
+                errorOverlay.style.display = 'block';
+                errorOverlay.textContent = 'Render Error: ' + msg;
+            }
+
+            // 1. Scene, Camera & Renderer
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a1424);
+
+            const camera = new THREE.PerspectiveCamera(55, viewport.clientWidth / viewport.clientHeight, 0.1, 4000);
+            camera.position.set(0, 16, 45);
+
+            let renderer;
+            try {
+                renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+                renderer.setSize(viewport.clientWidth, viewport.clientHeight);
+                renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+                viewport.appendChild(renderer.domElement);
+            } catch (err) {
+                showError("WebGL initialization failed: " + err.message);
+                return;
+            }
+
+            const controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxPolarAngle = Math.PI * 0.49;
+            controls.minDistance = 3;
+            controls.maxDistance = 1000;
+            controls.target.set(0, 0, 0);
+
+            // 2. Uniforms
+            const uniforms = {
+                uTime: { value: 0.0 },
+                uEngine: { value: 1 },
+                uWaveHeight: { value: 1.2 },
+                uChoppiness: { value: 3.5 },
+                uSpeed: { value: 1.0 },
+                uOceanScale: { value: 1.0 },
+                uSwellWavelength: { value: 1.0 },
+                uWindAngle: { value: 45.0 },
+                uDrag: { value: 0.45 },
+                uDetailAmount: { value: 1.0 },
+                uFoamAmount: { value: 1.0 },
+                uDeepColor: { value: new THREE.Color(0x04171c) },
+                uShallowColor: { value: new THREE.Color(0x0f525c) },
+                uSunDir: { value: new THREE.Vector3(0.5, 0.7, 0.5).normalize() },
+                uSunColor: { value: new THREE.Color(1.0, 0.95, 0.85) }
+            };
+
+            // 3. Dynamic Ocean Mesh
+            let currentPlaneSize = 300;
+            let currentGridDensity = 128;
+
+            const oceanMat = new THREE.ShaderMaterial({
+                vertexShader: waterVertexShader,
+                fragmentShader: waterFragmentShader,
+                uniforms: uniforms,
+                transparent: true,
+                side: THREE.DoubleSide
+            });
+
+            let oceanGeo = new THREE.PlaneGeometry(currentPlaneSize, currentPlaneSize, currentGridDensity, currentGridDensity);
+            oceanGeo.rotateX(-Math.PI / 2);
+            let oceanMesh = new THREE.Mesh(oceanGeo, oceanMat);
+            scene.add(oceanMesh);
+
+            function rebuildOceanGeometry(size, density) {
+                scene.remove(oceanMesh);
+                oceanGeo.dispose();
+                currentPlaneSize = size;
+                currentGridDensity = density;
+                oceanGeo = new THREE.PlaneGeometry(size, size, density, density);
+                oceanGeo.rotateX(-Math.PI / 2);
+                oceanMesh = new THREE.Mesh(oceanGeo, oceanMat);
+                scene.add(oceanMesh);
+
+                const totalTris = (density * density * 2).toLocaleString();
+                document.getElementById('grid-stat-val').textContent = `${density}×${density} (${totalTris} Triangles)`;
+            }
+
+            // 4. Floating Buoyancy Object (Test Boat)
+            const boatGroup = new THREE.Group();
+            const hullGeo = new THREE.ConeGeometry(1.6, 4.0, 4);
+            hullGeo.rotateZ(Math.PI / 2);
+            hullGeo.rotateY(Math.PI / 4);
+            const hullMat = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.3 });
+            const hullMesh = new THREE.Mesh(hullGeo, hullMat);
+            hullMesh.scale.set(1.0, 0.5, 1.2);
+            boatGroup.add(hullMesh);
+
+            const cabinGeo = new THREE.BoxGeometry(1.0, 0.8, 1.2);
+            const cabinMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 });
+            const cabinMesh = new THREE.Mesh(cabinGeo, cabinMat);
+            cabinMesh.position.set(0, 0.5, 0);
+            boatGroup.add(cabinMesh);
+
+            const mastGeo = new THREE.CylinderGeometry(0.06, 0.06, 2.5);
+            const mastMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b });
+            const mastMesh = new THREE.Mesh(mastGeo, mastMat);
+            mastMesh.position.set(0, 1.4, 0);
+            boatGroup.add(mastMesh);
+
+            scene.add(boatGroup);
+
+            // 5. Lighting
+            const dirLight = new THREE.DirectionalLight(0xfff7ed, 1.8);
+            dirLight.position.set(100, 150, 100);
+            scene.add(dirLight);
+
+            const ambLight = new THREE.AmbientLight(0x38bdf8, 0.6);
+            scene.add(ambLight);
+
+            // 6. Engine Selection UI
+            const engineNames = [
+                "Engine 0: Baseline Gerstner",
+                "Engine 1: TDM Seascape",
+                "Engine 2: Dave Hoskins Rough Seas",
+                "Engine 3: Sharp Trochoidal Gerstner",
+                "Engine 4: Directional Exponential",
+                "Engine 5: Derivative Crest Curling",
+                "Engine 6: German 4-Way Diagonal",
+                "Engine 7: Code-Golf Folded Waves",
+                "Engine 8: Multi-Harmonic AA",
+                "Engine 9: Wind Vector Waves",
+                "Engine 10: Stylized Flow (Anime)"
+            ];
+
+            const engineCards = document.querySelectorAll('.engine-card');
+            engineCards.forEach(card => {
+                card.addEventListener('click', () => {
+                    engineCards.forEach(c => c.classList.remove('active'));
+                    card.classList.add('active');
+                    const idx = parseInt(card.dataset.engine);
+                    uniforms.uEngine.value = idx;
+                    document.getElementById('active-engine-badge').textContent = engineNames[idx];
+                });
+            });
+
+            // 7. Bi-directional Linked Sliders & Numeric Inputs
+            const bindLinkedControl = (sliderId, numId, prop, customSetter = null) => {
+                const slider = document.getElementById(sliderId);
+                const num = document.getElementById(numId);
+
+                const updateVal = (val) => {
+                    const parsed = parseFloat(val);
+                    if (!isNaN(parsed)) {
+                        if (customSetter) {
+                            customSetter(parsed);
+                        } else if (uniforms[prop]) {
+                            uniforms[prop].value = parsed;
+                        }
+                    }
+                };
+
+                slider.addEventListener('input', (e) => {
+                    num.value = parseFloat(e.target.value).toFixed(2);
+                    updateVal(e.target.value);
+                });
+
+                num.addEventListener('input', (e) => {
+                    slider.value = e.target.value;
+                    updateVal(e.target.value);
+                });
+            };
+
+            // Scale & Frequency Controls
+            bindLinkedControl('slider-scale', 'num-scale', 'uSwellWavelength');
+            bindLinkedControl('slider-oceanscale', 'num-oceanscale', 'uOceanScale');
+            bindLinkedControl('slider-height', 'num-height', 'uWaveHeight');
+            bindLinkedControl('slider-boatscale', 'num-boatscale', null, (v) => {
+                boatGroup.scale.set(v, v, v);
+            });
+
+            // Dynamics & Wind
+            bindLinkedControl('slider-wind', 'num-wind', 'uWindAngle');
+            bindLinkedControl('slider-choppy', 'num-choppy', 'uChoppiness');
+            bindLinkedControl('slider-drag', 'num-drag', 'uDrag');
+            bindLinkedControl('slider-speed', 'num-speed', 'uSpeed');
+
+            // Visuals
+            bindLinkedControl('slider-detail', 'num-detail', 'uDetailAmount');
+            bindLinkedControl('slider-foam', 'num-foam', 'uFoamAmount');
+
+            // One-Click Sea State Presets
+            const applyPreset = (preset) => {
+                const setVal = (sliderId, numId, prop, val) => {
+                    document.getElementById(sliderId).value = val;
+                    document.getElementById(numId).value = val.toFixed(2);
+                    uniforms[prop].value = val;
+                };
+
+                if (preset === 'calm') {
+                    setVal('slider-height', 'num-height', 'uWaveHeight', 0.4);
+                    setVal('slider-choppy', 'num-choppy', 'uChoppiness', 1.5);
+                    setVal('slider-scale', 'num-scale', 'uSwellWavelength', 1.8);
+                    setVal('slider-speed', 'num-speed', 'uSpeed', 0.6);
+                    setVal('slider-foam', 'num-foam', 'uFoamAmount', 0.2);
+                } else if (preset === 'coastal') {
+                    setVal('slider-height', 'num-height', 'uWaveHeight', 0.8);
+                    setVal('slider-choppy', 'num-choppy', 'uChoppiness', 2.8);
+                    setVal('slider-scale', 'num-scale', 'uSwellWavelength', 1.2);
+                    setVal('slider-speed', 'num-speed', 'uSpeed', 0.9);
+                    setVal('slider-foam', 'num-foam', 'uFoamAmount', 0.7);
+                } else if (preset === 'open') {
+                    setVal('slider-height', 'num-height', 'uWaveHeight', 1.4);
+                    setVal('slider-choppy', 'num-choppy', 'uChoppiness', 3.8);
+                    setVal('slider-scale', 'num-scale', 'uSwellWavelength', 1.0);
+                    setVal('slider-speed', 'num-speed', 'uSpeed', 1.1);
+                    setVal('slider-foam', 'num-foam', 'uFoamAmount', 1.2);
+                } else if (preset === 'heavy') {
+                    setVal('slider-height', 'num-height', 'uWaveHeight', 2.2);
+                    setVal('slider-choppy', 'num-choppy', 'uChoppiness', 4.5);
+                    setVal('slider-scale', 'num-scale', 'uSwellWavelength', 0.7);
+                    setVal('slider-speed', 'num-speed', 'uSpeed', 1.3);
+                    setVal('slider-foam', 'num-foam', 'uFoamAmount', 1.6);
+                } else if (preset === 'storm') {
+                    setVal('slider-height', 'num-height', 'uWaveHeight', 3.2);
+                    setVal('slider-choppy', 'num-choppy', 'uChoppiness', 5.5);
+                    setVal('slider-scale', 'num-scale', 'uSwellWavelength', 0.55);
+                    setVal('slider-speed', 'num-speed', 'uSpeed', 1.6);
+                    setVal('slider-foam', 'num-foam', 'uFoamAmount', 2.4);
+                } else if (preset === 'anime') {
+                    document.querySelector('.engine-card[data-engine="10"]').click();
+                    setVal('slider-height', 'num-height', 'uWaveHeight', 1.1);
+                    setVal('slider-choppy', 'num-choppy', 'uChoppiness', 2.0);
+                    setVal('slider-scale', 'num-scale', 'uSwellWavelength', 1.3);
+                    setVal('slider-speed', 'num-speed', 'uSpeed', 1.0);
+                    setVal('slider-foam', 'num-foam', 'uFoamAmount', 1.0);
+                }
+            };
+
+            document.querySelectorAll('.preset-pill').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    applyPreset(btn.dataset.preset);
+                });
+            });
+
+            // Lighting Atmosphere Switcher
+            document.getElementById('select-sky').addEventListener('change', (e) => {
+                const mode = e.target.value;
+                if (mode === 'day') {
+                    scene.background = new THREE.Color(0x0a1424);
+                    dirLight.color = new THREE.Color(0xfff7ed);
+                    dirLight.intensity = 1.8;
+                    ambLight.color = new THREE.Color(0x38bdf8);
+                    uniforms.uSunColor.value = new THREE.Color(1.0, 0.95, 0.85);
+                    uniforms.uDeepColor.value = new THREE.Color(0x04171c);
+                    uniforms.uShallowColor.value = new THREE.Color(0x0f525c);
+                } else if (mode === 'sunset') {
+                    scene.background = new THREE.Color(0x2a0815);
+                    dirLight.color = new THREE.Color(0xff7733);
+                    dirLight.intensity = 2.4;
+                    ambLight.color = new THREE.Color(0xff4488);
+                    uniforms.uSunColor.value = new THREE.Color(1.0, 0.45, 0.15);
+                    uniforms.uDeepColor.value = new THREE.Color(0x1a0614);
+                    uniforms.uShallowColor.value = new THREE.Color(0x701a35);
+                } else if (mode === 'storm') {
+                    scene.background = new THREE.Color(0x050a10);
+                    dirLight.color = new THREE.Color(0x8899aa);
+                    dirLight.intensity = 1.0;
+                    ambLight.color = new THREE.Color(0x223344);
+                    uniforms.uSunColor.value = new THREE.Color(0.6, 0.7, 0.8);
+                    uniforms.uDeepColor.value = new THREE.Color(0x02070c);
+                    uniforms.uShallowColor.value = new THREE.Color(0x1b2d38);
+                } else if (mode === 'night') {
+                    scene.background = new THREE.Color(0x010308);
+                    dirLight.color = new THREE.Color(0x7799dd);
+                    dirLight.intensity = 0.8;
+                    ambLight.color = new THREE.Color(0x0a1530);
+                    uniforms.uSunColor.value = new THREE.Color(0.4, 0.6, 0.9);
+                    uniforms.uDeepColor.value = new THREE.Color(0x01050a);
+                    uniforms.uShallowColor.value = new THREE.Color(0x0b1e38);
+                }
+            });
+
+            // Plane Dimension & Density Dropdowns
+            document.getElementById('select-planesize').addEventListener('change', (e) => {
+                rebuildOceanGeometry(parseFloat(e.target.value), currentGridDensity);
+            });
+
+            document.getElementById('select-density').addEventListener('change', (e) => {
+                rebuildOceanGeometry(currentPlaneSize, parseInt(e.target.value));
+            });
+
+            // Color Pickers
+            document.getElementById('color-deep').addEventListener('input', (e) => {
+                uniforms.uDeepColor.value = new THREE.Color(e.target.value);
+            });
+            document.getElementById('color-shallow').addEventListener('input', (e) => {
+                uniforms.uShallowColor.value = new THREE.Color(e.target.value);
+            });
+
+            // Toggles
+            document.getElementById('check-wireframe').addEventListener('change', (e) => {
+                oceanMat.wireframe = e.target.checked;
+            });
+            document.getElementById('check-buoy').addEventListener('change', (e) => {
+                boatGroup.visible = e.target.checked;
+            });
+            document.getElementById('check-autorotate').addEventListener('change', (e) => {
+                controls.autoRotate = e.target.checked;
+                controls.autoRotateSpeed = 1.0;
+            });
+
+            // Camera Presets
+            document.getElementById('camera-surface-btn').addEventListener('click', () => {
+                camera.position.set(0, 2.5, 20);
+                controls.target.set(0, 2.0, 0);
+                controls.update();
+            });
+            document.getElementById('camera-bird-btn').addEventListener('click', () => {
+                camera.position.set(0, 95, 0.1);
+                controls.target.set(0, 0, 0);
+                controls.update();
+            });
+            document.getElementById('camera-orbit-btn').addEventListener('click', () => {
+                camera.position.set(25, 20, 35);
+                controls.target.set(0, 0, 0);
+                controls.update();
+            });
+
+            // Play / Pause & Reset
+            let isPlaying = true;
+            let simTime = 0.0;
+            let lastTime = performance.now();
+            let frameCount = 0;
+            let fpsTimer = performance.now();
+
+            const playBtn = document.getElementById('play-btn');
+            playBtn.addEventListener('click', () => {
+                isPlaying = !isPlaying;
+                playBtn.textContent = isPlaying ? '⏸ Pause' : '▶ Play';
+                playBtn.classList.toggle('active', !isPlaying);
+            });
+
+            document.getElementById('reset-btn').addEventListener('click', () => {
+                simTime = 0.0;
+            });
+
+            // Resize
+            window.addEventListener('resize', () => {
+                camera.aspect = viewport.clientWidth / viewport.clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(viewport.clientWidth, viewport.clientHeight);
+            });
+
+            // 8. CPU Height Sampler for Floating Boat Buoyancy
+            function sampleWaveHeightCPU(rawX, rawZ, t, engine) {
+                const spd = uniforms.uSpeed.value;
+                const hgt = uniforms.uWaveHeight.value;
+                const wl = uniforms.uSwellWavelength.value;
+                const oScale = uniforms.uOceanScale.value;
+
+                const x = rawX * oScale;
+                const z = rawZ * oScale;
+
+                if (engine === 1) {
+                    const st = t * 0.9 * spd;
+                    let h = 0;
+                    let freq = 0.18 * wl * 0.04;
+                    let amp = 1.6 * hgt;
+                    let ux = x * 0.75;
+                    let uz = z;
+                    for (let i = 0; i < 4; i++) {
+                        const s1 = Math.sin((ux + st) * freq);
+                        const s2 = Math.sin((ux - st) * freq);
+                        h += (s1 + s2) * amp * 0.4;
+                        const nx = ux * 1.6 + uz * 1.2;
+                        const ny = -ux * 1.2 + uz * 1.6;
+                        ux = nx; ux = ny;
+                        freq *= 1.9;
+                        amp *= 0.22;
+                    }
+                    return h;
+                }
+                return Math.sin(x * 0.1 * wl + t * 2.0 * spd) * Math.cos(z * 0.1 * wl + t * 1.5 * spd) * hgt * 0.8;
+            }
+
+            // 9. Animation Loop
+            function animate(now) {
+                requestAnimationFrame(animate);
+
+                const dt = Math.min((now - lastTime) / 1000.0, 0.1);
+                lastTime = now;
+
+                if (isPlaying) {
+                    simTime += dt;
+                    uniforms.uTime.value = simTime;
+                }
+
+                // FPS Tracker
+                frameCount++;
+                if (now - fpsTimer >= 500) {
+                    const fps = Math.round((frameCount * 1000) / (now - fpsTimer));
+                    document.getElementById('fps-val').textContent = fps;
+                    document.getElementById('time-val').textContent = simTime.toFixed(1) + 's';
+                    frameCount = 0;
+                    fpsTimer = now;
+                }
+
+                // Boat Buoyancy
+                if (boatGroup.visible) {
+                    const bx = boatGroup.position.x;
+                    const bz = boatGroup.position.z;
+                    const eng = uniforms.uEngine.value;
+                    const hC = sampleWaveHeightCPU(bx, bz, simTime, eng);
+                    const hF = sampleWaveHeightCPU(bx, bz + 1.2, simTime, eng);
+                    const hR = sampleWaveHeightCPU(bx + 1.2, bz, simTime, eng);
+
+                    boatGroup.position.y += (hC + 0.1 - boatGroup.position.y) * 0.15;
+                    const pitch = (hF - hC) * 0.35;
+                    const roll = (hR - hC) * 0.35;
+                    boatGroup.rotation.x += (-pitch - boatGroup.rotation.x) * 0.1;
+                    boatGroup.rotation.z += (roll - boatGroup.rotation.z) * 0.1;
+                }
+
+                controls.update();
+                renderer.render(scene, camera);
+            }
+
+            requestAnimationFrame(animate);
+        });
+    </script>
+</body>
+</html>

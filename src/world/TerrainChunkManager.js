@@ -1,13 +1,14 @@
-// Dynamic Terrain Geometry Grid Manager
+// Dynamic Terrain Geometry Grid Manager (100% 001 8000x8000 Scale)
 
 import * as THREE from 'three';
 import { getWorldHeight, getWorldColor, getBiomeAt } from './TerrainGenerator.js';
 
 export class TerrainChunkManager {
-    constructor(scene, terrainMat, terrainRes = 128) {
+    constructor(scene, terrainMat, terrainRes = 256) {
         this.scene = scene;
         this.terrainMat = terrainMat;
         this.terrainRes = terrainRes;
+        this.terrainSize = 8000;
         
         this.lastTerrainGridX = -999999;
         this.lastTerrainGridZ = -999999;
@@ -15,7 +16,7 @@ export class TerrainChunkManager {
         this.tempColor = new THREE.Color();
         this.colorPath = new THREE.Color(0xa68059);
 
-        this.terrainGeo = new THREE.PlaneGeometry(4000, 4000, terrainRes, terrainRes);
+        this.terrainGeo = new THREE.PlaneGeometry(this.terrainSize, this.terrainSize, terrainRes, terrainRes);
         this.terrainGeo.rotateX(-Math.PI / 2);
         this.terrain = new THREE.Mesh(this.terrainGeo, this.terrainMat);
         this.terrain.receiveShadow = true;
@@ -26,16 +27,24 @@ export class TerrainChunkManager {
         return 0; // Procedural path fallback
     }
 
+    forceUpdate() {
+        this.lastTerrainGridX = -999999;
+        this.lastTerrainGridZ = -999999;
+    }
+
     update(playerX, playerZ) {
-        const stepThreshold = 150;
-        if (Math.hypot(playerX - this.lastTerrainGridX, playerZ - this.lastTerrainGridZ) < stepThreshold) return;
+        const vertexSpacing = this.terrainSize / this.terrainRes;
+        const gridX = Math.floor(playerX / vertexSpacing) * vertexSpacing;
+        const gridZ = Math.floor(playerZ / vertexSpacing) * vertexSpacing;
         
-        const gridX = Math.round(playerX / stepThreshold) * stepThreshold;
-        const gridZ = Math.round(playerZ / stepThreshold) * stepThreshold;
+        if (gridX === this.lastTerrainGridX && gridZ === this.lastTerrainGridZ) return;
         
         this.terrain.position.set(gridX, 0, gridZ);
         
         const pos = this.terrainGeo.attributes.position;
+        const halfSize = this.terrainSize * 0.5;
+        const innerRadius = halfSize * 0.72;
+
         if (!this.terrainGeo.attributes.color) {
             this.terrainGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(pos.count * 3), 3));
         }
@@ -43,9 +52,20 @@ export class TerrainChunkManager {
         const norm = this.terrainGeo.attributes.normal;
 
         for (let i = 0; i < pos.count; i++) {
-            const worldX = pos.getX(i) + gridX;
-            const worldZ = pos.getZ(i) + gridZ;
-            const h = getWorldHeight(worldX, worldZ);
+            const localX = pos.getX(i);
+            const localZ = pos.getZ(i);
+            const worldX = localX + gridX;
+            const worldZ = localZ + gridZ;
+            let h = getWorldHeight(worldX, worldZ);
+
+            // Perimeter edge skirt
+            const edgeDist = Math.max(Math.abs(localX), Math.abs(localZ));
+            if (edgeDist > innerRadius) {
+                const t = Math.max(0, Math.min(1, (edgeDist - innerRadius) / (halfSize - innerRadius)));
+                const skirtT = 1.0 - t * t * (3.0 - 2.0 * t);
+                h = 2.4 + (h - 2.4) * skirtT;
+            }
+
             pos.setY(i, h);
 
             const hL = getWorldHeight(worldX - 12, worldZ);
@@ -56,17 +76,6 @@ export class TerrainChunkManager {
             norm.setXYZ(i, this.tempVec.x, this.tempVec.y, this.tempVec.z);
 
             getWorldColor(h, worldX, worldZ, this.tempColor);
-            
-            const pathMask = this.getPathStrength(worldX, worldZ);
-            if (pathMask > 0 && h > 2.0 && h < 25.0) {
-                const currentBiome = getBiomeAt(worldX, worldZ);
-                if (currentBiome && currentBiome.name && currentBiome.name.includes('North Pole')) {
-                    this.tempColor.lerp(new THREE.Color(0xd0edff), pathMask * 0.35);
-                } else if (!currentBiome || !currentBiome.name || (!currentBiome.name.includes('Crystal') && !currentBiome.name.includes('Ocean') && !currentBiome.name.includes('Desert') && !currentBiome.name.includes('Canyon'))) {
-                    this.tempColor.lerp(this.colorPath, pathMask * 0.85);
-                }
-            }
-
             colors.setXYZ(i, this.tempColor.r, this.tempColor.g, this.tempColor.b);
         }
         

@@ -1,4 +1,4 @@
-// Simplex 2D Procedural Noise Implementation
+﻿// Simplex 2D Procedural Noise Implementation (High-Performance Optimized)
 
 const _permP = new Uint8Array([
     151,160,137,91,90,15,131,13,201,95,96,53,194,233,7,225,140,36,103,30,69,142,
@@ -20,25 +20,56 @@ for (let i = 0; i < 512; i++) {
     perm[i] = _permP[i & 255];
 }
 
+const F2 = 0.3660254037844386;  // 0.5 * (Math.sqrt(3.0) - 1.0)
+const G2 = 0.21132486540518713; // (3.0 - Math.sqrt(3.0)) / 6.0
+const G2_2 = 0.42264973081037426;
+
+// Flat gradient LUTs for 12 simplex directions
+const gradX = new Float32Array([1, -1, 1, -1, 1, -1, 1, -1, 0, 0, 0, 0]);
+const gradZ = new Float32Array([1, 1, -1, -1, 0, 0, 0, 0, 1, -1, 1, -1]);
+
 export function snoise(x, z) {
-    let n0, n1, n2;
-    const F2 = 0.5 * (Math.sqrt(3.0) - 1.0);
-    const G2 = (3.0 - Math.sqrt(3.0)) / 6.0;
-    let s = (x + z) * F2;
-    let i = Math.floor(x + s), j = Math.floor(z + s);
-    let t = (i + j) * G2;
-    let X0 = i - t, Z0 = j - t;
-    let x0 = x - X0, z0 = z - Z0;
-    let i1, j1;
-    if (x0 > z0) { i1 = 1; j1 = 0; } else { i1 = 0; j1 = 1; }
-    let x1 = x0 - i1 + G2, z1 = z0 - j1 + G2;
-    let x2 = x0 - 1.0 + 2.0 * G2, z2 = z0 - 1.0 + 2.0 * G2;
-    let ii = i & 255, jj = j & 255;
-    let gi0 = perm[ii + perm[jj]] % 12;
-    let gi1 = perm[ii + i1 + perm[jj + j1]] % 12;
-    let gi2 = perm[ii + 1 + perm[jj + 1]] % 12;
-    let t0 = 0.5 - x0 * x0 - z0 * z0; if (t0 < 0) n0 = 0.0; else { t0 *= t0; n0 = t0 * t0 * (x0 * (gi0 > 5 ? 1 : -1) + z0 * (gi0 % 2 === 0 ? 1 : -1)); }
-    let t1 = 0.5 - x1 * x1 - z1 * z1; if (t1 < 0) n1 = 0.0; else { t1 *= t1; n1 = t1 * t1 * (x1 * (gi1 > 5 ? 1 : -1) + z1 * (gi1 % 2 === 0 ? 1 : -1)); }
-    let t2 = 0.5 - x2 * x2 - z2 * z2; if (t2 < 0) n2 = 0.0; else { t2 *= t2; n2 = t2 * t2 * (x2 * (gi2 > 5 ? 1 : -1) + z2 * (gi2 % 2 === 0 ? 1 : -1)); }
+    let n0 = 0.0, n1 = 0.0, n2 = 0.0;
+    const s = (x + z) * F2;
+    const i = Math.floor(x + s);
+    const j = Math.floor(z + s);
+    const t = (i + j) * G2;
+    const X0 = i - t;
+    const Z0 = j - t;
+    const x0 = x - X0;
+    const z0 = z - Z0;
+    
+    let i1 = 0, j1 = 0;
+    if (x0 > z0) { i1 = 1; } else { j1 = 1; }
+    
+    const x1 = x0 - i1 + G2;
+    const z1 = z0 - j1 + G2;
+    const x2 = x0 - 1.0 + G2_2;
+    const z2 = z0 - 1.0 + G2_2;
+    
+    const ii = i & 255;
+    const jj = j & 255;
+    const gi0 = perm[ii + perm[jj]] % 12;
+    const gi1 = perm[ii + i1 + perm[jj + j1]] % 12;
+    const gi2 = perm[ii + 1 + perm[jj + 1]] % 12;
+    
+    let t0 = 0.5 - x0 * x0 - z0 * z0;
+    if (t0 > 0.0) {
+        t0 *= t0;
+        n0 = t0 * t0 * (x0 * gradX[gi0] + z0 * gradZ[gi0]);
+    }
+    
+    let t1 = 0.5 - x1 * x1 - z1 * z1;
+    if (t1 > 0.0) {
+        t1 *= t1;
+        n1 = t1 * t1 * (x1 * gradX[gi1] + z1 * gradZ[gi1]);
+    }
+    
+    let t2 = 0.5 - x2 * x2 - z2 * z2;
+    if (t2 > 0.0) {
+        t2 *= t2;
+        n2 = t2 * t2 * (x2 * gradX[gi2] + z2 * gradZ[gi2]);
+    }
+    
     return 70.0 * (n0 + n1 + n2);
 }

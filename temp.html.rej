@@ -1,0 +1,2838 @@
+--- index.html
++++ index.html
+@@ -73,6 +73,8 @@
+     @media (hover: hover) and (pointer: fine) {
+       #touch-controls { display: none; }
+     }
++    .dg { zoom: 1.2 !important; }
++    .dg.ac { zoom: 1.2 !important; }
+   </style>
+ </head>
+ <body>
+@@ -99,21 +101,28 @@ console.error = function(...args) {
+ 
+   
+   <div id="top-bar" style="position: fixed; top: 16px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; z-index: 10; background: rgba(0,0,0,0.5); padding: 6px 12px; border-radius: 6px;">
+-    <button id="pause-toggle" style="background: none; border: none; color: white; cursor: pointer; font-size: 16px; padding: 0;">ΓÅ╕</button>
++    <button id="pause-toggle" style="background: none; border: none; color: white; cursor: pointer; font-size: 16px; padding: 0;" title="Pause Flight">ΓÅ╕</button>
+     <div id="fps-counter" style="color: #fff; font-family: monospace; font-size: 13px; font-weight: bold; pointer-events: none;">0 FPS</div>
++    <div id="time-label" style="color: #aaddff; font-family: monospace; font-size: 13px; font-weight: bold; pointer-events: none;">≡ƒîà Morning</div>
+     <div id="biome-label" style="color: #ffe066; font-family: monospace; font-size: 13px; font-weight: bold; pointer-events: none; opacity: 0.9;"></div>
+-    <button id="time-toggle" style="background: none; border: none; color: white; cursor: pointer; font-size: 16px; padding: 0;">ΓÿÇ∩╕Å</button>
+-    <button id="gui-toggle-btn" style="background: rgba(255,255,255,0.25); border: 1px solid rgba(255,255,255,0.5); color: white; cursor: pointer; font-size: 12px; font-weight: bold; padding: 3px 8px; border-radius: 4px; margin-left: 6px;">ΓÜÖ∩╕Å Settings (H)</button>
++    <button id="time-toggle" style="background: none; border: none; color: white; cursor: pointer; font-size: 16px; padding: 0;" title="Toggle Time">ΓÿÇ∩╕Å</button>
++    <button id="god-mode-btn" style="background: #ffaa00; border: none; color: #000; cursor: pointer; font-size: 12px; font-weight: bold; padding: 3px 8px; border-radius: 4px; margin-left: 6px; text-transform: uppercase;">≡ƒæü∩╕Å God Mode</button>
++    <button id="gui-toggle-btn" style="background: rgba(255,255,255,0.25); border: 1px solid rgba(255,255,255,0.5); color: white; cursor: pointer; font-size: 12px; font-weight: bold; padding: 3px 8px; border-radius: 4px;">ΓÜÖ∩╕Å Settings (H)</button>
+   </div>
+ 
+-  <!-- Mini-map overlay -->
+-  <div id="world-map" style="position: fixed; bottom: 20px; left: 20px; z-index: 15; background: rgba(0,0,0,0.85); backdrop-filter: blur(10px); border-radius: 12px; padding: 14px; border: 1px solid rgba(255,255,255,0.3); width: 380px; box-sizing: border-box; box-shadow: 0 8px 32px rgba(0,0,0,0.5);">
++  <!-- World Map Overlay -->
++  <div id="world-map" style="position: fixed; bottom: 20px; left: 20px; z-index: 15; background: rgba(0,0,0,0.88); backdrop-filter: blur(12px); border-radius: 12px; padding: 12px; border: 1px solid rgba(255,255,255,0.3); width: 230px; box-sizing: border-box; box-shadow: 0 8px 32px rgba(0,0,0,0.6); transition: all 0.25s ease-in-out;">
+     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+-      <div style="color: #ffe066; font-family: monospace; font-size: 12px; font-weight: bold; letter-spacing: 0.5px;">≡ƒù║∩╕Å WORLD MAP & TERRAIN SIZES</div>
+-      <button id="close-map-btn" style="background: rgba(255,255,255,0.15); border: none; color: #ff6666; font-family: monospace; font-size: 13px; font-weight: bold; cursor: pointer; padding: 2px 7px; border-radius: 4px; line-height: 1;" title="Hide Map">Γ£û</button>
++      <div id="map-title-text" style="color: #ffe066; font-family: monospace; font-size: 11px; font-weight: bold; letter-spacing: 0.5px;">≡ƒù║∩╕Å RADAR MAP</div>
++      <div style="display: flex; gap: 4px; align-items: center;">
++        <button id="zoom-out-btn" title="Zoom Out" style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); color: #fff; font-family: monospace; font-size: 12px; font-weight: bold; cursor: pointer; padding: 1px 6px; border-radius: 4px; line-height: 1.2;">-</button>
++        <button id="zoom-in-btn" title="Zoom In" style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); color: #fff; font-family: monospace; font-size: 12px; font-weight: bold; cursor: pointer; padding: 1px 6px; border-radius: 4px; line-height: 1.2;">+</button>
++        <button id="expand-map-btn" title="Expand / Collapse Map (M)" style="background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); color: #66ccff; font-family: monospace; font-size: 12px; font-weight: bold; cursor: pointer; padding: 1px 6px; border-radius: 4px; line-height: 1.2;">Γ¢╢</button>
++        <button id="close-map-btn" title="Hide Map" style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); color: #ff6666; font-family: monospace; font-size: 12px; font-weight: bold; cursor: pointer; padding: 1px 6px; border-radius: 4px; line-height: 1.2;">Γ£û</button>
++      </div>
+     </div>
+-    <canvas id="map-canvas" width="350" height="60" style="display: block; border-radius: 8px; margin: 0 auto; border: 1px solid rgba(255,255,255,0.35);"></canvas>
+-    <div id="map-info-text" style="color: #ffffff; font-family: monospace; font-size: 11px; margin-top: 8px; opacity: 0.95; text-align: center; font-weight: bold;">Z: 0m / 54,000m</div>
++    <canvas id="map-canvas" width="200" height="200" style="display: block; border-radius: 8px; margin: 0 auto; border: 1px solid rgba(255,255,255,0.35); max-width: 100%;"></canvas>
++    <div id="map-info-text" style="color: #ffffff; font-family: monospace; font-size: 10px; margin-top: 6px; opacity: 0.95; text-align: center; font-weight: bold;">Z: 0m</div>
+   </div>
+ 
+   
+@@ -133,11 +142,7 @@ console.error = function(...args) {
+ 
+   
+   
+-  <div id="photo-mode-ui">
+-    <span>Photo Mode</span>
+-    <button id="photo-capture">Capture</button>
+-    <button id="photo-exit">Exit</button>
+-  </div>
++
+ 
+ 
+   
+@@ -154,7 +159,7 @@ console.error = function(...args) {
+         <input type="color" id="c-f-col4" value="#00ffaa" style="width:25px;height:25px;padding:0;border:none;cursor:pointer;">
+         <input type="color" id="c-f-col5" value="#00aaff" style="width:25px;height:25px;padding:0;border:none;cursor:pointer;">
+       </div>
+-      <label style="font-size:12px; display:block; margin-bottom:4px;">Opacity <input type="range" id="c-fly-opacity" min="0" max="1" step="0.05" value="0.82" style="width:100%; box-sizing:border-box; display:block;"></label>
++      <label style="font-size:12px; display:block; margin-bottom:4px;">Opacity <input type="range" id="c-fly-opacity" min="0" max="1" step="0.05" value="1.0" style="width:100%; box-sizing:border-box; display:block;"></label>
+       <label style="font-size:12px; display:block; margin-bottom:4px;">Contrast <input type="range" id="c-fly-contrast" min="0.1" max="3" step="0.1" value="1.0" style="width:100%; box-sizing:border-box; display:block;"></label>
+       <label style="font-size:12px; display:block; margin-bottom:4px;">Hue Shift <input type="range" id="c-fly-hue" min="0" max="1" step="0.01" value="0.0" style="width:100%; box-sizing:border-box; display:block;"></label>
+       <label style="font-size:12px; display:block; margin-bottom:4px;">Base Glow <input type="range" id="c-baseGlow" min="0" max="3" step="0.1" value="1.2" style="width:100%; box-sizing:border-box; display:block;"></label>
+@@ -196,15 +201,37 @@ console.error = function(...args) {
+   }
+   </script>
+   <script type="module">
+-import terrainArch from './terrain-archipelago.js';
+-import terrainGhibli from './terrain-ghibli.js';
+-import terrainPlains from './terrain-plains.js';
+-import terrainMtn from './terrain-mountains.js';
+-import terrainCrystal from './terrain-crystal.js';
+-import terrainMtn2 from './terrain-mountains2.js';
+-import terrainJungle from './terrain-jungle.js';
++import terrainArch from './src/world/biomes/terrain-archipelago.js';
++import terrainGhibli from './src/world/biomes/terrain-ghibli.js';
++import terrainPlains from './src/world/biomes/terrain-plains.js';
++import terrainMtn from './src/world/biomes/terrain-mountains.js';
++import terrainCrystal from './src/world/biomes/terrain-crystal.js';
++import terrainJungle from './src/world/biomes/terrain-jungle.js';
++import terrainDesert, { desertColors } from './src/world/biomes/terrain-desert.js';
++import terrainCanyon from './src/world/biomes/terrain-canyon.js';
++import terrainNorthPole, { northPoleColors } from './src/world/biomes/terrain-northpole.js';
++
++import { WaterSystem } from './src/WaterAnime/WaterSystem.js';
++import { WaterEditorGUI } from './src/WaterAnime/WaterEditorGUI.js';
++import { waterShaderRegistry } from './src/waterShaders/index.js';
++import { TreeBillboardEditor } from './src/ui/TreeBillboardEditor.js';
++
++
++import { LOW_GFX, TERRAIN_RES } from './src/config/constants.js';
++import { snoise } from './src/world/Noise.js';
++import { ZONES, WORLD_LENGTH, BLEND_WIDTH } from './src/world/BiomeManager.js';
++import { getBiomeAt, getWorldHeight, getWorldColor, getIslandData } from './src/world/TerrainGenerator.js';
+ 
+     import * as THREE from 'three';
++
++import { PlayerPhysics } from './src/physics/PlayerPhysics.js';
++import { CameraManager } from './src/physics/CameraManager.js';
++import { setupGodMode, toggleGodMode } from './src/physics/GodMode.js';
++
++
++import { scene, camera, renderer, clock } from './src/core/Engine.js';
++import { composer, bloomPass, godRaysPass, summerPass, initPostProcessingUI } from './src/core/PostProcessing.js';
++
+     import { initTerrainEditor } from './TerrainEditor.js';
+     import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+@@ -221,250 +248,267 @@ import terrainJungle from './terrain-jungle.js';
+     import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+     import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+ 
+-    // ===== QUALITY TIER =====
+-    // 'low' targets weak devices (e.g. Galaxy Tab S6 Lite for a young kid).
+-    // Auto-defaults to low on Γëñ4GB devices; user choice (saved) always wins.
+-    // Regular is the untouched full-quality path.
+-    const _savedGfx = localStorage.getItem('gfxQuality');
+-    const LOW_GFX = _savedGfx === 'low'
+-        || (_savedGfx == null && typeof navigator.deviceMemory === 'number' && navigator.deviceMemory <= 4);
+-
+     let isWindOn = false;
+     let isRainOn = false;
+     let isWindTrailsOn = true;
+-    let isPhotoMode = false;
+     let isFlightPaused = false;
+     let isShadowsOn = !LOW_GFX;
+     let isTreeShadowsOn = false;
+     let shadowDistMode = LOW_GFX ? 'Close' : 'Med';
+     let isBloomOn = !LOW_GFX;
+     let isHD = !LOW_GFX;
+-    let photoControls = null;
+     let cameraZoomDist = 12.0;
+     let currentFrame = 0;
+     let logicTimer = 0;
+-    let terrainRes = LOW_GFX ? 64 : 256;
+-let isInitializingGui = true;
+-
+-            // PROCEDURAL NOISE & MULTI-BIOMES SETUP
+-    // ==========================================
+-    const perm = new Uint8Array(512);
+-    for (let i = 0; i < 512; i++) perm[i] = Math.floor(Math.random() * 255);
++    let animeWaterSystem = null;
++    let animeWaterGUI = null;
++    let terrainRes = TERRAIN_RES;
+     
+-    function snoise(x, z) {
+-        let n0, n1, n2;
+-        const F2 = 0.5 * (Math.sqrt(3.0) - 1.0);
+-        const G2 = (3.0 - Math.sqrt(3.0)) / 6.0;
+-        let s = (x + z) * F2;
+-        let i = Math.floor(x + s), j = Math.floor(z + s);
+-        let t = (i + j) * G2;
+-        let X0 = i - t, Z0 = j - t;
+-        let x0 = x - X0, z0 = z - Z0;
+-        let i1, j1;
+-        if (x0 > z0) { i1 = 1; j1 = 0; } else { i1 = 0; j1 = 1; }
+-        let x1 = x0 - i1 + G2, z1 = z0 - j1 + G2;
+-        let x2 = x0 - 1.0 + 2.0 * G2, z2 = z0 - 1.0 + 2.0 * G2;
+-        let ii = i & 255, jj = j & 255;
+-        let gi0 = perm[ii + perm[jj]] % 12;
+-        let gi1 = perm[ii + i1 + perm[jj + j1]] % 12;
+-        let gi2 = perm[ii + 1 + perm[jj + 1]] % 12;
+-        let t0 = 0.5 - x0 * x0 - z0 * z0; if (t0 < 0) n0 = 0.0; else { t0 *= t0; n0 = t0 * t0 * (x0 * (gi0 > 5 ? 1 : -1) + z0 * (gi0 % 2 === 0 ? 1 : -1)); }
+-        let t1 = 0.5 - x1 * x1 - z1 * z1; if (t1 < 0) n1 = 0.0; else { t1 *= t1; n1 = t1 * t1 * (x1 * (gi1 > 5 ? 1 : -1) + z1 * (gi1 % 2 === 0 ? 1 : -1)); }
+-        let t2 = 0.5 - x2 * x2 - z2 * z2; if (t2 < 0) n2 = 0.0; else { t2 *= t2; n2 = t2 * t2 * (x2 * (gi2 > 5 ? 1 : -1) + z2 * (gi2 % 2 === 0 ? 1 : -1)); }
+-        return 70.0 * (n0 + n1 + n2);
+-    }
+-
++    let isGodMode = false;
++    let godCamera = null;
++    let godControls = null;
++    let isInitializingGui = true;
+ 
+-    const ZONES = [
+-        { start:      0, end:   8000, module: terrainArch,     treesOk: true,  name: '≡ƒîè Archipelago',        archT: (t) => t * 2.0 },
+-        { start:   8000, end:  16000, module: terrainGhibli,   treesOk: true,  name: '≡ƒî│ Ghibli Land'         },
+-        { start:  16000, end:  24000, module: terrainPlains,   treesOk: true,  name: '≡ƒî╛ Golden Plains'        },
+-        { start:  24000, end:  40000, module: terrainMtn,      treesOk: false, name: '≡ƒÅö∩╕Å Misty Mountains I'   },
+-        { start:  40000, end:  70000, module: terrainJungle,   treesOk: true,  name: '≡ƒî┤ Lush Jungle'          },
+-        { start:  70000, end: 104000, module: terrainCrystal,  treesOk: false, name: '≡ƒÆÄ Crystal Land'         },
+-        { start: 104000, end: 134000, module: terrainMtn2,     treesOk: false, name: '≡ƒÅö∩╕Å Misty Mountains II'  },
+-        { start: 134000, end: 198000, module: terrainGhibli,   treesOk: true,  name: '≡ƒî│ Ghibli Land II'       },
+-        { start: 198000, end: 214000, module: terrainArch,     treesOk: false, name: '≡ƒîè Open Ocean'           },
+-    ];
+-    const WORLD_LENGTH = 214000;
+-    const BLEND_WIDTH  = 600;
+-    const blendColor1  = new THREE.Color();
+-    const blendColor2  = new THREE.Color();
+-
+-    function _wrapZ(worldZ) {
+-        return ((worldZ % WORLD_LENGTH) + WORLD_LENGTH) % WORLD_LENGTH;
+-    }
+-    function _zoneIdxAt(wrappedZ) {
+-        for (let i = 0; i < ZONES.length; i++) {
+-            if (wrappedZ >= ZONES[i].start && wrappedZ < ZONES[i].end) return i;
++    let _mapEl = null;
++    let _isMapExpanded = false;
++    let _mapCtx = null;
++    let _mapCanvas = null;
++    let _lastMapX = -999999;
++    let _lastMapZ = -999999;
++    let _mapZoomLevel = 1.0;
++    let _lastZoomState = 1.0;
++    let _lastExpandedState = false;
++
++    function toggleMapExpand() {
++        _isMapExpanded = !_isMapExpanded;
++        _mapEl = document.getElementById('world-map');
++        const mapTitle = document.getElementById('map-title-text');
++        const expandBtn = document.getElementById('expand-map-btn');
++
++        if (_mapEl) {
++            if (_isMapExpanded) {
++                _mapEl.style.width = '520px';
++                _mapEl.style.left = '50%';
++                _mapEl.style.top = '50%';
++                _mapEl.style.bottom = 'auto';
++                _mapEl.style.transform = 'translate(-50%, -50%)';
++                if (mapTitle) mapTitle.innerText = '≡ƒù║∩╕Å EXPANDED WORLD MAP (PRESS M TO CLOSE)';
++                if (expandBtn) expandBtn.innerText = '≡ƒùù';
++            } else {
++                _mapEl.style.width = '230px';
++                _mapEl.style.left = '20px';
++                _mapEl.style.bottom = '20px';
++                _mapEl.style.top = 'auto';
++                _mapEl.style.transform = 'none';
++                if (mapTitle) mapTitle.innerText = '≡ƒù║∩╕Å RADAR MAP';
++                if (expandBtn) expandBtn.innerText = 'Γ¢╢';
++            }
+         }
+-        return 0;
++        _lastMapX = -999999;
+     }
+-    function _zoneT(wrappedZ, idx) {
+-        const zn = ZONES[idx];
+-        return (wrappedZ - zn.start) / (zn.end - zn.start);
+-    }
+-    function _zoneWeights(worldZ) {
+-        const wz = _wrapZ(worldZ);
+-        const currIdx = _zoneIdxAt(wz);
+-        const currZone = ZONES[currIdx];
+-        const nextIdx = (currIdx + 1) % ZONES.length;
+-        const distToBoundary = currZone.end - wz;
+-
+-        if (distToBoundary < BLEND_WIDTH) {
+-            const blendFactor = distToBoundary / BLEND_WIDTH;
+-            const w1 = smoothstep(0, 1, blendFactor);
+-            const w2 = 1.0 - w1;
+-            return [
+-                { idx: currIdx, w: w1, t: _zoneT(wz, currIdx) },
+-                { idx: nextIdx, w: w2, t: _zoneT(wz, nextIdx) }
+-            ];
+-        } else {
+-            return [{ idx: currIdx, w: 1.0, t: _zoneT(wz, currIdx) }];
++
++    function initMapUI() {
++        _mapEl = document.getElementById('world-map');
++        _mapCanvas = document.getElementById('map-canvas');
++        if (_mapCanvas) {
++            _mapCtx = _mapCanvas.getContext('2d');
++            _mapCanvas.style.cursor = 'crosshair';
++            _mapCanvas.addEventListener('click', (e) => {
++                const rect = _mapCanvas.getBoundingClientRect();
++                const normX = (e.clientX - rect.left) / rect.width - 0.5;
++                const normY = (e.clientY - rect.top) / rect.height - 0.5;
++                
++                const baseSize = _isMapExpanded ? WORLD_LENGTH : 80000;
++                const radarSize = baseSize / _mapZoomLevel;
++
++                if (typeof playerGrp !== 'undefined') {
++                    const targetX = playerGrp.position.x + normX * radarSize;
++                    const targetZ = playerGrp.position.z + normY * radarSize;
++                    playerGrp.position.set(targetX, Math.max(15, getWorldHeight(targetX, targetZ) + 15), targetZ);
++                    lastTerrainGridX = -999999;
++                    _lastMapX = -999999;
++                }
++            });
+         }
+-    }
+ 
+-    function getWorldHeight(worldX, worldZ) {
+-        const wts = _zoneWeights(worldZ);
+-        let h = 0;
+-        for (let i = 0; i < wts.length; i++) {
+-            const zn = ZONES[wts[i].idx];
+-            let rawH = zn.module.getHeight(worldX, worldZ, snoise);
+-            if (zn.archT) rawH = zn.module.getHeight(worldX, worldZ, snoise, zn.archT(wts[i].t));
+-            h += rawH * wts[i].w;
++        const expandMapBtn = document.getElementById('expand-map-btn');
++        if (expandMapBtn) {
++            expandMapBtn.addEventListener('click', () => toggleMapExpand());
+         }
+-        return h;
+-    }
+-    function getWorldColor(h, worldX, worldZ, targetColor) {
+-        const wts = _zoneWeights(worldZ);
+-        if (wts.length === 1) {
+-            ZONES[wts[0].idx].module.getColor(h, worldX, worldZ, snoise, targetColor, smoothstep);
+-        } else {
+-            ZONES[wts[0].idx].module.getColor(h, worldX, worldZ, snoise, blendColor1, smoothstep);
+-            ZONES[wts[1].idx].module.getColor(h, worldX, worldZ, snoise, blendColor2, smoothstep);
+-            targetColor.copy(blendColor1).lerp(blendColor2, wts[1].w);
++
++        const zoomInBtn = document.getElementById('zoom-in-btn');
++        if (zoomInBtn) {
++            zoomInBtn.addEventListener('click', () => {
++                _mapZoomLevel = Math.min(16.0, _mapZoomLevel * 1.6);
++                _lastMapX = -999999;
++            });
+         }
+-    }
+ 
++        const zoomOutBtn = document.getElementById('zoom-out-btn');
++        if (zoomOutBtn) {
++            zoomOutBtn.addEventListener('click', () => {
++                _mapZoomLevel = Math.max(0.05, _mapZoomLevel / 1.6);
++                _lastMapX = -999999;
++            });
++        }
+ 
++        if (_mapCanvas) {
++            _mapCanvas.addEventListener('wheel', (e) => {
++                e.preventDefault();
++                if (e.deltaY > 0) {
++                    _mapZoomLevel = Math.max(0.05, _mapZoomLevel / 1.25);
++                } else {
++                    _mapZoomLevel = Math.min(16.0, _mapZoomLevel * 1.25);
++                }
++                _lastMapX = -999999;
++            }, { passive: false });
++        }
+ 
+-    
+-    let _mapEl = null;
+-    let _mapCanvas = null;
+-    let _mapCtx = null;
+-    let _mapVisible = true;
++        const closeMapBtn = document.getElementById('close-map-btn');
++        if (closeMapBtn) {
++            closeMapBtn.addEventListener('click', () => {
++                if (_mapEl) _mapEl.style.display = 'none';
++                if (typeof params !== 'undefined') params.showMap = false;
++            });
++        }
+ 
+-    function initMapUI() {
+-    _mapEl = document.getElementById('world-map');
+-    _mapCanvas = document.getElementById('map-canvas');
+-    if (_mapCanvas) {
+-        _mapCtx = _mapCanvas.getContext('2d');
+-        _mapCanvas.style.cursor = 'pointer';
+-        _mapCanvas.addEventListener('click', (e) => {
+-            const rect = _mapCanvas.getBoundingClientRect();
+-            const x = e.clientX - rect.left;
+-            const ratio = x / rect.width;
+-            const targetZ = ratio * WORLD_LENGTH;
+-            const zn = ZONES.find(z => targetZ >= z.start && targetZ <= z.end);
+-            if (zn && typeof playerGrp !== 'undefined') {
+-                playerGrp.position.set(0, 80, (zn.start + zn.end) * 0.5);
+-                if (typeof lastTerrainGridX !== 'undefined') lastTerrainGridX = -9999;
+-                if (typeof lastTerrainGridZ !== 'undefined') lastTerrainGridZ = -9999;
+-                if (typeof navParams !== 'undefined' && typeof navFolder !== 'undefined') {
+-                    navParams.biome = zn.name;
+-                    navFolder.controllersRecursive().forEach(c => c.updateDisplay());
++        window.addEventListener('keydown', (e) => {
++            if (e.key === 'm' || e.key === 'M') {
++                if (!e.target || (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA')) {
++                    if (_mapEl && _mapEl.style.display === 'none') {
++                        _mapEl.style.display = 'block';
++                    } else {
++                        toggleMapExpand();
++                    }
+                 }
+             }
+         });
+     }
+-    const closeMapBtn = document.getElementById('close-map-btn');
+-    if (closeMapBtn) {
+-        closeMapBtn.addEventListener('click', () => {
+-            if (_mapEl) _mapEl.style.display = 'none';
+-            if (typeof params !== 'undefined') params.showMap = false;
+-        });
+-    }
+-}
+-initMapUI();
++    initMapUI();
+ 
+     const _mapColors = {
+-        '≡ƒîè Archipelago':       '#2a6aad',
+-        '≡ƒî│ Ghibli Land':       '#4a9640',
++        '≡ƒÅ¥∩╕Å Archipelago':       '#2a6aad',
++        '≡ƒî▓ Ghibli Land':       '#4a9640',
+         '≡ƒî╛ Golden Plains':     '#c8a832',
+-        '≡ƒÅö∩╕Å Misty Mountains I': '#6b7280',
+-        '≡ƒî┤ Lush Jungle':        '#286330',
++        '≡ƒÅö∩╕Å Misty Mountains':   '#6b7280',
++        '≡ƒî┤ Lush Jungle':        '#2eb85c',
+         '≡ƒÆÄ Crystal Land':      '#5b8fa8',
+-        '≡ƒÅö∩╕Å Misty Mountains II':'#6b7280',
+-        '≡ƒî│ Ghibli Land II':    '#4a9640',
+         '≡ƒîè Open Ocean':        '#1d4ed8',
++        '≡ƒÅ£∩╕Å Desert Dunes':      '#d97706',
++        'Γ¢░∩╕Å Badlands Canyon':   '#9a3412',
++        'Γ¥ä∩╕Å North Pole':        '#93e5fa',
+     };
+ 
++    let _mapBgCanvas, _mapBgCtx;
++
++
+     function _drawWorldMap() {
++        if (typeof playerGrp === 'undefined') return;
+         if (!_mapCanvas) _mapCanvas = document.getElementById('map-canvas');
+         if (_mapCanvas && !_mapCtx) _mapCtx = _mapCanvas.getContext('2d');
+         if (!_mapCanvas || !_mapCtx) return;
+-        const W = _mapCanvas.width, H = _mapCanvas.height;
+-        _mapCtx.clearRect(0, 0, W, H);
+         
+-        // 1. Draw Biome Bands with distinct colors & borders
+-        ZONES.forEach(zn => {
+-            const x1 = (zn.start / WORLD_LENGTH) * W;
+-            const x2 = (zn.end   / WORLD_LENGTH) * W;
+-            _mapCtx.fillStyle = _mapColors[zn.name] || '#555';
+-            _mapCtx.fillRect(x1, 0, x2 - x1, H);
+-
+-            _mapCtx.strokeStyle = 'rgba(0,0,0,0.35)';
+-            _mapCtx.lineWidth = 1;
+-            _mapCtx.beginPath();
+-            _mapCtx.moveTo(x1, 0); _mapCtx.lineTo(x1, H);
+-            _mapCtx.stroke();
+-
+-            // Label Emoji & Short Name
+-            _mapCtx.fillStyle = '#ffffff';
+-            _mapCtx.font = 'bold 10px monospace';
+-            _mapCtx.textAlign = 'center';
+-            const parts = zn.name.split(' ');
+-            const labelStr = parts[0] + (parts[1] ? ' ' + parts[1].substring(0, 5) : '');
+-            _mapCtx.fillText(labelStr, (x1 + x2) / 2, H / 2 + 3);
+-        });
++        const W = _isMapExpanded ? 480 : 200;
++        const H = _isMapExpanded ? 480 : 200;
+ 
+-        // 2. Draw Player Marker & Position Info
+-        if (typeof playerGrp !== 'undefined') {
+-            const pz = ((playerGrp.position.z % WORLD_LENGTH + WORLD_LENGTH) % WORLD_LENGTH);
+-            const px = (pz / WORLD_LENGTH) * W;
+-
+-            // Halo Ring
+-            _mapCtx.fillStyle = 'rgba(255, 230, 0, 0.45)';
+-            _mapCtx.beginPath();
+-            _mapCtx.arc(px, H / 2, 7, 0, Math.PI * 2);
+-            _mapCtx.fill();
+-
+-            // Core Marker Dot
+-            _mapCtx.fillStyle = '#ffffff';
+-            _mapCtx.beginPath();
+-            _mapCtx.arc(px, H / 2, 3.5, 0, Math.PI * 2);
+-            _mapCtx.fill();
+-            _mapCtx.strokeStyle = '#000000';
+-            _mapCtx.lineWidth = 1.5;
+-            _mapCtx.stroke();
+-
+-            // Live Position Text update
+-            const mapInfoEl = document.getElementById('map-info-text');
+-            if (mapInfoEl) {
+-                const curZoneIdx = _zoneIdxAt(pz);
+-                const curZone = ZONES[curZoneIdx];
+-                const pzVal = Math.round(playerGrp.position.z);
+-                const totalK = Math.round(WORLD_LENGTH / 1000);
+-                mapInfoEl.innerText = `${curZone.name} | Z:${pzVal}m / ${totalK}k`;
++        if (_mapCanvas.width !== W || _mapCanvas.height !== H) {
++            _mapCanvas.width = W;
++            _mapCanvas.height = H;
++        }
++
++        if (!_mapBgCanvas) {
++            _mapBgCanvas = document.createElement('canvas');
++            _mapBgCtx = _mapBgCanvas.getContext('2d');
++        }
++
++        if (_mapBgCanvas.width !== W || _mapBgCanvas.height !== H) {
++            _mapBgCanvas.width = W;
++            _mapBgCanvas.height = H;
++            _lastMapX = -999999;
++        }
++
++        const px = playerGrp.position.x;
++        const pz = playerGrp.position.z;
++
++        const stateChanged = (_lastExpandedState !== _isMapExpanded) || (_lastZoomState !== _mapZoomLevel);
++        if (stateChanged) {
++            _lastExpandedState = _isMapExpanded;
++            _lastZoomState = _mapZoomLevel;
++            _lastMapX = -999999;
++        }
++
++        // Re-render heavy noise background ONLY when player moves significantly or zoom/size changed
++        if (Math.hypot(px - _lastMapX, pz - _lastMapZ) > 80 || stateChanged) {
++            _lastMapX = px;
++            _lastMapZ = pz;
++
++            const baseSize = _isMapExpanded ? WORLD_LENGTH : 80000;
++            const radarSize = baseSize / _mapZoomLevel;
++            const pxStart = px - radarSize / 2;
++            const pzStart = pz - radarSize / 2;
++            
++            const res = _isMapExpanded ? 60 : 40;
++            const step = radarSize / res;
++            const pxStep = W / res;
++            
++            _mapBgCtx.clearRect(0, 0, W, H);
++            for (let i = 0; i < res; i++) {
++                for (let j = 0; j < res; j++) {
++                    const sampleX = pxStart + i * step;
++                    const sampleZ = pzStart + j * step;
++                    
++                    const data = getIslandData(sampleX, sampleZ);
++                    if (data.mask === 0) {
++                        _mapBgCtx.fillStyle = '#1a4a8c'; // Deep ocean blue
++                    } else {
++                        _mapBgCtx.fillStyle = _mapColors[data.mainBiome.name] || '#88cc88';
++                    }
++                    _mapBgCtx.fillRect(i * pxStep, j * pxStep, pxStep + 0.5, pxStep + 0.5);
++                }
+             }
+         }
++        
++        _mapCtx.clearRect(0, 0, W, H);
++        _mapCtx.drawImage(_mapBgCanvas, 0, 0);
++        
++        // Draw Red Player Dot in center
++        _mapCtx.fillStyle = '#ff3333';
++        _mapCtx.beginPath();
++        _mapCtx.arc(W / 2, H / 2, _isMapExpanded ? 6 : 4, 0, Math.PI * 2);
++        _mapCtx.fill();
++        _mapCtx.strokeStyle = '#ffffff';
++        _mapCtx.lineWidth = 1.5;
++        _mapCtx.stroke();
++        
++        const infoText = document.getElementById('map-info-text');
++        if (infoText) {
++            const rx = Math.round(px);
++            const rz = Math.round(pz);
++            const currentBiome = getBiomeAt(px, pz);
++            const bName = currentBiome ? currentBiome.name : 'Unknown';
++            const zoomStr = _mapZoomLevel >= 1.0 ? `${_mapZoomLevel.toFixed(1)}x` : `${_mapZoomLevel.toFixed(2)}x`;
++            infoText.innerText = `X: ${rx}m | Z: ${rz}m | BIOME: ${bName} | ZOOM: ${zoomStr}`;
++        }
+     }
+ 
+-
+-        const gui = new GUI({ title: 'Settings' });
+-    
++    const gui = new GUI();
+     const params = {
+-        trails: isWindTrailsOn,
++        worldMode: 'Islands',
++        sceneFog: true,
++        terrainSmoothing: 0.0,
++        waterMode: 'realistic',
++        toggleRealistic: true,
++        toggleAnime: false,
++        toggleWindWaker: false,
++        toggleWindWakerDeep: false,
++        toggleToon06: false,
++        toggleToon07: false,
++        waterDeepColor: '#1a4a8c',
++        waterMidColor: '#4da9e8',
++        waterHighlight: '#ffffff',
++        waterScale: 0.005,
++        waterCellSpeed: 0.5,
++        trails: isWindTrailsOn, lockSunToPlayer: true,
+         shadows: isShadowsOn,
+         treeShadows: isTreeShadowsOn,
+         shadowDist: shadowDistMode,
+@@ -554,25 +598,75 @@ initMapUI();
+     
+     // Add Navigation folder (Go To Biome)
+     const navFolder = gui.addFolder('Navigation');
+-    const navParams = { biome: ZONES[0].name };
+-    navFolder.add(navParams, 'biome', ZONES.map(z => z.name)).name('Go To Biome').onChange(v => {
+-        const zn = ZONES.find(z => z.name === v);
+-        if (!zn) return;
+-        playerGrp.position.set(0, 80, (zn.start + zn.end) * 0.5);
+-        lastTerrainGridX = -9999;
+-        lastTerrainGridZ = -9999;
++    const navParams = {};
++    ZONES.forEach(zn => {
++        navParams[zn.name] = () => {
++            teleportToBiome(zn.name);
++        };
++        navFolder.add(navParams, zn.name).name(`${zn.name}`);
+     });
+ 
+     // Add Editor folder (Terrain Editor & Edit Crystals)
+     const editorFolder = gui.addFolder('Editor');
+     editorFolder.add({ openTerrainEditor: () => {
+-        const btn = document.getElementById('editor-toggle');
+-        if (btn) btn.click();
++        if (window.toggleTerrainEditor) {
++            window.toggleTerrainEditor();
++        } else {
++            const btn = document.getElementById('editor-toggle');
++            if (btn) btn.click();
++        }
+     }}, 'openTerrainEditor').name('≡ƒ¢á∩╕Å Terrain Editor');
+     editorFolder.add({ openCrystalEditor: () => {
+         const crystalEditor = document.getElementById('crystal-editor');
+         if (crystalEditor) crystalEditor.style.display = crystalEditor.style.display === 'none' ? 'block' : 'none';
+     }}, 'openCrystalEditor').name('≡ƒÆÄ Edit Crystals');
++    editorFolder.add({ openTreeBillboardEditor: () => {
++        if (window.treeBillboardEditor) {
++            window.treeBillboardEditor.togglePanel(true);
++        }
++    }}, 'openTreeBillboardEditor').name('≡ƒî▓ Tree & Billboard Editor');
++    editorFolder.add(params, 'lockSunToPlayer').name('Lock Sun To Player'); 
++    const editorWaterDropdownController = editorFolder.add(params, 'waterMode', ['realistic', 'anime', 'windWaker', 'windWakerDeep', 'toon06', 'toon07', 'toon08']).name('Water Shader').onChange(v => {
++        activateWaterShader(v, true);
++    });
++
++    // ≡ƒÄ¿ Live Biome Terrain Color & Shimmer Editor
++    const colorEditorFolder = editorFolder.addFolder('≡ƒÄ¿ Terrain Color & Shimmer');
++    const triggerTerrainColorUpdate = () => {
++        lastTerrainGridX = -9999;
++        lastTerrainGridZ = -9999;
++    };
++    const colorParams = {
++        npSnow: '#' + northPoleColors.snowDune.getHexString(),
++        npShadow: '#' + northPoleColors.snowShadow.getHexString(),
++        npPeak: '#' + northPoleColors.icePeak.getHexString(),
++        desertSlope: '#' + desertColors.duneSlope.getHexString(),
++        desertShadow: '#' + desertColors.valleyShadow.getHexString(),
++        shimmer: 1.0
++    };
++    colorEditorFolder.addColor(colorParams, 'npSnow').name('Γ¥ä∩╕Å Snow Color').onChange(hex => {
++        northPoleColors.snowDune.set(hex);
++        triggerTerrainColorUpdate();
++    });
++    colorEditorFolder.addColor(colorParams, 'npShadow').name('Γ¥ä∩╕Å Snow Shadow').onChange(hex => {
++        northPoleColors.snowShadow.set(hex);
++        triggerTerrainColorUpdate();
++    });
++    colorEditorFolder.addColor(colorParams, 'npPeak').name('Γ¥ä∩╕Å Peak Color').onChange(hex => {
++        northPoleColors.icePeak.set(hex);
++        triggerTerrainColorUpdate();
++    });
++    colorEditorFolder.addColor(colorParams, 'desertSlope').name('≡ƒÅ£∩╕Å Sand Color').onChange(hex => {
++        desertColors.duneSlope.set(hex);
++        triggerTerrainColorUpdate();
++    });
++    colorEditorFolder.addColor(colorParams, 'desertShadow').name('≡ƒÅ£∩╕Å Sand Shadow').onChange(hex => {
++        desertColors.valleyShadow.set(hex);
++        triggerTerrainColorUpdate();
++    });
++    colorEditorFolder.add(colorParams, 'shimmer', 0, 3, 0.1).name('Γ£¿ Shimmer Sparkle').onChange(val => {
++        terrainUniforms.uShimmerMult.value = val;
++    });
+ 
+     // Add Game folder
+     const gameFolder = gui.addFolder('Game');
+@@ -591,10 +685,56 @@ initMapUI();
+     envFolder.add(params, 'godRayIntensity', 0, 2, 0.05).name('Ray Intensity').onChange(v => { godRaysPass.uniforms.uIntensity.value = v; });
+     envFolder.add(params, 'trails').name('Wind Trails').onChange(v => isWindTrailsOn = v);
+ 
++
+     const debugFolder = gui.addFolder('≡ƒöº Debug Render');
+     debugFolder.add(params, 'showTerrain').name('Terrain').onChange(v => { terrain.visible = v; });
+-    debugFolder.add(params, 'showWater').name('Water').onChange(v => { waterMesh.visible = v; });
+-    debugFolder.add(params, 'showTrees').name('Trees').onChange(v => { treeMeshes.forEach(m => m.visible = v); });
++
++    // Water Master Toggle & Shader Toggles
++    const showWaterController = debugFolder.add(params, 'showWater').name('Water Master Toggle').onChange(v => {
++        activateWaterShader(params.waterMode, v);
++    });
++
++    const waterShaderFolder = debugFolder.addFolder('≡ƒîè Water Shaders');
++    let debugWaterDropdownController;
++    const shaderToggleControllers = {};
++
++    function activateWaterShader(mode, turnOn) {
++        if (!turnOn) {
++            params.showWater = false;
++            params.toggleRealistic = false;
++            params.toggleAnime = false;
++            params.toggleWindWaker = false;
++            params.toggleWindWakerDeep = false;
++            params.toggleToon06 = false;
++            params.toggleToon07 = false;
++        } else {
++            params.showWater = true;
++            params.waterMode = mode;
++            params.toggleRealistic = (mode === 'realistic');
++            params.toggleAnime = (mode === 'anime');
++            params.toggleWindWaker = (mode === 'windWaker');
++            params.toggleWindWakerDeep = (mode === 'windWakerDeep');
++            params.toggleToon06 = (mode === 'toon06');
++            params.toggleToon07 = (mode === 'toon07');
++        }
++
++        Object.values(shaderToggleControllers).forEach(c => { if(c && c.updateDisplay) c.updateDisplay(); });
++        if (showWaterController && showWaterController.updateDisplay) showWaterController.updateDisplay();
++        if (debugWaterDropdownController && debugWaterDropdownController.updateDisplay) debugWaterDropdownController.updateDisplay();
++        if (editorWaterDropdownController && editorWaterDropdownController.updateDisplay) editorWaterDropdownController.updateDisplay();
++
++        setWaterMaterialMode(params.waterMode);
++    }
++
++    shaderToggleControllers['realistic'] = waterShaderFolder.add(params, 'toggleRealistic').name('≡ƒîè Realistic Waves').onChange(v => activateWaterShader('realistic', v));
++    shaderToggleControllers['anime'] = waterShaderFolder.add(params, 'toggleAnime').name('≡ƒÄ¿ Anime Cel Water').onChange(v => activateWaterShader('anime', v));
++    shaderToggleControllers['windWaker'] = waterShaderFolder.add(params, 'toggleWindWaker').name('Γ¢╡ Wind Waker Ocean').onChange(v => activateWaterShader('windWaker', v));
++    shaderToggleControllers['windWakerDeep'] = waterShaderFolder.add(params, 'toggleWindWakerDeep').name('≡ƒîè Wind Waker Deep').onChange(v => activateWaterShader('windWakerDeep', v));
++    shaderToggleControllers['toon06'] = waterShaderFolder.add(params, 'toggleToon06').name('Γ£¿ Toon FBM Step 06').onChange(v => activateWaterShader('toon06', v));
++    shaderToggleControllers['toon07'] = waterShaderFolder.add(params, 'toggleToon07').name('≡ƒîÇ Toon Layered Ripple 07').onChange(v => activateWaterShader('toon07', v));
++    debugWaterDropdownController = waterShaderFolder.add(params, 'waterMode', ['realistic', 'anime', 'windWaker', 'windWakerDeep', 'toon06', 'toon07']).name('Active Mode').onChange(v => activateWaterShader(v, true));
++
++    debugFolder.add(params, 'showTrees').name('Trees').onChange(v => { treeMeshes.forEach(m => m.visible = v); if(typeof instBillboardTrees !== 'undefined') instBillboardTrees.visible = v; });
+     debugFolder.add(params, 'showClouds').name('Clouds').onChange(v => { instClouds.visible = v; if(typeof instHighClouds !== 'undefined') instHighClouds.visible = v; if(typeof instMegaClouds !== 'undefined') instMegaClouds.visible = v; });
+     debugFolder.add(params, 'showBirds').name('Birds').onChange(v => { if(typeof instBirds !== 'undefined') instBirds.visible = v; if(typeof flockGrp !== 'undefined') flockGrp.visible = v; });
+     debugFolder.add(params, 'showFogPlanes').name('Fog Planes').onChange(v => { if(typeof window.fogGroup !== 'undefined') window.fogGroup.visible = v; });
+@@ -602,6 +742,50 @@ initMapUI();
+ 
+ 
+     debugFolder.add(params, 'showMap').name('World Map').onChange(v => { const el = document.getElementById('world-map'); if(el) el.style.display = v ? 'block' : 'none'; });
++    
++    function teleportToBiome(biomeName) {
++        if (typeof playerGrp === 'undefined') return;
++        
++        const zn = ZONES.find(z => z.name === biomeName);
++        if (!zn) return;
++
++        // Smart Search for Islands Mode
++        const SEARCH_STEP = 14000;
++        let radius = 0;
++        let found = false;
++        let targetX = playerGrp.position.x, targetZ = playerGrp.position.z;
++        
++        while (!found && radius < 120) {
++            for (let x = -radius; x <= radius; x++) {
++                for (let z = -radius; z <= radius; z++) {
++                    if (Math.max(Math.abs(x), Math.abs(z)) !== radius) continue; // Only search outer edge ring
++                    
++                    const sampleX = playerGrp.position.x + x * SEARCH_STEP;
++                    const sampleZ = playerGrp.position.z + z * SEARCH_STEP;
++                    const data = getIslandData(sampleX, sampleZ);
++                    
++                    if (data.mask > 0.2 && data.mainBiome.name === biomeName) {
++                        targetX = sampleX;
++                        targetZ = sampleZ;
++                        found = true;
++                        break;
++                    }
++                }
++                if (found) break;
++            }
++            radius++;
++        }
++        playerGrp.position.set(targetX, 100, targetZ);
++        
++        lastTerrainGridX = -9999;
++        lastTerrainGridZ = -9999;
++        
++        if (typeof navParams !== 'undefined' && typeof navFolder !== 'undefined') {
++            navParams.biome = biomeName;
++            navFolder.controllersRecursive().forEach(c => c.updateDisplay());
++        }
++    }
++
+     function toggleGUI(show) {
+         const isVisible = typeof show === 'boolean' ? show : (gui.domElement.style.display === 'none');
+         gui.domElement.style.display = isVisible ? '' : 'none';
+@@ -643,6 +827,67 @@ initMapUI();
+         document.getElementById('pause-toggle').innerText = isFlightPaused ? 'Γû╢' : 'ΓÅ╕';
+     });
+ 
++    document.getElementById('god-mode-btn').addEventListener('click', () => {
++        isGodMode = !isGodMode;
++        const btn = document.getElementById('god-mode-btn');
++        if (isGodMode) {
++            if (typeof params !== 'undefined') {
++                params.groundFog = false;
++                params.godRays = false;
++                if (typeof isWindTrailsOn !== 'undefined') params.trails = false;
++                params.wind = false;
++                params.rain = false;
++                params.sceneFog = false;
++                params.showClouds = false;
++            }
++            // Automatically hide ALL cloud layers in God Mode
++            if (typeof instClouds !== 'undefined') instClouds.visible = false;
++            if (typeof instHighClouds !== 'undefined') instHighClouds.visible = false;
++            if (typeof instWispyClouds !== 'undefined') instWispyClouds.visible = false;
++            if (typeof instMegaClouds !== 'undefined') instMegaClouds.visible = false;
++            if (typeof skyMat !== 'undefined' && skyMat.uniforms && skyMat.uniforms.uEnableClouds) skyMat.uniforms.uEnableClouds.value = 0.0;
++
++            if (typeof scene !== 'undefined' && scene.fog) { scene.fog.near = 100000; scene.fog.far = 200000; }
++            if (typeof groundFog !== 'undefined') groundFog.visible = false;
++            if (typeof godRaysGroup !== 'undefined') godRaysGroup.visible = false;
++            if (typeof windTrailsGroup !== 'undefined') windTrailsGroup.visible = false;
++            
++            if (typeof debugFolder !== 'undefined') debugFolder.open();
++            if (typeof envFolder !== 'undefined') envFolder.open();
++            isFlightPaused = true;
++            document.getElementById('pause-toggle').innerText = 'Γû╢';
++            btn.style.background = '#ff4444';
++            btn.style.color = '#fff';
++
++            if (!godCamera) {
++                const gm = setupGodMode(scene, cameraBase, renderer, playerGrp);
++                godCamera = gm.godCamera;
++                godControls = gm.godControls;
++            }
++            toggleGodMode(isGodMode, godCamera, camera, godControls, playerGrp, (cam) => {
++                renderPass.camera = cam;
++            });
++    
++        } else {
++            if (typeof params !== 'undefined') {
++                params.showClouds = true;
++            }
++            if (typeof instClouds !== 'undefined') instClouds.visible = true;
++            if (typeof instHighClouds !== 'undefined') instHighClouds.visible = true;
++            if (typeof instWispyClouds !== 'undefined') instWispyClouds.visible = true;
++            if (typeof instMegaClouds !== 'undefined') instMegaClouds.visible = true;
++            if (typeof skyMat !== 'undefined' && skyMat.uniforms && skyMat.uniforms.uEnableClouds) skyMat.uniforms.uEnableClouds.value = 1.0;
++
++            btn.style.background = '#ffaa00';
++            btn.style.color = '#000';
++
++            toggleGodMode(isGodMode, godCamera, camera, godControls, playerGrp, (cam) => {
++                renderPass.camera = cam;
++            });
++    
++        }
++    });
++
+ 
+ 
+     const clickRaycaster = new THREE.Raycaster();
+@@ -667,38 +912,7 @@ initMapUI();
+ 
+     }, { passive: true });
+     
+-    document.getElementById('photo-exit').addEventListener('click', () => {
+-        isPhotoMode = false;
+-        document.getElementById('settings-controls').style.display = 'flex';
+-        document.getElementById('touch-controls').style.display = '';
+-        document.getElementById('time-toggle').style.display = 'block';
+-        document.getElementById('photo-mode-ui').style.display = 'none';
+-        camera.fov = 60;
+-        camera.position.set(0, 4, 14);
+-        camera.up.set(0, 1, 0);
+-        camera.rotation.set(0, 0, 0);
+-        camera.updateProjectionMatrix();
+-        if (photoControls) {
+-            photoControls.enabled = false;
+-        }
+-    });
+-    
+-    document.getElementById('photo-capture').addEventListener('click', () => {
+-        document.getElementById('photo-mode-ui').style.display = 'none';
+-        requestAnimationFrame(() => {
+-            requestAnimationFrame(() => {
+-        
+-        
+-        composer.render();
+-                const dataURL = renderer.domElement.toDataURL('image/png');
+-                const link = document.createElement('a');
+-                link.download = 'GhibliFlight_Screenshot.png';
+-                link.href = dataURL;
+-                link.click();
+-                document.getElementById('photo-mode-ui').style.display = 'flex';
+-            });
+-        });
+-    });
++
+ 
+     // ==========================================
+     // 1. CORE SETUP & TOON RENDERER
+@@ -706,164 +920,10 @@ initMapUI();
+     
+ 
+ 
+-    const container = document.getElementById('app');
+-    const scene = new THREE.Scene();
+-    scene.background = new THREE.Color(0x8cbce6);
+-    scene.fog = new THREE.Fog(0x8cbce6, 100, 1800);
+-
+-
+-
+-    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 2.0, 30000); // Extended far plane so 20000-unit sun is visible
+-    camera.position.set(0, 9, 26);
+-    const renderer = new THREE.WebGLRenderer({ antialias: !LOW_GFX, preserveDrawingBuffer: true, logarithmicDepthBuffer: false });
+-    renderer.setSize(window.innerWidth, window.innerHeight);
+-    renderer.setPixelRatio(LOW_GFX ? 0.5 : Math.min(window.devicePixelRatio, 1.5));
+-    
+-    renderer.shadowMap.enabled = !LOW_GFX;
+-    renderer.shadowMap.type = LOW_GFX ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
+-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+-    renderer.toneMappingExposure = 1.8;
+-    container.appendChild(renderer.domElement);
+-
+-    const composer = new EffectComposer(renderer);
+-    const renderPass = new RenderPass(scene, camera);
+-    composer.addPass(renderPass);
+-    const _bloomRes = LOW_GFX ? new THREE.Vector2(window.innerWidth * 0.5, window.innerHeight * 0.5) : new THREE.Vector2(window.innerWidth, window.innerHeight);
+-    const bloomPass = new UnrealBloomPass(_bloomRes, 0.8, 0.4, 1.5);
+-    bloomPass.enabled = !LOW_GFX;
+-    composer.addPass(bloomPass); // Enable Selective Bloom
+-
+-    const GhibliSummerShader = {
+-        uniforms: {
+-            tDiffuse: { value: null }
+-        },
+-        vertexShader: `
+-            varying vec2 vUv;
+-            void main() {
+-                vUv = uv;
+-                gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+-            }
+-        `,
+-        fragmentShader: `
+-            uniform sampler2D tDiffuse;
+-            varying vec2 vUv;
+-
+-            void main() {
+-                vec4 texel = texture2D( tDiffuse, vUv );
+-                vec3 col = texel.rgb;
+-
+-                float lum = dot(col, vec3(0.299, 0.587, 0.114));
+-
+-                // Studio Ghibli Summer Split-Toning (Golden sunlit highlights, soft atmospheric cerulean shadows)
+-                vec3 warmGold = col * vec3(1.07, 1.02, 0.92);
+-                vec3 azureShadow = col * vec3(0.93, 0.98, 1.07);
+-                col = mix(azureShadow, warmGold, smoothstep(0.2, 0.75, lum));
+-
+-                // Lush Saturation Boost (Chlorophyll greens & vibrant ocean)
+-                col = mix(vec3(lum), col, 1.18);
+-
+-                // Sun-drenched warm optical shimmer on highlights
+-                col += max(vec3(0.0), col - 0.55) * vec3(0.12, 0.09, 0.02);
+-
+-                // Subtle Hand-Painted Celluloid Vignette
+-                vec2 uv = (vUv - 0.5) * 2.0;
+-                float vign = clamp(1.0 - dot(uv, uv) * 0.14, 0.0, 1.0);
+-                col *= vign;
+-
+-                gl_FragColor = vec4(col, texel.a);
+-            }
+-        `
+-    };
+ 
++    initPostProcessingUI();
++    // (Engine & PostProcessing initialized via modules)
+     
+-    // ==========================================
+-    // GOD RAYS POST-PROCESSING PASS
+-    // ==========================================
+-    const GodRaysShader = {
+-        uniforms: {
+-            tDiffuse: { value: null },
+-            uSunScreenPos: { value: new THREE.Vector2(0.5, 0.5) },
+-            uIntensity: { value: 0.65 },
+-            uDecay: { value: 0.927 },
+-            uDensity: { value: 0.50 },
+-            uWeight: { value: 0.75 },
+-            uSunVisible: { value: 1.0 }
+-        },
+-        vertexShader: `
+-            varying vec2 vUv;
+-            void main() {
+-                vUv = uv;
+-                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+-            }
+-        `,
+-        fragmentShader: `
+-            uniform sampler2D tDiffuse;
+-            uniform vec2 uSunScreenPos;
+-            uniform float uIntensity;
+-            uniform float uDecay;
+-            uniform float uDensity;
+-            uniform float uWeight;
+-            uniform float uSunVisible;
+-            varying vec2 vUv;
+-
+-            float pseudoRand(vec2 p) {
+-                return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453123);
+-            }
+-
+-            void main() {
+-                vec4 texel = texture2D(tDiffuse, vUv);
+-                
+-                // Direction from this pixel toward the sun
+-                vec2 deltaUV = (vUv - uSunScreenPos);
+-                float dist = length(deltaUV);
+-                deltaUV *= (1.0 / 32.0) * uDensity; // 32 dithered samples for 5x FPS gain with identical visual quality
+-
+-                // Screen-space dither offsets sample points to eliminate banding with fewer samples
+-                float dither = pseudoRand(gl_FragCoord.xy);
+-                vec2 sampleUV = vUv - (deltaUV * dither);
+-                
+-                float illumination = 0.0;
+-                float currentWeight = uWeight;
+-                
+-                for(int i = 0; i < 32; i++) {
+-                    sampleUV -= deltaUV;
+-                    vec4 samp = texture2D(tDiffuse, sampleUV);
+-                    float lum = dot(samp.rgb, vec3(0.299, 0.587, 0.114));
+-                    float bright = smoothstep(0.45, 0.85, lum);
+-                    illumination += bright * currentWeight;
+-                    currentWeight *= uDecay;
+-                }
+-                
+-                // Fade out rays near screen edges and when sun is off-screen
+-                float edgeFade = 1.0 - smoothstep(0.4, 1.5, dist);
+-                
+-                // Warm golden tint for the rays
+-                vec3 rayColor = vec3(1.0, 0.9, 0.7) * illumination * uIntensity * edgeFade * uSunVisible;
+-                
+-                gl_FragColor = vec4(texel.rgb + rayColor, texel.a);
+-            }
+-        `
+-    };
+-
+-    const godRaysPass = new ShaderPass(GodRaysShader);
+-    godRaysPass.enabled = !LOW_GFX;
+-    composer.addPass(godRaysPass);
+-
+-    const summerPass = new ShaderPass(GhibliSummerShader);
+-    summerPass.enabled = false;
+-    composer.addPass(summerPass);
+-
+-    let isSummerFilterOn = false;
+-    const summerBtn = document.getElementById('summer-toggle');
+-    if (summerBtn) {
+-        summerBtn.addEventListener('click', () => {
+-            isSummerFilterOn = !isSummerFilterOn;
+-            summerPass.enabled = isSummerFilterOn;
+-            if (typeof params !== 'undefined') params.summerFilter = isSummerFilterOn;
+-        });
+-    }
+-
+-    // ==========================================
+     // 2. LIGHTING
+     // ==========================================
+     const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+@@ -882,7 +942,7 @@ initMapUI();
+         roughness: 0.08,
+         metalness: 0.15,
+         transparent: true,
+-        opacity: 0.82,
++        opacity: 1.02,
+         transmission: 0.0,
+         thickness: 10.0,
+         ior: 2.2,
+@@ -1137,24 +1197,124 @@ initMapUI();
+ 
+     const matRock = new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap, dithering: true });
+     const matBush = new THREE.MeshToonMaterial({ color: 0x48a868, gradientMap, dithering: true });
+-    const matCloud = new THREE.MeshToonMaterial({ color: 0xfffaec, transparent: true, opacity: 0.65, gradientMap, dithering: true });
+-    const matWispyCloud = new THREE.MeshToonMaterial({ color: 0xffffff, transparent: true, opacity: 0.42, gradientMap, dithering: true });
+-    const matFlower = new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap, dithering: true }); 
++    const matCloud = new THREE.MeshToonMaterial({ color: 0xfffaec, transparent: true, opacity: 1.0, gradientMap, dithering: true });
++    const matWispyCloud = new THREE.MeshToonMaterial({ color: 0xffffff, transparent: true, opacity: 1.0, gradientMap, dithering: true });
++    const matFlower = new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap, dithering: true });
++    function createSandNoiseTexture(size = 256) {
++        const data = new Uint8Array(size * size * 4);
++        for (let i = 0; i < size * size * 4; i += 4) {
++            const v = Math.floor(Math.random() * 256);
++            data[i] = v; data[i + 1] = v; data[i + 2] = v; data[i + 3] = 255;
++        }
++        const texture = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
++        texture.wrapS = THREE.RepeatWrapping;
++        texture.wrapT = THREE.RepeatWrapping;
++        texture.minFilter = THREE.LinearFilter;
++        texture.magFilter = THREE.LinearFilter;
++        texture.needsUpdate = true;
++        return texture;
++    }
++    const sandNoiseMap = createSandNoiseTexture(256);
++
++    const terrainUniforms = {
++        uTime: { value: 0 },
++        uSunDir: { value: new THREE.Vector3(0.3, 0.8, 0.5) },
++        uSandNoiseMap: { value: sandNoiseMap },
++        uShimmerMult: { value: 1.0 }
++    };
++
+     const terrainMat = new THREE.MeshToonMaterial({ 
+         vertexColors: true, 
+         gradientMap,
+         dithering: true
+     });
+     
+-    // Shader injection for perfect pixel-smooth shorelines
++    // Shader injection for Journey Sand Shaders (glitter sparkles, dune rim glow, warm shadows)
+     terrainMat.onBeforeCompile = (shader) => {
++        shader.uniforms.uTime = terrainUniforms.uTime;
++        shader.uniforms.uSunDir = terrainUniforms.uSunDir;
++        shader.uniforms.uSandNoiseMap = terrainUniforms.uSandNoiseMap;
++        shader.uniforms.uShimmerMult = terrainUniforms.uShimmerMult;
++        
+         shader.vertexShader = `
+             varying vec3 vWorldPos;
++            varying vec3 vViewPos;
+         ` + shader.vertexShader;
++        
+         shader.vertexShader = shader.vertexShader.replace(
+             `#include <worldpos_vertex>`,
+             `#include <worldpos_vertex>
+-             vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`
++             vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
++             vViewPos = - (modelViewMatrix * vec4(transformed, 1.0)).xyz;`
++        );
++
++        shader.fragmentShader = `
++            uniform float uTime;
++            uniform vec3 uSunDir;
++            uniform float uShimmerMult;
++            uniform sampler2D uSandNoiseMap;
++            varying vec3 vWorldPos;
++            varying vec3 vViewPos;
++        ` + shader.fragmentShader;
++
++        shader.fragmentShader = shader.fragmentShader.replace(
++            `#include <dithering_fragment>`,
++            `#include <dithering_fragment>
++            
++            vec3 viewDir = normalize(vViewPos);
++            vec3 norm = normalize(vNormal);
++            vec3 lightDir = normalize(uSunDir);
++            vec3 halfDir = normalize(lightDir + viewDir);
++            vec3 ref = reflect(-viewDir, norm);
++            
++            // 1. Detect Sand / Warm Dune Surface (r > 0.55 and r > b)
++            float isSand = step(0.55, gl_FragColor.r) * step(gl_FragColor.b, gl_FragColor.r * 0.85);
++            
++            if (isSand > 0.1) {
++                // Dune Rim Lighting (Fresnel glow along grazing angles and dune ridges)
++                float rim = 1.0 - clamp(dot(norm, viewDir), 0.0, 1.0);
++                float rimStrength = pow(rim, 4.5) * 0.5;
++                vec3 rimGlow = vec3(1.0, 0.72, 0.38) * rimStrength;
++                
++                // Journey Sand Specular Glitter (Glitter grains sampling noise texture)
++                float mainSpec = clamp(dot(ref, halfDir), 0.0, 1.0);
++                mainSpec = pow(mainSpec, 45.0) * 3.5;
++                
++                float textureGlitter = texture2D(uSandNoiseMap, vWorldPos.xz * 0.07).r * 1.2;
++                textureGlitter = pow(clamp(textureGlitter, 0.0, 1.0), 3.0);
++                mainSpec *= textureGlitter;
++                
++                float rimSpec = pow(rim, 2.8) * textureGlitter * 2.0;
++                vec3 specColor = (mainSpec + rimSpec) * vec3(1.0, 0.82, 0.55) * uShimmerMult;
++                
++                // Apply Sand Shader Effects without stripe artifacts
++                gl_FragColor.rgb += (rimGlow + specColor) * isSand;
++            }
++
++            // 2. Detect Snow / North Pole Glacial Surface (High blue channel b > 0.70 & g > 0.55)
++            float isSnow = step(0.70, gl_FragColor.b) * step(0.55, gl_FragColor.g) * (1.0 - isSand);
++            
++            if (isSnow > 0.1) {
++                // Glacial Rim Lighting (Crisp sky-blue rim highlight)
++                float snowRim = 1.0 - clamp(dot(norm, viewDir), 0.0, 1.0);
++                float snowRimStrength = pow(snowRim, 4.0) * 0.35;
++                vec3 snowRimGlow = vec3(0.65, 0.85, 1.0) * snowRimStrength;
++                
++                // Diamond Snow & Ice Specular Glitter (Fine Crystalline Sparkles)
++                float mainSnowSpec = clamp(dot(ref, halfDir), 0.0, 1.0);
++                mainSnowSpec = pow(mainSnowSpec, 50.0) * 2.5;
++                
++                float snowGlitter = texture2D(uSandNoiseMap, vWorldPos.xz * 0.12).r * 1.25;
++                snowGlitter = pow(clamp(snowGlitter, 0.0, 1.0), 3.8);
++                mainSnowSpec *= snowGlitter;
++                
++                float snowRimSpec = pow(snowRim, 2.8) * snowGlitter * 1.5;
++                vec3 snowSpecColor = (mainSnowSpec + snowRimSpec) * vec3(0.85, 0.95, 1.0) * 0.9 * uShimmerMult;
++                
++                // Apply Diamond Snow Shimmer Effects
++                gl_FragColor.rgb += (snowRimGlow + snowSpecColor) * isSnow;
++            }
++            `
+         );
+     };
+ 
+@@ -1237,11 +1397,11 @@ initMapUI();
+     }
+ 
+     function updateTerrainGeometry(playerX, playerZ) {
+-        const vertexSpacing = 4000 / terrainRes;
+-        const gridX = Math.floor(playerX / vertexSpacing) * vertexSpacing;
+-        const gridZ = Math.floor(playerZ / vertexSpacing) * vertexSpacing;
++        const stepThreshold = 150;
++        if (Math.hypot(playerX - lastTerrainGridX, playerZ - lastTerrainGridZ) < stepThreshold) return;
+         
+-        if (gridX === lastTerrainGridX && gridZ === lastTerrainGridZ) return;
++        const gridX = Math.round(playerX / stepThreshold) * stepThreshold;
++        const gridZ = Math.round(playerZ / stepThreshold) * stepThreshold;
+         
+         terrain.position.set(gridX, 0, gridZ);
+         
+@@ -1250,6 +1410,7 @@ initMapUI();
+             terrainGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(pos.count * 3), 3));
+         }
+         const colors = terrainGeo.attributes.color;
++        const norm = terrainGeo.attributes.normal;
+ 
+         for (let i = 0; i < pos.count; i++) {
+             const worldX = pos.getX(i) + gridX;
+@@ -1257,20 +1418,33 @@ initMapUI();
+             const h = getWorldHeight(worldX, worldZ);
+             pos.setY(i, h);
+ 
++            // Fast analytical heightmap normals (avoids expensive computeVertexNormals triangle pass)
++            const hL = getWorldHeight(worldX - 12, worldZ);
++            const hR = getWorldHeight(worldX + 12, worldZ);
++            const hD = getWorldHeight(worldX, worldZ - 12);
++            const hU = getWorldHeight(worldX, worldZ + 12);
++            tempVec1.set(hL - hR, 24.0, hD - hU).normalize();
++            norm.setXYZ(i, tempVec1.x, tempVec1.y, tempVec1.z);
++
+             getWorldColor(h, worldX, worldZ, tempColor);
+             
+-            // Add dirt path
++            // Add dirt / frost path
+             const pathMask = getPathStrength(worldX, worldZ);
+             if (pathMask > 0 && h > 2.0 && h < 25.0) {
+-                tempColor.lerp(colorPath, pathMask * 0.85);
++                const currentBiome = getBiomeAt(worldX, worldZ);
++                if (currentBiome && currentBiome.name && currentBiome.name.includes('North Pole')) {
++                    tempColor.lerp(new THREE.Color(0xd0edff), pathMask * 0.35);
++                } else if (!currentBiome || !currentBiome.name || (!currentBiome.name.includes('Crystal') && !currentBiome.name.includes('Ocean') && !currentBiome.name.includes('Desert') && !currentBiome.name.includes('Canyon'))) {
++                    tempColor.lerp(colorPath, pathMask * 0.85);
++                }
+             }
+ 
+             colors.setXYZ(i, tempColor.r, tempColor.g, tempColor.b);
+         }
+         
+-        terrainGeo.computeVertexNormals(); 
+         pos.needsUpdate = true;
+         colors.needsUpdate = true;
++        norm.needsUpdate = true;
+         
+         lastTerrainGridX = gridX;
+         lastTerrainGridZ = gridZ;
+@@ -1285,7 +1459,7 @@ initMapUI();
+     const BUSH_COUNT = 0;
+         const CLOUD_COUNT = LOW_GFX ? 40 : 150;
+     const FLOWER_COUNT = 0; // Optimized for FPS
+-    const TREE_MULT = 0.5; // Doubled tree count so entire landscape and horizon are filled with dense forests
++    const TREE_MULT = 0.15; // Doubled tree count so entire landscape and horizon are filled with dense forests
+     
+     function applyColor(geometry, colorHex) {
+         const color = new THREE.Color(colorHex);
+@@ -1562,35 +1736,75 @@ initMapUI();
+     }
+     geoCloud.computeVertexNormals();
+ 
+-    // Meshes
+-    const instTree1 = new THREE.InstancedMesh(geoTree1, matTree, Math.floor(3600 * TREE_MULT));
+-    const instTree2 = new THREE.InstancedMesh(geoTree2, matTree, Math.floor(3600 * TREE_MULT));
+-    const instTree3 = new THREE.InstancedMesh(geoTree3, matTree, Math.floor(3600 * TREE_MULT));
+-    const instTree4 = new THREE.InstancedMesh(geoTree4, matTree, Math.floor(2400 * TREE_MULT));
+-    const instOak1 = new THREE.InstancedMesh(geoTree1, matTree, Math.floor(2400 * TREE_MULT));
+-    const instOak2 = new THREE.InstancedMesh(geoTree2, matTree, Math.floor(2400 * TREE_MULT));
+-    const instOak3 = new THREE.InstancedMesh(geoTree3, matTree, Math.floor(2400 * TREE_MULT));
+-    scene.add(instOak1);
+-    scene.add(instOak2);
+-    scene.add(instOak3);
+-    
+-    let treeGreenVariations = [
+-        0xffffff, // Normal white
+-        0xddff88, // Warm bright yellow-green
+-        0x88cc99, // Cool minty green
+-        0x778855, // Dark olive pine
+-        0xaaffaa, // Pure bright green
+-        0xbbdd99, // Lush spring green
+-        0x669966  // Deep forest green
++    // Meshes ΓÇö Single 3D GLB Pine tree instanced mesh (Pine_ultra_fast.glb, 800 count)
++    const instTree1 = new THREE.InstancedMesh(geoTree1, matTree, 800);
++    scene.add(instTree1);
++
++    // ==========================================
++    // DISTANT HORIZON BILLBOARD TREES (SINGLE REAL TREE PNG WITH SIZE & COLOR VARIATION)
++    // ==========================================
++    const BILLBOARD_TREE_COUNT = 5000;
++    const texLoader = new THREE.TextureLoader();
++    const billboardTex = texLoader.load('assets/tree_billboard_1.png');
++    billboardTex.colorSpace = THREE.SRGBColorSpace;
++
++    const billboardMat = new THREE.MeshToonMaterial({
++        map: billboardTex,
++        alphaTest: 0.25,
++        transparent: true,
++        side: THREE.DoubleSide,
++        dithering: true,
++        gradientMap: gradientMap
++    });
++
++    billboardMat.onBeforeCompile = (shader) => {
++        shader.vertexShader = shader.vertexShader.replace(
++            '#include <begin_vertex>',
++            `
++            #include <begin_vertex>
++            vec3 instancePos = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
++            vec3 worldInstPos = (modelMatrix * vec4(instancePos, 1.0)).xyz;
++            vec3 dirToCam = cameraPosition - worldInstPos;
++            dirToCam.y = 0.0;
++            float lenDir = length(dirToCam);
++            dirToCam = lenDir > 0.001 ? dirToCam / lenDir : vec3(0.0, 0.0, 1.0);
++            vec3 fwd = dirToCam;
++            vec3 right = vec3(fwd.z, 0.0, -fwd.x);
++            
++            float scaleX = length(vec3(instanceMatrix[0][0], instanceMatrix[0][1], instanceMatrix[0][2]));
++            float scaleY = length(vec3(instanceMatrix[1][0], instanceMatrix[1][1], instanceMatrix[1][2]));
++            float scaleZ = length(vec3(instanceMatrix[2][0], instanceMatrix[2][1], instanceMatrix[2][2]));
++            
++            transformed = right * (position.x * scaleX) + vec3(0.0, position.y * scaleY, 0.0) + fwd * (position.z * scaleZ);
++            `
++        ).replace(
++            '#include <project_vertex>',
++            `
++            vec4 mvPosition = vec4( transformed + instancePos, 1.0 );
++            mvPosition = modelViewMatrix * mvPosition;
++            gl_Position = projectionMatrix * mvPosition;
++            `
++        );
++    };
++
++    const billboardGeo = new THREE.PlaneGeometry(12, 21.6);
++    billboardGeo.translate(0, 10.8, 0);
++
++    const instBillboardTrees = new THREE.InstancedMesh(billboardGeo, billboardMat, BILLBOARD_TREE_COUNT);
++    scene.add(instBillboardTrees);
++
++    // Exact color matching palette derived directly from 3D GLB Pine tree foliage colors
++    const billboardTints = [
++        new THREE.Color(0x52c439), // Vibrant Ghibli Spring Green (exact 3D tree match)
++        new THREE.Color(0x2ea84b), // Lush Emerald Green (exact 3D tree match)
++        new THREE.Color(0x44c838), // Rich Meadow Green (exact 3D tree match)
++        new THREE.Color(0x64d848), // Bright Sunlit Green (exact 3D tree match)
++        new THREE.Color(0x38b000)  // Deep Forest Green
+     ];
+-    const tempTreeColor = new THREE.Color();
+-    const treeMeshes = [instTree1, instTree2, instTree3, instTree4, instOak1, instOak2, instOak3];
++
++    const treeMeshes = [instTree1];
+     treeMeshes.forEach(mesh => {
+         mesh.maxCount = mesh.count;
+-        for (let i = 0; i < mesh.count; i++) {
+-            tempTreeColor.setHex(treeGreenVariations[Math.floor(Math.random() * treeGreenVariations.length)]);
+-            mesh.setColorAt(i, tempTreeColor);
+-        }
+     });
+ 
+ 
+@@ -1624,7 +1838,9 @@ initMapUI();
+         // All 3D models removed
+     }
+ 
+-    const waterGeo = new THREE.PlaneGeometry(5000, 5000);
++    
++
++    const waterGeo = new THREE.PlaneGeometry(50000, 50000);
+     waterGeo.rotateX(-Math.PI / 2);
+     
+     const waterUniforms = {
+@@ -1682,24 +1898,69 @@ initMapUI();
+              float n2 = 1.0 - abs(snoise(uv * 1.5 - vec2(uTime * 0.15, -uTime * 0.05)));
+              float caustics = pow(n1, 6.0) + pow(n2, 6.0) * 0.5;
+              
+-             // Fade out ripples on inland rivers and small lakes perfectly
+-             float simpleTerrainH = snoise(vWorldPos.xz * 0.003) * 15.0;
+-             float deepWater = smoothstep(-0.5, -4.0, simpleTerrainH); 
+-             
+-             caustics = clamp(caustics, 0.0, 1.0) * deepWater;
++             caustics = clamp(caustics, 0.0, 1.0);
+              diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.9, 0.95, 1.0), caustics * 0.5);
+              
+              float dist = length(vWorldPos.xz - cameraPosition.xz);
+-             float depthFade = smoothstep(50.0, 350.0, dist);
+-             diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.2, depthFade);
++             float depthFade = smoothstep(2000.0, 20000.0, dist);
++             diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.6, depthFade);
+             `
+         );
+     };
+ 
++    const originalWaterMat = waterMat;
+     waterMesh = new THREE.Mesh(waterGeo, waterMat);
+     waterMesh.position.y = 2.4; // Lowered slightly so the terrain shader can paint a smooth shoreline above it
+     waterMesh.receiveShadow = true;
+     scene.add(waterMesh);
++    
++    // Initialize advanced anime water system
++    animeWaterSystem = new WaterSystem(scene, renderer);
++    animeWaterSystem.setVisible(false);
++    animeWaterGUI = new WaterEditorGUI(animeWaterSystem, editorFolder);
++
++    function setWaterMaterialMode(mode) {
++        if (!params.showWater) {
++            if (waterMesh) waterMesh.visible = false;
++            if (animeWaterSystem) animeWaterSystem.setVisible(false);
++            if (animeWaterGUI) animeWaterGUI.hide();
++            return;
++        }
++
++        if (mode === 'anime') {
++            if (waterMesh) waterMesh.visible = false;
++            if (animeWaterSystem) animeWaterSystem.setVisible(true);
++            if (animeWaterGUI) animeWaterGUI.show();
++            return;
++        }
++
++        if (waterMesh) waterMesh.visible = true;
++        if (animeWaterSystem) animeWaterSystem.setVisible(false);
++        if (animeWaterGUI) animeWaterGUI.hide();
++
++        if (mode === 'realistic') {
++            waterMesh.material = originalWaterMat;
++            waterMesh.material.needsUpdate = true;
++            return;
++        }
++
++        const shaderObj = waterShaderRegistry[mode];
++        if (shaderObj && shaderObj.onCompile) {
++            const mat = new THREE.MeshStandardMaterial({
++                color: 0x4da9e8,
++                transparent: false,
++                opacity: 1.0,
++                roughness: 0.1,
++                metalness: 0.2
++            });
++            mat.customProgramCacheKey = () => mode;
++            mat.onBeforeCompile = (shader) => {
++                shaderObj.onCompile(shader, waterUniforms);
++            };
++            waterMesh.material = mat;
++            waterMesh.material.needsUpdate = true;
++        }
++    }
+ 
+     // ==========================================
+     // VOLUMETRIC GROUND FOG (GOD RAYS)
+@@ -1780,12 +2041,13 @@ initMapUI();
+     treeMeshes.forEach(mesh => {
+         mesh.castShadow = false; // MASSIVE FPS GAIN: Stop rendering 9,000+ complex trees into the shadow depth map
+         mesh.receiveShadow = true;
+-        mesh.frustumCulled = false; 
+-        scene.add(mesh);
+-    });
+-    [instRocks, instBushes, instFlowers].forEach(mesh => {
++    instRocks.visible = false;
++    [instBushes, instFlowers].forEach(mesh => {
+         mesh.castShadow = false;
+         mesh.receiveShadow = true;
++        mesh.frustumCulled = false;
++        scene.add(mesh);
++    });
+         mesh.frustumCulled = false; 
+         scene.add(mesh);
+     });
+@@ -1819,7 +2081,7 @@ initMapUI();
+ 
+     const highCloudGeo = BufferGeometryUtils.mergeGeometries(baseCloudSpheres);
+     highCloudGeo.computeVertexNormals();
+-    const highCloudMat = new THREE.MeshToonMaterial({ color: 0xffffff, transparent: true, opacity: 0.7 });
++    const highCloudMat = new THREE.MeshToonMaterial({ color: 0xffffff, transparent: true, opacity: 1.0 });
+     const instHighClouds = new THREE.InstancedMesh(highCloudGeo, highCloudMat, HIGH_CLOUD_COUNT);
+     instHighClouds.frustumCulled = false;
+     scene.add(instHighClouds);
+@@ -1831,7 +2093,7 @@ initMapUI();
+ 
+     // Far-Distance Mega Painted Clouds (Visible when Kiki climbs high)
+     const MEGA_CLOUD_COUNT = LOW_GFX ? 0 : 24;
+-    const megaCloudMat = new THREE.MeshToonMaterial({ color: 0xfff6e3, transparent: true, opacity: 0.88 });
++    const megaCloudMat = new THREE.MeshToonMaterial({ color: 0xfff6e3, transparent: true, opacity: 1.0 });
+     const instMegaClouds = new THREE.InstancedMesh(highCloudGeo, megaCloudMat, MEGA_CLOUD_COUNT);
+     instMegaClouds.frustumCulled = false;
+     scene.add(instMegaClouds);
+@@ -1870,7 +2132,104 @@ initMapUI();
+     instFlowers.castShadow = false;
+     scene.add(instFlowers);
+     
+-    // High-Altitude Distant Clouds (Removed to fix glitchy sky blobs)
++    // ==========================================
++    // VOLUMETRIC TOON SKY CLOUDS (SpiralNoiseC Raymarched Sky)
++    // ==========================================
++    const toonCloudGeo = new THREE.SphereGeometry(14000, 32, 16);
++    const toonCloudMat = new THREE.ShaderMaterial({
++        side: THREE.BackSide,
++        transparent: true,
++        depthWrite: false,
++        uniforms: {
++            uTime: { value: 0 },
++            uSunDir: { value: new THREE.Vector3(-0.077, 0.5, 0.577).normalize() },
++            uCloudDensity: { value: 1.0 },
++            uCloudHeight: { value: 800.0 },
++            uSkyColor: { value: new THREE.Color(0x8cbce6) },
++            uCloudColor: { value: new THREE.Color(0xfffaec) },
++            uEnableClouds: { value: 1.0 }
++        },
++        vertexShader: `
++            varying vec3 vWorldPos;
++            varying vec3 vViewDir;
++            void main() {
++                vec4 worldPos = modelMatrix * vec4(position, 1.0);
++                vWorldPos = worldPos.xyz;
++                vViewDir = normalize(worldPos.xyz - cameraPosition);
++                gl_Position = projectionMatrix * viewMatrix * worldPos;
++            }
++        `,
++        fragmentShader: `
++            uniform float uTime;
++            uniform vec3 uSunDir;
++            uniform float uCloudDensity;
++            uniform float uCloudHeight;
++            uniform vec3 uSkyColor;
++            uniform vec3 uCloudColor;
++            uniform float uEnableClouds;
++
++            varying vec3 vWorldPos;
++            varying vec3 vViewDir;
++
++            const float nudge = 0.739513;
++            float normalizer = 1.0 / sqrt(1.0 + nudge*nudge);
++
++            float SpiralNoiseC(vec3 p) {
++                float n = 0.0;
++                float iter = 1.0;
++                for (int i = 0; i < 5; i++) {
++                    vec3 spin = sin(p * iter);
++                    n += -abs(spin.x + spin.y + spin.z) / iter;
++                    p.xy += vec2(p.y, -p.x) * nudge;
++                    p.xy *= normalizer;
++                    p.xz += vec2(p.z, -p.x) * nudge;
++                    p.xz *= normalizer;
++                    iter *= 1.733733;
++                }
++                return n;
++            }
++
++            float getCloud(vec3 pos) {
++                vec3 p = pos * 0.0012 + vec3(uTime * 0.015, 0.0, uTime * 0.008);
++                float noise = SpiralNoiseC(p);
++                float heightFalloff = smoothstep(100.0, 1200.0, pos.y) * smoothstep(5000.0, 2000.0, pos.y);
++                float coverage = (uCloudDensity * 0.5 - 0.2);
++                float cloudVal = noise * 0.35 + coverage + heightFalloff * 0.4;
++                return clamp(cloudVal, 0.0, 1.0);
++            }
++
++            void main() {
++                if (uEnableClouds < 0.5 || vViewDir.y < -0.05) {
++                    discard;
++                }
++
++                vec3 dir = normalize(vViewDir);
++                float rayT = (uCloudHeight - cameraPosition.y) / max(dir.y, 0.01);
++                
++                if (rayT <= 0.0 || rayT > 16000.0) {
++                    discard;
++                }
++
++                vec3 pos = cameraPosition + dir * rayT;
++                float cloudDensity = getCloud(pos);
++
++                if (cloudDensity < 0.05) {
++                    discard;
++                }
++
++                float alpha = smoothstep(0.05, 0.45, cloudDensity);
++                float diff = clamp(dot(vec3(0.0, 1.0, 0.0), uSunDir), 0.5, 1.0);
++                
++                vec3 col = mix(uSkyColor, uCloudColor, alpha);
++                col = mix(col, uCloudColor * 1.15, diff * 0.3);
++
++                gl_FragColor = vec4(col, alpha * 0.95);
++            }
++        `
++    });
++
++    const toonCloudDome = new THREE.Mesh(toonCloudGeo, toonCloudMat);
++    scene.add(toonCloudDome);
+     
+ 
+ 
+@@ -2064,15 +2423,16 @@ initMapUI();
+     const treeGrid = new Map();
+     const TREE_CELL_SIZE = 15;
+     function getTreeCell(x, z) {
+-        return Math.floor(x / TREE_CELL_SIZE) + '_' + Math.floor(z / TREE_CELL_SIZE);
++        const cx = (Math.floor(x / TREE_CELL_SIZE) + 32768) & 0xFFFF;
++        const cz = (Math.floor(z / TREE_CELL_SIZE) + 32768) & 0xFFFF;
++        return (cx << 16) | cz;
+     }
+ 
+     const treeDist = 520; // Focused tree spawn radius so trees are dense around the player!
+     let isPrewarming = false;
+ 
+-    function isTreeZone(worldZ) {
+-        const wz = _wrapZ(worldZ);
+-        return ZONES[_zoneIdxAt(wz)].treesOk;
++    function isTreeZone(worldX, worldZ) {
++        return getBiomeAt(worldX, worldZ).treesOk;
+     }
+ 
+     function updateInstances(playerX, playerZ, time, dt, playerYaw) {
+@@ -2187,201 +2547,173 @@ initMapUI();
+             const focusX = (window.editorState && window.editorState.isEditorMode) ? camera.position.x : playerX;
+             const focusZ = (window.editorState && window.editorState.isEditorMode) ? camera.position.z : playerZ;
+             
+-            // Dynamic tree spawn distance: expands when camera is high up to cover the whole visible horizon
+-            const activeTreeDist = Math.min(1300, 750 + Math.max(0, camera.position.y - 40) * 1.8);
+-
+-            // Trees
++            // STRICT 800-METER TREE RADIUS WITH SEAMLESS PROGRESSIVE LOD HANDOFF
++            const activeTreeDist = 800;
++            const dense3dRadius = 420; // 3D GLB trees spawn from 0m to 420m
++            const billboardMinDist = 380; // Billboards spawn from 380m out to 800m (40m overlap ring)
++            const billboardMaxDist = 800;
++
++            // Trees (GLB Pines ONLY ΓÇö 800 max capacity)
++            if (params.showTrees) {
+             treeMeshes.forEach((instMesh, meshIdx) => {
+-            const count = instMesh.maxCount || instMesh.count;
+-            let treeUpdated = false;
+-            // Update 1/30th of trees per frame instead of 1/10th to save massive CPU overhead
+-            for (let i = currentFrame % 30; i < count; i += 30) {
+-                instMesh.getMatrixAt(i, dummy.matrix);
+-                dummy.position.setFromMatrixPosition(dummy.matrix);
+-                
+-                if (Math.abs(dummy.position.x - focusX) > activeTreeDist || Math.abs(dummy.position.z - focusZ) > activeTreeDist || dummy.position.y < -500) {
+-                    
+-                    if (dummy.position.y > 0) {
+-                        treeGrid.delete(getTreeCell(dummy.position.x, dummy.position.z));
+-                    }
++                const count = instMesh.maxCount || instMesh.count;
++                let treeUpdated = false;
++                // Update 1/15th of instances per frame (phase offset +0)
++                for (let i = (currentFrame + 0) % 15; i < count; i += 15) {
++                    instMesh.getMatrixAt(i, dummy.matrix);
++                    dummy.position.setFromMatrixPosition(dummy.matrix);
+                     
+-                    let valid = false;
+-                    let nx, nz, h, pathVal, cellKey;
+-                    let attempts = 0;
+-
+-                    while(!valid && attempts < 15) {
+-                        nx = focusX + (Math.random() - 0.5) * activeTreeDist * 2.0;
+-                        nz = focusZ + (Math.random() - 0.5) * activeTreeDist * 2.0;
+-                        h = getWorldHeight(nx, nz);
+-                        pathVal = getPathStrength(nx, nz);
+-                        cellKey = getTreeCell(nx, nz);
++                    if (Math.abs(dummy.position.x - focusX) > dense3dRadius || Math.abs(dummy.position.z - focusZ) > dense3dRadius || dummy.position.y < -500) {
+                         
+-                        // 1. Domain Warping: Distort spatial coordinates using noise
+-                        let wx = nx + snoise(nx * 0.005 + 123.4, nz * 0.005 + 567.8) * 160.0;
+-                        let wz = nz + snoise(nx * 0.005 + 890.1, nz * 0.005 + 234.5) * 160.0;
+-
+-                        // 2. Multi-octave Fractal Noise for organic forest patches
+-                        let f1 = snoise(wx * 0.001, wz * 0.001);
+-                        let f2 = snoise(wx * 0.003, wz * 0.003) * 0.4;
+-                        let f3 = snoise(wx * 0.008, wz * 0.008) * 0.2;
+-                        let forestDensity = f1 + f2 + f3;
++                        if (dummy.position.y > 0) {
++                            treeGrid.delete(getTreeCell(dummy.position.x, dummy.position.z));
++                        }
++                        
++                        let valid = false;
++                        let nx, nz, h, pathVal, cellKey, bName = '';
++                        let attempts = 0;
+ 
+-                        // Boost forest density on brown hills (h > 15) so hills & mountain slopes get dense tree coverage
+-                        if (h > 15.0) forestDensity += 0.30;
++                        while(!valid && attempts < 12) {
++                            nx = focusX + (Math.random() - 0.5) * dense3dRadius * 2.0;
++                            nz = focusZ + (Math.random() - 0.5) * dense3dRadius * 2.0;
++                            h = getWorldHeight(nx, nz);
++                            pathVal = getPathStrength(nx, nz);
+ 
+-                        let isForest = forestDensity > -0.30; // Generous forest patch coverage
++                            bName = getBiomeAt(nx, nz).name;
+ 
+-                        const bName = ZONES[_zoneIdxAt(_wrapZ(nz))].name;
+-                        let biomeMatch = true;
+-                        if (bName.includes('Golden Plains')) {
+-                            if (meshIdx < 4) biomeMatch = false; // Golden Plains gets Oak trees
+-                        } else {
+-                            if (meshIdx >= 4) biomeMatch = false; // Ghibli Land & Jungle get Pine trees
+-                        }
++                            let isForest = true;
+ 
+-                        // 3. Allow trees anywhere above water (h > 4.0), including all brown hills and mountain peaks
+-                        let elevationValid = h > 4.0;
++                            let biomeMatch = true;
++                            if (bName.includes('Crystal Land') || bName.includes('Desert') || bName.includes('Canyon') || bName.includes('North Pole') || bName.includes('Misty')) {
++                                biomeMatch = false; // NO trees in non-vegetation biomes!
++                            }
+ 
+-                        if (isForest && elevationValid && pathVal < 0.15 && isTreeZone(nz) && biomeMatch) { 
+-                            // 4. Poisson-disk distance check using 3x3 grid neighborhood (~9.5m spacing for thick forests)
+-                            let cx = Math.floor(nx / TREE_CELL_SIZE);
+-                            let cz = Math.floor(nz / TREE_CELL_SIZE);
+-                            let tooClose = false;
+-                            let minDistSq = 85; 
+-                            
+-                            for (let dx = -1; dx <= 1 && !tooClose; dx++) {
+-                                for (let dz = -1; dz <= 1 && !tooClose; dz++) {
+-                                    let neighbor = treeGrid.get((cx + dx) + '_' + (cz + dz));
+-                                    if (neighbor) {
+-                                        let distSq = (neighbor.x - nx)**2 + (neighbor.z - nz)**2;
+-                                        if (distSq < minDistSq) {
+-                                            tooClose = true;
++                            // Tree elevation & coastline limits:
++                            const iData = getIslandData(nx, nz);
++                            let islandMaskOk = (iData.mask >= 0.35);
++                            let elevationValid = (h >= 6.8 && h <= 55.0) && islandMaskOk;
++
++                            if (isForest && elevationValid && pathVal < 0.20 && isTreeZone(nx, nz) && biomeMatch) { 
++                                let cx = Math.floor(nx / TREE_CELL_SIZE);
++                                let cz = Math.floor(nz / TREE_CELL_SIZE);
++                                let tooClose = false;
++                                let minDistSq = 20;
++                                
++                                for (let dx = -1; dx <= 1 && !tooClose; dx++) {
++                                    for (let dz = -1; dz <= 1 && !tooClose; dz++) {
++                                        const ncx = (cx + dx + 32768) & 0xFFFF;
++                                        const ncz = (cz + dz + 32768) & 0xFFFF;
++                                        let neighbor = treeGrid.get((ncx << 16) | ncz);
++                                        if (neighbor) {
++                                            let distSq = (neighbor.x - nx)**2 + (neighbor.z - nz)**2;
++                                            if (distSq < minDistSq) {
++                                                tooClose = true;
++                                            }
+                                         }
+                                     }
+                                 }
++                                if (!tooClose) {
++                                    valid = true;
++                                }
+                             }
+-                            if (!tooClose) {
+-                                valid = true;
+-                            }
++                            attempts++;
+                         }
+-                        attempts++;
+-                    }
+ 
+-                    if (valid) {
+-                        treeGrid.set(cellKey, {x: nx, z: nz});
+-                        dummy.position.set(nx, h, nz);
+-                        dummy.rotation.set(0, Math.random() * Math.PI * 2.0, 0); // 360 degree rotation variation
+-                        
+-                        let baseS = 0.75 + Math.random() * 1.1;
+-                        dummy.scale.set(baseS * (0.85 + Math.random() * 0.3), baseS * (0.9 + Math.random() * 0.25), baseS * (0.85 + Math.random() * 0.3));
+-                        tempTreeColor.setHex(treeGreenVariations[Math.floor(Math.random() * treeGreenVariations.length)]);
+-                        instMesh.setColorAt(i, tempTreeColor);
+-                    } else {
+-                        dummy.position.set(0, -1000, 0); 
++                        if (valid) {
++                            treeGrid.set(getTreeCell(nx, nz), {x: nx, z: nz});
++                            dummy.position.set(nx, h, nz);
++                            dummy.rotation.set(0, Math.random() * Math.PI * 2.0, 0);
++                            
++                            let baseS = 0.92 + Math.random() * 0.45;
++                            dummy.scale.set(baseS * (0.92 + Math.random() * 0.16), baseS * (0.94 + Math.random() * 0.12), baseS * (0.92 + Math.random() * 0.16));
++
++                            if (window.treeBillboardEditor) {
++                                const activeVars = window.treeBillboardEditor.getActiveVariants();
++                                if (activeVars.length > 0) {
++                                    const v = activeVars[Math.floor(Math.random() * activeVars.length)];
++                                    instMesh.setColorAt(i, v.colorObj);
++                                }
++                            }
++                        } else {
++                            dummy.position.set(0, -1000, 0); 
++                        }
++                        dummy.updateMatrix();
++                        instMesh.setMatrixAt(i, dummy.matrix);
++                        treeUpdated = true;
+                     }
+-                    dummy.updateMatrix();
+-                    instMesh.setMatrixAt(i, dummy.matrix);
+-                    treeUpdated = true;
+                 }
+-            }
+-            if (treeUpdated) {
+-                instMesh.instanceMatrix.needsUpdate = true;
+-                if (instMesh.instanceColor) instMesh.instanceColor.needsUpdate = true;
+-            }
+-        });
+-
+-        // Rocks
+-        let rocksUpdated = false;
+-        for (let i = currentFrame % 5; i < ROCK_COUNT; i += 5) {
+-            instRocks.getMatrixAt(i, dummy.matrix);
+-            dummy.position.setFromMatrixPosition(dummy.matrix);
+-            
+-            if (Math.abs(dummy.position.x - playerX) > dist || Math.abs(dummy.position.z - playerZ) > dist || dummy.position.y < -500) {
+-                const nx = playerX + (Math.random() - 0.5) * dist * 2.0;
+-                const nz = playerZ + (Math.random() - 0.5) * dist * 2.0;
+-                const h = getWorldHeight(nx, nz);
+-
+-                if (h > 0.0 && getPathStrength(nx, nz) < 0.1) { 
+-                    dummy.position.set(nx, h, nz);
+-                    dummy.rotation.set(Math.random(), Math.random(), Math.random());
+-                    // Uneven scaling creates distinct natural boulders
+-                    dummy.scale.set(0.7 + Math.random() * 2.0, 0.5 + Math.random() * 1.5, 0.7 + Math.random() * 2.0); 
+-                } else {
+-                    dummy.position.set(0, -1000, 0);
++                if (treeUpdated) {
++                    instMesh.instanceMatrix.needsUpdate = true;
+                 }
+-                dummy.updateMatrix();
+-                instRocks.setMatrixAt(i, dummy.matrix);
+-                rocksUpdated = true;
+-            }
+-        }
++            });
+ 
+-        // Houses
++            // Single Billboard Tree (380m to 800m with Hysteresis overlap for zero popping)
++            const camX = camera.position.x;
++            const camZ = camera.position.z;
++            let billboardUpdated = false;
++            let billboardColorUpdated = false;
+ 
+-        // Boats
++            const bbCount = instBillboardTrees.count;
++            // Batch update 1/30th of billboards per frame (phase offset +7)
++            for (let i = (currentFrame + 7) % 30; i < bbCount; i += 30) {
++                instBillboardTrees.getMatrixAt(i, dummy.matrix);
++                dummy.position.setFromMatrixPosition(dummy.matrix);
+ 
+-        // Floating Castles
++                const dX = dummy.position.x - focusX;
++                const dZ = dummy.position.z - focusZ;
++                const dSq = dX * dX + dZ * dZ;
+ 
+-        // Bushes
+-        let bushesUpdated = false;
+-        for (let i = currentFrame % 10; i < BUSH_COUNT; i += 10) {
+-            instBushes.getMatrixAt(i, dummy.matrix);
+-            dummy.position.setFromMatrixPosition(dummy.matrix);
+-            
+-            if (Math.abs(dummy.position.x - playerX) > dist || Math.abs(dummy.position.z - playerZ) > dist || dummy.position.y < -500) {
+-                const nx = playerX + (Math.random() - 0.5) * dist * 2.0;
+-                const nz = playerZ + (Math.random() - 0.5) * dist * 2.0;
+-                const h = getWorldHeight(nx, nz);
+-                
+-                let isClearing = snoise(nx * 0.003, nz * 0.003 + 50) > 0.2;
+-                let validBush = isClearing ? (Math.random() < 0.2) : (Math.random() < 0.05);
++                // Despawn only if inside 360m (after 3D tree is already spawned) or beyond 830m
++                if (dSq < 360 * 360 || dSq > 830 * 830 || dummy.position.y < -500) {
++                    const ang = Math.random() * Math.PI * 2.0;
++                    const r = billboardMinDist + Math.random() * (billboardMaxDist - billboardMinDist);
++                    const nx = focusX + Math.cos(ang) * r;
++                    const nz = focusZ + Math.sin(ang) * r;
++                    const h = getWorldHeight(nx, nz);
+ 
+-                if (validBush && h > 3.0 && getPathStrength(nx, nz) < 0.1) {
+-                    dummy.position.set(nx, h, nz);
+-                    dummy.rotation.set(0, Math.random() * Math.PI, 0);
+-                    dummy.scale.setScalar(0.7 + Math.random() * 1.6); // +30-40% scale
+-                } else {
+-                    dummy.position.set(0, -1000, 0);
++                    let bName = getBiomeAt(nx, nz).name;
++                    let islandMaskOk = (getIslandData(nx, nz).mask >= 0.35);
++
++                    if (h >= 6.5 && h <= 55.0 && islandMaskOk && getPathStrength(nx, nz) < 0.20 && isTreeZone(nx, nz) && !bName.includes('Crystal Land') && !bName.includes('Desert') && !bName.includes('Canyon') && !bName.includes('North Pole') && !bName.includes('Misty')) {
++                        dummy.position.set(nx, h, nz);
++                        dummy.rotation.set(0, 0, 0);
++                        
++                        // Dynamic scale & aspect ratio variation for natural forest canopy height
++                        let s = 0.88 + Math.random() * 0.65;
++                        let aspect = 0.88 + Math.random() * 0.24;
++                        dummy.scale.set(s * aspect, s * (0.94 + Math.random() * 0.18), s * aspect);
++                        dummy.updateMatrix();
++                        instBillboardTrees.setMatrixAt(i, dummy.matrix);
++
++                        // Color variation from active variants (or default billboardTints)
++                        let tint;
++                        if (window.treeBillboardEditor) {
++                            const activeVars = window.treeBillboardEditor.getActiveVariants();
++                            tint = activeVars.length > 0 ? activeVars[Math.floor(Math.random() * activeVars.length)].colorObj : billboardTints[Math.floor(Math.random() * billboardTints.length)];
++                        } else {
++                            tint = billboardTints[Math.floor(Math.random() * billboardTints.length)];
++                        }
++                        instBillboardTrees.setColorAt(i, tint);
++
++                        billboardUpdated = true;
++                        billboardColorUpdated = true;
++                    } else {
++                        dummy.position.set(0, -1000, 0);
++                        dummy.updateMatrix();
++                        instBillboardTrees.setMatrixAt(i, dummy.matrix);
++                        billboardUpdated = true;
++                    }
+                 }
+-                dummy.updateMatrix();
+-                instBushes.setMatrixAt(i, dummy.matrix);
+-                bushesUpdated = true;
+             }
+-        }
+ 
+-        // Flowers
+-        let flowersUpdated = false;
+-        for (let i = currentFrame % 10; i < FLOWER_COUNT; i += 10) {
+-            instFlowers.getMatrixAt(i, dummy.matrix);
+-            dummy.position.setFromMatrixPosition(dummy.matrix);
+-            
+-            if (Math.abs(dummy.position.x - playerX) > dist || Math.abs(dummy.position.z - playerZ) > dist || dummy.position.y < -500) {
+-                const nx = playerX + (Math.random() - 0.5) * dist * 2.0;
+-                const nz = playerZ + (Math.random() - 0.5) * dist * 2.0;
+-                const h = getWorldHeight(nx, nz);
+-                
+-                let isClearing = snoise(nx * 0.003, nz * 0.003 + 50) > 0.2;
+-                let validFlower = isClearing ? (Math.random() < 0.8) : (Math.random() < 0.05);
+-
+-                if (validFlower && h > 2.0 && getPathStrength(nx, nz) < 0.1) {
+-                    dummy.position.set(nx, h, nz);
+-                    dummy.rotation.set(0, Math.random() * Math.PI, 0);
+-                    dummy.scale.set(1, 1, 1);
+-                    let cNoise = snoise(nx * 0.005, nz * 0.005);
+-                    let cIdx = Math.floor(((cNoise + 1.0) / 2.0) * flowerColors.length);
+-                    tempFlowerColor.setHex(flowerColors[Math.min(flowerColors.length - 1, Math.max(0, cIdx))]);
+-                    instFlowers.setColorAt(i, tempFlowerColor);
+-                } else {
+-                    dummy.position.set(0, -1000, 0);
+-                }
+-                dummy.updateMatrix();
+-                instFlowers.setMatrixAt(i, dummy.matrix);
+-                flowersUpdated = true;
++            if (billboardUpdated) {
++                instBillboardTrees.instanceMatrix.needsUpdate = true;
+             }
+-        }
+-            
+-            if (rocksUpdated) instRocks.instanceMatrix.needsUpdate = true;
+-            if (bushesUpdated) instBushes.instanceMatrix.needsUpdate = true;
+-            if (flowersUpdated) { instFlowers.instanceMatrix.needsUpdate = true; instFlowers.instanceColor.needsUpdate = true; }
++            if (billboardColorUpdated && instBillboardTrees.instanceColor) {
++                instBillboardTrees.instanceColor.needsUpdate = true;
++            }
++            }
++
+         } // End of shouldUpdateTerrain block
+ 
+         // Animals
+@@ -2472,101 +2804,126 @@ initMapUI();
+     // Merges Bark + Leaves primitives into ONE geometry with vertex colors.
+     // 1 InstancedMesh = 1 draw call per tree slot (not 2).
+ 
+-    function applyGLBPineTree(gltf, targetInstancedMeshes, targetHeight) {
+-        // GLTFLoader creates separate THREE.Mesh per primitive
++    function applyGLBPineTree(gltf, targetInstancedMeshes, targetHeight, leafColorVariants) {
++        gltf.scene.updateMatrixWorld(true);
+         const childMeshes = [];
+         gltf.scene.traverse((child) => {
+             if (child.isMesh) childMeshes.push(child);
+         });
+         if (childMeshes.length === 0) return;
+ 
+-        // Compute overall bounding box for uniform scaling
+-        const bbox = new THREE.Box3();
+-        childMeshes.forEach(m => {
+-            m.geometry.computeBoundingBox();
+-            bbox.expandByObject(m);
+-        });
++        const bbox = new THREE.Box3().setFromObject(gltf.scene);
+         const modelHeight = bbox.max.y - bbox.min.y;
+         const sc = modelHeight > 0 ? (targetHeight / modelHeight) : 1.0;
+         const offsetY = -bbox.min.y;
+ 
+-        // Colors for each primitive
+-        const partColors = [
+-            new THREE.Color(0x8B6B4A),  // [0] Bark ΓÇö warm brown
+-            new THREE.Color(0x4CAF50),  // [1] Leaves ΓÇö bright green
++        const defaultLeafColors = leafColorVariants || [
++            new THREE.Color(0x52c439), // Vibrant Spring Green
++            new THREE.Color(0x2ea84b), // Lush Emerald Green
++            new THREE.Color(0x44c838), // Sunlit Highland Green
++            new THREE.Color(0x64d848)  // Bright Alpine Green
+         ];
++        const barkColor = new THREE.Color(0x6e4a32); // Warm rich wood brown
+ 
+-        // Scale each geometry and stamp vertex colors
+-        const coloredGeos = childMeshes.map((m, idx) => {
+-            const g = m.geometry.clone();
+-            g.translate(0, offsetY, 0);
+-            g.scale(sc, sc, sc);
+-
+-            // Remove any existing COLOR_0 attribute from GLB
+-            if (g.attributes.color) g.deleteAttribute('color');
+-
+-            // Stamp solid vertex color for this part
+-            const vertCount = g.attributes.position.count;
+-            const colors = new Float32Array(vertCount * 3);
+-            const c = partColors[Math.min(idx, partColors.length - 1)];
+-            for (let i = 0; i < vertCount; i++) {
+-                colors[i * 3]     = c.r;
+-                colors[i * 3 + 1] = c.g;
+-                colors[i * 3 + 2] = c.b;
+-            }
+-            g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
++        targetInstancedMeshes.forEach((instMesh, meshIdx) => {
++            const leafColor = defaultLeafColors[meshIdx % defaultLeafColors.length];
++            const geos = [];
+ 
+-            // Ensure indexed geometry for merge compatibility
+-            if (!g.index) {
+-                const indices = new Uint32Array(vertCount);
+-                for (let i = 0; i < vertCount; i++) indices[i] = i;
+-                g.setIndex(new THREE.BufferAttribute(indices, 1));
+-            }
++            childMeshes.forEach((m, idx) => {
++                const g = m.geometry.clone();
++                g.applyMatrix4(m.matrixWorld);
++                g.translate(0, offsetY, 0);
++                g.scale(sc, sc, sc);
+ 
+-            g.computeBoundingBox();
+-            g.computeBoundingSphere();
+-            return g;
+-        });
++                // Strip embedded/dark vertex colors from GLB file
++                if (g.attributes.color) g.deleteAttribute('color');
+ 
+-        // Merge all primitives into a single geometry
+-        const mergedGeom = BufferGeometryUtils.mergeGeometries(coloredGeos, false);
+-        if (!mergedGeom) return;
+-        mergedGeom.computeBoundingBox();
+-        mergedGeom.computeBoundingSphere();
+-
+-        // Single toon material with vertex colors ΓÇö 1 draw call
+-        const mergedMat = new THREE.MeshToonMaterial({
+-            vertexColors: true,
+-            gradientMap: gradientMap,
+-            side: THREE.DoubleSide,
+-            dithering: true
+-        });
++                const matName = (m.material && m.material.name) ? m.material.name.toLowerCase() : '';
++                const isBark = matName.includes('bark') || matName.includes('trunk') || matName.includes('wood') || idx === 0;
++
++                const vertCount = g.attributes.position.count;
++                const colors = new Float32Array(vertCount * 3);
++                const c = isBark ? barkColor : leafColor;
++
++                for (let i = 0; i < vertCount; i++) {
++                    colors[i * 3]     = c.r;
++                    colors[i * 3 + 1] = c.g;
++                    colors[i * 3 + 2] = c.b;
++                }
++                g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
++
++                if (!g.index) {
++                    const indices = new Uint32Array(vertCount);
++                    for (let i = 0; i < vertCount; i++) indices[i] = i;
++                    g.setIndex(new THREE.BufferAttribute(indices, 1));
++                }
++
++                g.computeBoundingBox();
++                g.computeBoundingSphere();
++                geos.push(g);
++            });
++
++            const mergedGeom = BufferGeometryUtils.mergeGeometries(geos, false);
++            if (!mergedGeom) return;
++            mergedGeom.computeBoundingBox();
++            mergedGeom.computeBoundingSphere();
++
++            const mergedMat = new THREE.MeshToonMaterial({
++                vertexColors: true,
++                gradientMap: gradientMap,
++                side: THREE.DoubleSide,
++                dithering: true
++            });
+ 
+-        targetInstancedMeshes.forEach(instMesh => {
+             instMesh.geometry = mergedGeom;
+             instMesh.material = mergedMat;
+             instMesh.instanceColor = null;
+         });
+     }
+ 
++    // Only load Pine_ultra_fast.glb for all 800 3D tree instances
+     gltfLoader.load('assets/Pine_ultra_fast.glb', (gltf) => {
+-        applyGLBPineTree(gltf, [instTree1, instTree3], 22.0);
++        applyGLBPineTree(gltf, [instTree1], 22.0);
+     });
+ 
+-    gltfLoader.load('assets/Pine_1_ultra_fast.glb', (gltf) => {
+-        applyGLBPineTree(gltf, [instTree2, instTree4], 20.0);
+-    });
++    // Initialize Tree & Billboard Editor
++    const treeBillboardEditor = new TreeBillboardEditor(scene, camera, gltfLoader);
++    window.treeBillboardEditor = treeBillboardEditor;
+ 
+-    gltfLoader.load('assets/tree_oak1.glb', (gltf) => {
+-        applyGLBPineTree(gltf, [instOak1], 18.0);
+-    });
+-    gltfLoader.load('assets/tree_oak2.glb', (gltf) => {
+-        applyGLBPineTree(gltf, [instOak2], 20.0);
+-    });
+-    gltfLoader.load('assets/tree_oak3.glb', (gltf) => {
+-        applyGLBPineTree(gltf, [instOak3], 22.0);
++    treeBillboardEditor.onApply((preset, variants) => {
++        gltfLoader.load(preset.glbPath, (gltf) => {
++            applyGLBPineTree(gltf, [instTree1], preset.targetHeight);
++            
++            // Randomly assign active variant colors to 3D tree instances
++            if (variants && variants.length > 0) {
++                const count = instTree1.count;
++                for (let i = 0; i < count; i++) {
++                    const v = variants[Math.floor(Math.random() * variants.length)];
++                    instTree1.setColorAt(i, v.colorObj);
++                }
++                if (instTree1.instanceColor) instTree1.instanceColor.needsUpdate = true;
++            }
++        });
++
++        // Update distant billboard texture & variant colors
++        texLoader.load(preset.billboardPath, (tex) => {
++            tex.colorSpace = THREE.SRGBColorSpace;
++            billboardMat.map = tex;
++            billboardMat.needsUpdate = true;
++
++            if (variants && variants.length > 0) {
++                const count = instBillboardTrees.count;
++                for (let i = 0; i < count; i++) {
++                    const v = variants[Math.floor(Math.random() * variants.length)];
++                    instBillboardTrees.setColorAt(i, v.colorObj);
++                }
++                if (instBillboardTrees.instanceColor) instBillboardTrees.instanceColor.needsUpdate = true;
++            }
++        });
+     });
+ 
++
++
+     gltfLoader.load(
+         'kiki-lowpoly.glb',
+         (gltf) => {
+@@ -2799,7 +3156,6 @@ initMapUI();
+     let velocity = 15.0; 
+     let pitch = 0, yaw = 0, roll = 0;
+     const BASE_FOV = 60;
+-    const clock = new THREE.Clock();
+     // --- Low-Poly Particle Starfield ---
+     const starCount = LOW_GFX ? 2000 : 8000;
+     const starGeometry = new THREE.BufferGeometry();
+@@ -2809,7 +3165,8 @@ initMapUI();
+         // Distribute randomly in a sphere well within camera.far (3000)
+         const radius = 2500;
+         const u = Math.random();
+-        const v = Math.random();
++        // Restrict v to [0.5, 1.0] to only generate stars in the upper hemisphere
++        const v = Math.random() * 0.5 + 0.5;
+         const theta = u * 2.0 * Math.PI;
+         const phi = Math.acos(2.0 * v - 1.0);
+         
+@@ -2825,13 +3182,14 @@ initMapUI();
+     starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+     const starMaterial = new THREE.PointsMaterial({
+         color: 0xffffff,
+-        size: 2.5,
++        size: 1.0,
+         sizeAttenuation: false,
+         fog: false, // Prevents scene fog from hiding the stars
+         transparent: true,
+         opacity: 0.0 // Start invisible ΓÇö lerps to target based on time-of-day
+     });
+     const starField = new THREE.Points(starGeometry, starMaterial);
++    starField.visible = false;
+     scene.add(starField);
+ 
+     // --- Camera Rig Hierarchy ---
+@@ -2845,6 +3203,21 @@ initMapUI();
+     camera.position.set(0, 4, 12); 
+     cameraPivot.add(camera);
+ 
++    // Initialize window.editorState and Terrain Editor
++    window.editorState = {
++        isEditorMode: false,
++        isDragging: false,
++        cameraPivot: cameraPivot,
++        playerGrp: playerGrp,
++        pauseFlight: () => { if (typeof isFlightPaused !== 'undefined') isFlightPaused = true; },
++        resumeFlight: () => { if (typeof isFlightPaused !== 'undefined') isFlightPaused = false; },
++        isFlightPaused: () => (typeof isFlightPaused !== 'undefined' ? isFlightPaused : false),
++    };
++
++    if (typeof initTerrainEditor === 'function') {
++        initTerrainEditor(scene, camera, renderer, terrain);
++    }
++
+     // --- Pan Event Listeners (Handles Mouse & Mobile Touch Screen) ---
+     let isDragging = false;
+     let previousPointerPos = { x: 0, y: 0 };
+@@ -2878,84 +3251,14 @@ initMapUI();
+     canvas.addEventListener('pointerup', onPointerUp);
+     canvas.addEventListener('pointerleave', onPointerUp);
+ 
+-    // --- 4. Movement Variables ---
+-    const moveSpeed = 18;
+-    const turnAcceleration = 0.55; 
+-    const maxTurnSpeed = 0.45;     
+-    const maxBankAngle = Math.PI / 7; 
+-    const maxPitchAngle = Math.PI / 4; 
+-
+-    let currentYaw = 0;   
+-    let currentPitch = 0;
+-    let currentRoll = 0;  
+-    let turnVelocity = 0; 
+-
+-    const targetQuaternion = new THREE.Quaternion();
+-    const eulerRotation = new THREE.Euler(0, 0, 0, 'YXZ');
+-    const baseTargetQuat = new THREE.Quaternion();
+-
+-    function tickMovement(delta, inputState, character, globalVelocity) {
+-        // Steering
+-        if (inputState.left) {
+-            turnVelocity += turnAcceleration * delta;
+-        } else if (inputState.right) {
+-            turnVelocity -= turnAcceleration * delta;
+-        } else {
+-            turnVelocity = THREE.MathUtils.lerp(turnVelocity, 0, 3.5 * delta); 
+-        }
+-        
+-        turnVelocity = Math.max(-maxTurnSpeed, Math.min(maxTurnSpeed, turnVelocity));
+-        currentYaw += turnVelocity * delta;
+-
+-        // Banking
+-        let targetRoll = (turnVelocity / maxTurnSpeed) * maxBankAngle;
+-        currentRoll = THREE.MathUtils.lerp(currentRoll, targetRoll, 1.5 * delta); 
+-
+-        // Altitude Control
+-        let targetPitch = -0.18; // Default
+-        if (inputState.up) { 
+-            targetPitch = maxPitchAngle; 
+-        } else if (inputState.down) {
+-            targetPitch = -maxPitchAngle; 
+-        }
+-        currentPitch = THREE.MathUtils.lerp(currentPitch, targetPitch, 1.5 * delta);
+-
+-        // Apply Rotations
+-        eulerRotation.set(currentPitch, currentYaw, currentRoll, 'YXZ');
+-        targetQuaternion.setFromEuler(eulerRotation);
+-        
+-        // Soft camera auto-leveling
+-        if (!inputState.left && !inputState.right && !inputState.up && !inputState.down) {
+-            character.quaternion.slerp(targetQuaternion, 1.2 * delta); 
+-        } else {
+-            character.quaternion.slerp(targetQuaternion, 5.0 * delta); 
+-        }
+-
+-        // Forward Flight & Speed Boost
+-        const movementDirection = new THREE.Vector3(0, 0, -1); 
+-        movementDirection.applyQuaternion(character.quaternion);
+-        
+-        let activeSpeed = globalVelocity; 
+-        character.position.add(movementDirection.multiplyScalar(activeSpeed * delta));
+-
+-        // Anti-Clipping Floor Constraint (Metric calculation)
+-        const minimumFlightHeight = 18; 
+-        if (character.position.y < minimumFlightHeight) {
+-            character.position.y = minimumFlightHeight;
+-        }
+-
+-        // Camera Base Tracking
+-        cameraBase.position.copy(character.position);
+-        
+-        eulerRotation.set(0, currentYaw, 0, 'YXZ'); 
+-        baseTargetQuat.setFromEuler(eulerRotation);
+-        
+-        cameraBase.quaternion.slerp(baseTargetQuat, 2.8 * delta); 
+-        
+-        // Auto-leveling for camera tilt
+-        camera.quaternion.slerp(new THREE.Quaternion(), 2.0 * delta);
+-    }
+-
++    const tempVec1 = new THREE.Vector3();
++    const tempVec2 = new THREE.Vector3();
++    const tempVec3 = new THREE.Vector3();
++    const tempVecSunFwd = new THREE.Vector3();
++    const tempVecMoonOff = new THREE.Vector3();
++    const tempVecToLight = new THREE.Vector3();
++    const tempColorTarget = new THREE.Color();
++    const quatIdentity = new THREE.Quaternion();
+ 
+     let envConfigs = [
+         {bg: 0x8cbce6, fog: 0x8cbce6, amb: 0xdcf2ff, dir: 0xfffaeb, ambI: 0.9, dirI: 2.5, starOp: 0, sunY: 1500, moonY: -1500, glintCol: 0xfff0d0, cloudCol: 0xfffaec}, // Day
+@@ -2968,16 +3271,41 @@ initMapUI();
+ 
+     let lastFpsTime = performance.now();
+     let framesThisSecond = 0;
++    let lastAnimTime = performance.now();
++    let smoothedDt = 0.0166;
+ 
++
++    let playerPhysics;
++    let cameraManager;
++    
+     function animate() {
+         requestAnimationFrame(animate);
+         if (params.showMap) _drawWorldMap();
+-        let dt = Math.min(clock.getDelta(), 0.1);
++        
++        const nowAnimTime = performance.now();
++        let rawDt = (nowAnimTime - lastAnimTime) / 1000.0;
++
++        if (!playerPhysics && typeof playerGrp !== 'undefined') {
++            playerPhysics = new PlayerPhysics(playerGrp);
++            cameraManager = new CameraManager(camera, cameraBase, cameraZoomDist);
++        }
++    
++        lastAnimTime = nowAnimTime;
++        if (rawDt > 0.1 || rawDt <= 0) rawDt = 0.0166;
++        smoothedDt = smoothedDt * 0.7 + rawDt * 0.3;
++        let dt = smoothedDt;
++
+         const time = clock.getElapsedTime();
+         
+ 
+         
+         waterUniforms.uTime.value = time;
++        if (typeof terrainUniforms !== 'undefined') {
++            terrainUniforms.uTime.value = time;
++            if (typeof dirLight !== 'undefined') {
++                terrainUniforms.uSunDir.value.copy(dirLight.position).normalize();
++            }
++        }
+         if (typeof treeUniforms !== 'undefined') {
+             treeUniforms.uPlayerPos.value.copy(playerGrp.position);
+         }
+@@ -2995,96 +3323,88 @@ initMapUI();
+             lastFpsTime = now;
+             // Only update DOM text once per second to prevent browser layout thrashing!
+             document.getElementById('fps-counter').innerText = currentFps + ' FPS | ALT: ' + currentAlt + 'm';
++            const currZn = getBiomeAt(playerGrp.position.x, playerGrp.position.z);
++            document.getElementById('biome-label').innerText = '| BIOME: ' + currZn.name;
+         }
+ 
+         
+         // 3-Stage Lighting Engine Lerp
+         const target = envConfigs[timePhase];
+-        scene.background.lerp(new THREE.Color(target.bg), dt * 2);
+-        scene.fog.color.lerp(new THREE.Color(target.fog), dt * 2);
+-        
+-        // Distance fog ΓÇö must hide terrain edges at ┬▒2000 units from center
+-        const fogAltitude = Math.max(0, playerGrp.position.y);
++        const decayEnv = 1.0 - Math.exp(-2.0 * dt);
++        scene.background.lerp(tempColorTarget.setHex(target.bg), decayEnv);
++        scene.fog.color.lerp(tempColorTarget.setHex(target.fog), decayEnv);
+         
+-        // Pin background elements to player (Removed super clouds)
+-        
+-        ambientLight.color.lerp(new THREE.Color(target.amb), dt * 2);
+-        ambientLight.intensity += (target.ambI - ambientLight.intensity) * dt * 2;
+-        dirLight.color.lerp(new THREE.Color(target.dir), dt * 2);
+-        dirLight.intensity += (target.dirI - dirLight.intensity) * dt * 2;
+-        starMaterial.opacity += (target.starOp - starMaterial.opacity) * dt * 2;
++        ambientLight.color.lerp(tempColorTarget.setHex(target.amb), decayEnv);
++        ambientLight.intensity += (target.ambI - ambientLight.intensity) * decayEnv;
++        dirLight.color.lerp(tempColorTarget.setHex(target.dir), decayEnv);
++        starMaterial.opacity += (target.starOp - starMaterial.opacity) * decayEnv;
++        starField.visible = starMaterial.opacity > 0.02;
++        if (typeof playerGrp !== 'undefined') {
++            starField.position.copy(playerGrp.position);
++        }
+ 
+ 
+ 
+-        if (isPhotoMode) {
+-            dt = 0;
+-            if (photoControls) {
+-                photoControls.update();
+-            }
+-        }
+ 
+-        // Floating Crystals ΓÇö respawn in Crystal Land (Z: 70,000 to 104,000)
+-        const crystalDist = 2400;
+-        const inCrystalLand = typeof playerGrp !== 'undefined' && (function(){ const wz = _wrapZ(playerGrp.position.z); return wz >= 68000 && wz <= 106000; })();
++
++        // Floating Crystals ΓÇö respawn in Crystal Land
++        const crystalDist = 1200;
++        let inCrystalLand = false;
++        if (typeof playerGrp !== 'undefined') {
++            inCrystalLand = getBiomeAt(playerGrp.position.x, playerGrp.position.z).name.includes('Crystal');
++        }
+         
+-        if (typeof matCrystal !== 'undefined' && matCrystal.userData.shader) {
+-            matCrystal.userData.shader.uniforms.uTime.value = time;
++        if (typeof instCrystals !== 'undefined') {
++            instCrystals.visible = inCrystalLand;
+         }
+ 
+-        for (let i = 0; i < CRYSTAL_COUNT; i++) {
+-            if (!inCrystalLand) {
+-                dummy.position.set(0, -9999, 0);
+-                dummy.scale.set(1, 1, 1);
+-                dummy.updateMatrix();
+-                instCrystals.setMatrixAt(i, dummy.matrix);
+-                continue;
++        if (inCrystalLand) {
++            if (typeof matCrystal !== 'undefined' && matCrystal.userData.shader) {
++                matCrystal.userData.shader.uniforms.uTime.value = time;
+             }
+ 
+-            instCrystals.getMatrixAt(i, dummy.matrix);
+-            dummy.matrix.decompose(dummy.position, dummy.quaternion, dummy.scale);
+-            
+-            if (dummy.position.y < -500 || Math.abs(dummy.position.x - playerGrp.position.x) > crystalDist || Math.abs(dummy.position.z - playerGrp.position.z) > crystalDist) {
+-                const s = (30 + Math.random() * 60) * 3;
+-                let dx = (Math.random() - 0.5) * crystalDist * 2.0;
+-                let dz = (Math.random() - 0.5) * crystalDist * 2.0;
+-                const cX = playerGrp.position.x + dx;
+-                const cZ = Math.max(70500, Math.min(103500, playerGrp.position.z + dz));
+-                const cGroundY = getWorldHeight(cX, cZ);
++            for (let i = 0; i < CRYSTAL_COUNT; i++) {
++                instCrystals.getMatrixAt(i, dummy.matrix);
++                dummy.matrix.decompose(dummy.position, dummy.quaternion, dummy.scale);
+                 
+-                let spawnY = cGroundY + 100 + Math.random() * 150;
+-                if (i % 5 === 0) {
+-                    spawnY = cGroundY + 15 + (s * 3.0); 
++                if (dummy.position.y < -500 || Math.abs(dummy.position.x - playerGrp.position.x) > crystalDist || Math.abs(dummy.position.z - playerGrp.position.z) > crystalDist) {
++                    const s = (30 + Math.random() * 60) * 3;
++                    let dx = (Math.random() - 0.5) * crystalDist * 2.0;
++                    let dz = (Math.random() - 0.5) * crystalDist * 2.0;
++                    const cX = playerGrp.position.x + dx;
++                    let cZ = playerGrp.position.z + dz;
++                    const cGroundY = getWorldHeight(cX, cZ);
++                    
++                    let spawnY = cGroundY + 100 + Math.random() * 150;
++                    if (i % 5 === 0) {
++                        spawnY = cGroundY + 15 + (s * 3.0); 
++                    }
++                    
++                    dummy.position.set(cX, spawnY, cZ);
++                    dummy.scale.set(s * 0.6, s, s * 0.6);
+                 }
+                 
+-                dummy.position.set(cX, spawnY, cZ);
+-                dummy.scale.set(s * 0.6, s, s * 0.6);
+-            }
+-            
+-            // Constantly ensure they NEVER clip the ground wherever they drift
+-            const localGroundY = getWorldHeight(dummy.position.x, dummy.position.z);
+-            const minHeight = localGroundY + 15 + (dummy.scale.y * 3.0); 
+-            if (dummy.position.y < minHeight) {
+-                dummy.position.y = minHeight;
+-            }
++                // Constantly ensure they NEVER clip the ground wherever they drift
++                const localGroundY = getWorldHeight(dummy.position.x, dummy.position.z);
++                const minHeight = localGroundY + 15 + (dummy.scale.y * 3.0); 
++                if (dummy.position.y < minHeight) {
++                    dummy.position.y = minHeight;
++                }
+ 
+-            dummy.position.y += Math.sin(time * 0.3 + i * 2.0) * 0.15;
+-            dummy.rotateY(0.002);
+-            dummy.updateMatrix();
+-            instCrystals.setMatrixAt(i, dummy.matrix);
++                dummy.position.y += Math.sin(time * 0.3 + i * 2.0) * 0.15;
++                dummy.rotateY(0.002);
++                dummy.updateMatrix();
++                instCrystals.setMatrixAt(i, dummy.matrix);
++            }
++            instCrystals.instanceMatrix.needsUpdate = true;
+         }
+-        instCrystals.instanceMatrix.needsUpdate = true;
+ 
+-        if (isPhotoMode) {
+-            composer.render();
+-            return;
+-        }
++
+ 
+         let oldY = playerGrp.position.y;
++
+         const isBraking = keys.space || touchState.brake;
+         const isBoosting = keys.shift || touchState.boost;
+-
+-        const targetSpeed = isBraking ? 0.0 : (isBoosting ? 250.0 : 18.0); // Extreme super speed
+-        velocity += (targetSpeed - velocity) * dt * (isBraking ? 3.0 : (isBoosting ? 1.5 : 1.0));
+         
+         const inputState = {
+             forward: true,
+@@ -3093,112 +3413,48 @@ initMapUI();
+             left: keys.a || touchState.x < -0.1,
+             right: keys.d || touchState.x > 0.1
+         };
+-        if (!isFlightPaused) {
+-            tickMovement(dt, inputState, playerGrp, velocity);
+-        }
+ 
+-        const groundY = getWorldHeight(playerGrp.position.x, playerGrp.position.z);
+-        playerGrp.position.y = Math.min(Math.max(playerGrp.position.y, 18), 3500);
+-        cameraBase.position.lerp(playerGrp.position, dt * 7.0); // Re-sync camera position
+-        
+-        // --- Camera Collision Prevention ---
+-        // --- Camera Collision Prevention & Zoom ---
+-        const idealCamPos = new THREE.Vector3();
+-        camera.getWorldPosition(idealCamPos);
+-        const playerPos = playerGrp.position.clone();
+-        const dirToCam = new THREE.Vector3().subVectors(idealCamPos, playerPos);
+-        const distToCam = dirToCam.length();
+-        dirToCam.normalize();
+-        
+-        const defaultCamDist = cameraZoomDist;
+-        const defaultCamHeight = cameraZoomDist * 0.33;
+-        
+-        // Smoothly lerp camera to default distance
+-        camera.position.z = THREE.MathUtils.lerp(camera.position.z, defaultCamDist, dt * 5.0);
+-        camera.position.y = THREE.MathUtils.lerp(camera.position.y, defaultCamHeight, dt * 5.0);
+-        // -----------------------------------
+-        
+-        starField.position.copy(playerGrp.position); // Track player to create infinite distance illusion
+-        const targetMinY = groundY + 55; // Keep above trees and terrain
+-        if (playerGrp.position.y < targetMinY) {
+-            const depth = targetMinY - playerGrp.position.y;
+-            const swoopPitch = Math.min(Math.PI / 4, depth / 40.0);
+-            currentPitch = THREE.MathUtils.lerp(currentPitch, swoopPitch, dt * 3.0);
+-            playerGrp.rotation.set(currentPitch, currentYaw, 0, 'YXZ');
++        if (playerPhysics) {
++            playerPhysics.update(dt, inputState, isBraking, isBoosting, isFlightPaused);
+             
+-            if (playerGrp.position.y < groundY + 15) {
+-                playerGrp.position.y += (groundY + 15 - playerGrp.position.y) * dt * 5.0;
++            if (cameraManager) {
++                cameraManager.update(dt, playerGrp, playerPhysics.currentYaw, isBoosting);
++                if (isGodMode && godControls) godControls.update();
+             }
+         }
+-        
+-        playerGrp.position.y = Math.min(Math.max(playerGrp.position.y, 18), 3500);
+-        cameraBase.position.lerp(playerGrp.position, dt * 7.0); // Re-sync camera position
+-        starField.position.copy(playerGrp.position); // Track player to create infinite distance illusion
+-
+-        // Visual bank and yaw when turning to see her side
+-        // const extraBank = (turnVelocity / maxTurnSpeed) * (Math.PI / 3); 
+-        // playerVisuals.rotation.z = THREE.MathUtils.lerp(playerVisuals.rotation.z, extraBank, dt * 5.0);
+-        
+-        // const extraYaw = (turnVelocity / maxTurnSpeed) * (Math.PI / 6);
+-        // playerVisuals.rotation.y = THREE.MathUtils.lerp(playerVisuals.rotation.y, extraYaw, dt * 5.0);
+-        
+-        // Remove extra pitch to prevent double-rotation
+-        playerVisuals.rotation.x = THREE.MathUtils.lerp(playerVisuals.rotation.x, 0, dt * 5.0);
+-
+-        if (params.showTerrain) updateTerrainGeometry(playerGrp.position.x, playerGrp.position.z);
+-        waterMesh.position.x = playerGrp.position.x;
+-        waterMesh.position.z = playerGrp.position.z;
+-        
+-        if(typeof window.fogGroup !== 'undefined' && window.fogGroup.visible) {
+-            window.fogUniforms.uTime.value = time;
+-            // The planes follow the player, but the noise shader uses world coordinates, 
+-            // so the noise texture slides perfectly across the planes, anchored to the world!
+-            window.fogGroup.position.x = playerGrp.position.x;
+-            window.fogGroup.position.z = playerGrp.position.z;
+-            // Tint fog slightly towards sun color during sunrise/sunset
+-            const currentFogMat = window.fogGroup.children[0].material;
+-            currentFogMat.color.lerp(scene.fog.color, 0.01); 
+-        }
+-        
+-
+-
+-        camera.fov = THREE.MathUtils.lerp(camera.fov, isBoosting ? BASE_FOV + 12 : BASE_FOV, dt * 5.0);
+-        if (!isPhotoMode) {
+-            camera.up.set(0, 1, 0);
+-            camera.rotation.z = 0;
+-        }
+-        camera.updateProjectionMatrix();
++    
+ 
+         // Keep the physical sun and flare exactly 20,000 units away directly in front of the player's flight path
+-        currentSunY += (target.sunY - currentSunY) * dt * 2.0;
+-        currentMoonY += (target.moonY - currentMoonY) * dt * 2.0;
++        const decaySunY = 1.0 - Math.exp(-2.0 * dt);
++        currentSunY += (target.sunY - currentSunY) * decaySunY;
++        currentMoonY += (target.moonY - currentMoonY) * decaySunY;
+ 
+-        const sunForward = new THREE.Vector3(0, 0, -20000);
+-        sunForward.applyQuaternion(playerGrp.quaternion);
++        tempVecSunFwd.set(0, 0, -20000);
++        if (params.lockSunToPlayer) { tempVecSunFwd.applyQuaternion(playerGrp.quaternion); }
+ 
+-        // Sun positioning & visibility (hidden at Night to prevent 2nd sun artifact)
+-        staticSun.position.copy(playerGrp.position).add(sunForward);
++        // Sun positioning & visibility
++        staticSun.position.copy(playerGrp.position).add(tempVecSunFwd);
+         staticSun.position.y = playerGrp.position.y * 0.45 + currentSunY;
+         staticSun.visible = (timePhase !== 2);
+ 
+-        // Moon positioning (rises high into the sky in Night/Twilight phase)
+-        const moonOffset = sunForward.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI * 0.35);
+-        staticMoon.position.copy(playerGrp.position).add(moonOffset);
++        // Moon positioning
++        tempVecMoonOff.copy(tempVecSunFwd).applyAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI * 0.35);
++        staticMoon.position.copy(playerGrp.position).add(tempVecMoonOff);
+         staticMoon.position.y = playerGrp.position.y * 0.45 + currentMoonY;
+         staticMoon.visible = (timePhase === 2);
+ 
+-        // Active celestial light source (Sun during Day/Dusk, Moon during Twilight)
++        // Active celestial light source
+         const activeLightTarget = (timePhase === 2) ? staticMoon : staticSun;
+-        const toLight = activeLightTarget.position.clone().sub(playerGrp.position).normalize();
+-        dirLight.position.copy(playerGrp.position).add(toLight.multiplyScalar(2000));
++        tempVecToLight.copy(activeLightTarget.position).sub(playerGrp.position).normalize();
++        dirLight.position.copy(playerGrp.position).add(tempVecToLight.multiplyScalar(2000));
+         dirLight.target.position.copy(playerGrp.position);
+         dirLight.target.updateMatrixWorld();
+ 
+-        // Cloud colors lerping (tints clouds to match day / dusk / night dark blue sky)
+-        if (typeof matCloud !== 'undefined') matCloud.color.lerp(new THREE.Color(target.cloudCol), dt * 2);
+-        if (typeof highCloudMat !== 'undefined') highCloudMat.color.lerp(new THREE.Color(target.cloudCol), dt * 2);
+-        if (typeof megaCloudMat !== 'undefined') megaCloudMat.color.lerp(new THREE.Color(target.cloudCol), dt * 2);
+-        if (typeof matWispyCloud !== 'undefined') matWispyCloud.color.lerp(new THREE.Color(target.cloudCol), dt * 2);
++        // Cloud colors lerping
++        if (typeof matCloud !== 'undefined') matCloud.color.lerp(tempColorTarget.setHex(target.cloudCol), decayEnv);
++        if (typeof highCloudMat !== 'undefined') highCloudMat.color.lerp(tempColorTarget.setHex(target.cloudCol), decayEnv);
++        if (typeof megaCloudMat !== 'undefined') megaCloudMat.color.lerp(tempColorTarget.setHex(target.cloudCol), decayEnv);
++        if (typeof matWispyCloud !== 'undefined') matWispyCloud.color.lerp(tempColorTarget.setHex(target.cloudCol), decayEnv);
+         
+         // Dynamically scale up the terrain and water as Kiki flies high
+         terrainScale = 1.0 + Math.min(1.0, Math.max(0.0, (playerGrp.position.y - 300.0) / 11700.0)) * 9.0;
+@@ -3209,10 +3465,12 @@ initMapUI();
+         const dynamicFar = 800 + Math.max(0, playerGrp.position.y - 300.0) * 2.2;
+         const dynamicNear = 10 + Math.max(0, playerGrp.position.y - 300.0) * 0.4;
+         
+-        scene.fog.far += (dynamicFar - scene.fog.far) * dt * 2.0;
+-        scene.fog.near += (dynamicNear - scene.fog.near) * dt * 2.0;
++        if (params.sceneFog) {
++            scene.fog.far += (dynamicFar - scene.fog.far) * dt * 2.0;
++            scene.fog.near += (dynamicNear - scene.fog.near) * dt * 2.0;
++        }
+ 
+-        const altitude = Math.max(0, playerGrp.position.y - groundY);
++        const altitude = Math.max(0, playerGrp.position.y - currentGroundY);
+ 
+         // Dynamically adjust shadow map resolution based on altitude (quantized to prevent constant shadow re-renders)
+         let baseS = 120, maxS = 250;
+@@ -3229,7 +3487,7 @@ initMapUI();
+             dirLight.shadow.camera.updateProjectionMatrix();
+         }
+ 
+-        updateInstances(playerGrp.position.x, playerGrp.position.z, time, dt, currentYaw);
++        updateInstances(playerGrp.position.x, playerGrp.position.z, time, dt, playerPhysics ? playerPhysics.currentYaw : 0);
+         updateBirds(playerGrp.position.x, playerGrp.position.y, playerGrp.position.z, time, dt);
+         
+         if (isWindTrailsOn && isWindOn) {
+@@ -3238,7 +3496,7 @@ initMapUI();
+             trailMat.opacity = trailOpacity;
+             for (let i = 0; i < 100; i++) {
+                 let z = trailsData[i*4+2];
+-                z += velocity * 3.0 * dt; 
++                z += playerPhysics ? playerPhysics.velocity : 18.0 * 3.0 * dt; 
+                 if (z > 50) {
+                      z -= 100;
+                      trailsData[i*4] = (Math.random() - 0.5) * 80;
+@@ -3265,7 +3523,7 @@ initMapUI();
+             if (!isWindOn || !isBoosting) {
+                 windGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.15);
+             } else {
+-                const speedFactor = Math.max(0, Math.min(1, (velocity - 15) / 30)); 
++                const speedFactor = Math.max(0, Math.min(1, (playerPhysics ? playerPhysics.velocity : 18.0 - 15) / 30)); 
+                 const targetVolume = 0.25 + speedFactor * 0.35;
+                 windGain.gain.setTargetAtTime(targetVolume, audioCtx.currentTime, 0.1);
+                 
+@@ -3282,21 +3540,24 @@ initMapUI();
+ 
+         // Update God Rays sun screen position
+         if (godRaysPass.enabled && typeof staticSun !== 'undefined') {
+-            const sunWorldPos = staticSun.position.clone();
+-            sunWorldPos.project(camera);
+-            // Convert from NDC (-1 to 1) to UV (0 to 1)
+-            const sunScreenX = (sunWorldPos.x + 1.0) * 0.5;
+-            const sunScreenY = (sunWorldPos.y + 1.0) * 0.5;
+-            godRaysPass.uniforms.uSunScreenPos.value.set(sunScreenX, sunScreenY);
+-            // Fade rays when sun is behind camera (z > 1 means behind)
+-            const behindCamera = sunWorldPos.z > 1.0 ? 0.0 : 1.0;
+-            // Also fade based on how far off-screen the sun is
+-            const offScreen = Math.max(Math.abs(sunScreenX - 0.5), Math.abs(sunScreenY - 0.5));
+-            const screenFade = 1.0 - Math.min(1.0, Math.max(0.0, (offScreen - 0.5) * 1.5));
+-            godRaysPass.uniforms.uSunVisible.value = behindCamera * screenFade;
+-            // Auto-fade god rays at twilight (timePhase 2 = sun below horizon)
+-            const twilightFade = timePhase === 2 ? 0.0 : 1.0;
+-            godRaysPass.uniforms.uSunVisible.value *= twilightFade;
++            tempVecSunFwd.copy(staticSun.position).sub(camera.position).normalize();
++            camera.getWorldDirection(tempVec1);
++            const dotFwd = tempVec1.dot(tempVecSunFwd);
++
++            if (dotFwd > -0.2) {
++                tempVec2.copy(staticSun.position).project(camera);
++                const sunScreenX = (tempVec2.x + 1.0) * 0.5;
++                const sunScreenY = (tempVec2.y + 1.0) * 0.5;
++                godRaysPass.uniforms.uSunScreenPos.value.set(sunScreenX, sunScreenY);
++                
++                const offScreen = Math.max(Math.abs(sunScreenX - 0.5), Math.abs(sunScreenY - 0.5));
++                const screenFade = 1.0 - Math.min(1.0, Math.max(0.0, (offScreen - 0.5) * 1.5));
++                const twilightFade = timePhase === 2 ? 0.0 : 1.0;
++                const fwdFade = Math.max(0.0, Math.min(1.0, (dotFwd + 0.2) * 2.5));
++                godRaysPass.uniforms.uSunVisible.value = fwdFade * screenFade * twilightFade;
++            } else {
++                godRaysPass.uniforms.uSunVisible.value = 0.0;
++            }
+         }
+ 
+         composer.render();
+@@ -3701,7 +3962,7 @@ initMapUI();
+             moonAltitude: envConfigs[2].moonY
+         };
+ 
+-        const moonFolder = gui.addFolder('≡ƒîÖ Moonlight & Night');
++        const moonFolder = atmoFolder.addFolder('≡ƒîÖ Moonlight & Night');
+         moonFolder.add(params, 'exposure', 0.5, 4.0, 0.1).name('ΓÿÇ∩╕Å Global Brightness').onChange(v => { renderer.toneMappingExposure = v; });
+         moonFolder.addColor(moonParams, 'moonlightColor').name('Moonlight Color').onChange(v => envConfigs[2].dir = parseInt(v.replace('#',''), 16));
+         moonFolder.add(moonParams, 'moonlightIntensity', 0, 10, 0.1).name('Moonlight Power').onChange(v => envConfigs[2].dirI = v);
+@@ -3718,7 +3979,7 @@ initMapUI();
+             spread: 35,
+             color: '#ffaa44'
+         };
+-        const glowFolder = gui.addFolder('Γ£¿ Kiki Warm Side Glow');
++        const glowFolder = envFolder.addFolder('≡ƒÆí Kiki Warm Side Glow');
+         glowFolder.add(kikiGlowParams, 'intensity', 0, 8, 0.1).name('Glow Power').onChange(v => {
+             kikiLeftLight.intensity = v;
+             kikiRightLight.intensity = v;
+@@ -3744,10 +4005,13 @@ initMapUI();
+             c2: '#' + pastelColors[2].toString(16).padStart(6, '0'),
+             c3: '#' + pastelColors[3].toString(16).padStart(6, '0'),
+             c4: '#' + pastelColors[4].toString(16).padStart(6, '0'),
+-            opBase: matCloud.opacity,
+-            opHigh: highCloudMat.opacity,
+-            opWispy: matWispyCloud.opacity,
+-            opMega: megaCloudMat.opacity
++            opBase: 1.0,
++            opHigh: 1.0,
++            opWispy: 1.0,
++            opMega: 1.0,
++            enableClouds: true,
++            density: 1.0,
++            cloudScale: 1.0
+         };
+         
+         let oldCloudColors = [...pastelColors];
+@@ -3772,7 +4036,32 @@ initMapUI();
+             oldCloudColors[idx] = newHexVal;
+         }
+ 
+-        const cloudFolder = gui.addFolder('Cloud Editor');
++        const cloudFolder = envFolder.addFolder('Cloud Editor');
++        cloudFolder.add(cloudParams, 'enableClouds').name('Γÿü∩╕Å Show Clouds').onChange(v => {
++            if (typeof instClouds !== 'undefined') instClouds.visible = v;
++            if (typeof instHighClouds !== 'undefined') instHighClouds.visible = v;
++            if (typeof instMegaClouds !== 'undefined') instMegaClouds.visible = v;
++            if (typeof instWispyClouds !== 'undefined') instWispyClouds.visible = v;
++        });
++        cloudFolder.add(cloudParams, 'density', 0.1, 2.5, 0.05).name('Γÿü∩╕Å Cloud Density').onChange(v => {
++            if (typeof instClouds !== 'undefined' && typeof CLOUD_COUNT !== 'undefined') {
++                instClouds.count = Math.max(1, Math.min(CLOUD_COUNT, Math.floor(CLOUD_COUNT * v)));
++                if (instClouds.instanceMatrix) instClouds.instanceMatrix.needsUpdate = true;
++            }
++            if (typeof instHighClouds !== 'undefined' && typeof HIGH_CLOUD_COUNT !== 'undefined') {
++                instHighClouds.count = Math.max(1, Math.min(HIGH_CLOUD_COUNT, Math.floor(HIGH_CLOUD_COUNT * v)));
++                if (instHighClouds.instanceMatrix) instHighClouds.instanceMatrix.needsUpdate = true;
++            }
++            if (typeof instMegaClouds !== 'undefined' && typeof MEGA_CLOUD_COUNT !== 'undefined') {
++                instMegaClouds.count = Math.max(1, Math.min(MEGA_CLOUD_COUNT, Math.floor(MEGA_CLOUD_COUNT * v)));
++                if (instMegaClouds.instanceMatrix) instMegaClouds.instanceMatrix.needsUpdate = true;
++            }
++        });
++        cloudFolder.add(cloudParams, 'cloudScale', 0.5, 3.0, 0.1).name('Γÿü∩╕Å Cloud Size').onChange(v => {
++            [instClouds, instHighClouds, instMegaClouds].forEach(mesh => {
++                if (mesh) mesh.scale.set(v, v, v);
++            });
++        });
+         cloudFolder.addColor(cloudParams, 'c0').name('Color 1').onChange(v => updateCloudColorForIndex(0, v));
+         cloudFolder.addColor(cloudParams, 'c1').name('Color 2').onChange(v => updateCloudColorForIndex(1, v));
+         cloudFolder.addColor(cloudParams, 'c2').name('Color 3').onChange(v => updateCloudColorForIndex(2, v));
+@@ -3784,6 +4073,7 @@ initMapUI();
+         cloudFolder.add(cloudParams, 'opMega', 0, 1).name('Mega Opacity').onChange(v => megaCloudMat.opacity = v);
+ 
+         // Tree Editor
++        const treeGreenVariations = [0x52c439, 0x38b000, 0x2d8028, 0x76e054, 0x6e4a32];
+         let oldTreeColors = [...treeGreenVariations];
+         function updateTreeColorForIndex(idx, newHex) {
+             const oldHex = oldTreeColors[idx];
+@@ -3807,7 +4097,7 @@ initMapUI();
+             oldTreeColors[idx] = newHexVal;
+         }
+ 
+-        const treeFolder = gui.addFolder('Tree Editor');
++        const treeFolder = envFolder.addFolder('Tree Editor');
+         treeFolder.add(params, 'treeScale', 0.5, 4.0).name('Tree Scale').onChange(v => treeUniforms.uTreeScale.value = v);
+         treeFolder.addColor(params, 'treeColor0').name('Color 1').onChange(v => updateTreeColorForIndex(0, v));
+         treeFolder.addColor(params, 'treeColor1').name('Color 2').onChange(v => updateTreeColorForIndex(1, v));
+@@ -3846,7 +4136,32 @@ initMapUI();
+         } catch(e) {
+             console.error('Failed to load settings', e);
+         }
+-        
++
++        // --- Dock GUI Panel Flush to Top-Right Edge ---
++        const guiEl = document.querySelector('.lil-gui.root');
++        if (guiEl) {
++            guiEl.style.position = 'fixed';
++            guiEl.style.right = '0px';
++            guiEl.style.top = '0px';
++            guiEl.style.left = 'auto';
++            guiEl.style.margin = '0';
++            guiEl.style.zIndex = '1000';
++            guiEl.style.maxHeight = '95vh';
++            guiEl.style.overflowY = 'auto';
++        }
++            
++            // Close all folders by default
++            if (gui.folders) {
++                gui.folders.forEach(f => {
++                    f.close();
++                });
++            } else {
++                for (let i in gui.__folders) {
++                    gui.__folders[i].close();
++                }
++            }
++        // ---------------------------
++
+         isInitializingGui = false;
+     }
+ 

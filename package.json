@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --port=3000 ",
+    "dev": "vite --port=8000 ",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
@@ -24,9 +24,13 @@
     "vite": "^6.2.3"
   },
   "devDependencies": {
+    "@gltf-transform/core": "^4.4.2",
+    "@gltf-transform/extensions": "^4.4.2",
+    "@gltf-transform/functions": "^4.4.2",
     "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
+    "draco3d": "^1.5.7",
     "esbuild": "^0.25.0",
     "puppeteer": "^25.5.0",
     "tailwindcss": "^4.1.14",

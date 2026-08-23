@@ -1,31 +1,28 @@
-// Biome Manager & Adjacency Matrix
+﻿// Biome Manager & Adjacency Matrix (100% Icon-Free, Zero-GC Optimized)
 
 import terrainArch from './biomes/terrain-archipelago.js';
 import terrainGhibli from './biomes/terrain-ghibli.js';
-import terrainPlains from './biomes/terrain-plains.js';
 import terrainMtn from './biomes/terrain-mountains.js';
-import terrainCrystal from './biomes/terrain-crystal.js';
 import terrainJungle from './biomes/terrain-jungle.js';
+import terrainCrystal from './biomes/terrain-crystal.js';
+import terrainMagical from './biomes/terrain-magical.js';
 import terrainDesert from './biomes/terrain-desert.js';
-import terrainCanyon from './biomes/terrain-canyon.js';
 import terrainNorthPole from './biomes/terrain-northpole.js';
-import { snoise } from './Noise.js';
 
 export const ZONES = [
-    { start:      0, end:   8000, module: terrainArch,     treesOk: true,  name: '🏝️ Archipelago',        archT: (t) => t * 2.0 },
-    { start:   8000, end:  16000, module: terrainGhibli,   treesOk: true,  name: '🌲 Ghibli Land'         },
-    { start:  16000, end:  24000, module: terrainPlains,   treesOk: true,  name: '🌾 Vast Plains'          },
-    { start:  24000, end:  40000, module: terrainMtn,      treesOk: false, name: '🏔️ Misty Mountains'     },
-    { start:  40000, end:  70000, module: terrainJungle,   treesOk: true,  name: '🌴 Lush Jungle'          },
-    { start:  70000, end: 104000, module: terrainCrystal,  treesOk: false, name: '💎 Crystal Land'         },
-    { start: 104000, end: 120000, module: terrainArch,     treesOk: false, name: '🌊 Open Ocean'           },
-    { start: 120000, end: 150000, module: terrainDesert,   treesOk: false, name: '🏜️ Desert Dunes'        },
-    { start: 150000, end: 180000, module: terrainCanyon,   treesOk: false, name: '⛰️ Badlands Canyon'      },
-    { start: 180000, end: 210000, module: terrainNorthPole,treesOk: false, name: '❄️ North Pole'          },
+    { start:      0, end:  16000, module: terrainArch,     treesOk: true,  name: 'Archipelago',        archT: (t) => t * 2.0 },
+    { start:  16000, end:  40000, module: terrainGhibli,   treesOk: true,  name: 'Ghibli Land'         },
+    { start:  40000, end:  70000, module: terrainMtn,      treesOk: false, name: 'Misty Mountains'     },
+    { start:  70000, end: 100000, module: terrainJungle,   treesOk: true,  name: 'Lush Jungle'          },
+    { start: 100000, end: 130000, module: terrainCrystal,  treesOk: false, name: 'Crystal Land'         },
+    { start: 130000, end: 155000, module: terrainMagical,  treesOk: true,  name: 'Magical Sanctuary'    },
+    { start: 155000, end: 180000, module: terrainDesert,   treesOk: false, name: 'Desert Dunes'        },
+    { start: 180000, end: 205000, module: terrainNorthPole,treesOk: false, name: 'North Pole'          },
+    { start: 205000, end: 215000, module: terrainArch,     treesOk: false, name: 'Open Ocean'           },
 ];
 
-export const WORLD_LENGTH = 210000;
-export const BLEND_WIDTH  = 3500;
+export const WORLD_LENGTH = 215000;
+export const BLEND_WIDTH  = 2500;
 
 export function wrapZ(worldZ) {
     return ((worldZ % WORLD_LENGTH) + WORLD_LENGTH) % WORLD_LENGTH;
@@ -51,6 +48,13 @@ function smoothstep(min, max, value) {
     return x * x * (3 - 2 * x);
 }
 
+// Pre-allocated static buffers to avoid GC allocations in hot vertex loop
+const _resultOne = [{ idx: 0, w: 1.0, t: 0.0 }];
+const _resultTwo = [
+    { idx: 0, w: 1.0, t: 0.0 },
+    { idx: 0, w: 0.0, t: 0.0 }
+];
+
 export function zoneWeights(worldZ) {
     const wz = wrapZ(worldZ);
     const currIdx = zoneIdxAt(wz);
@@ -62,25 +66,17 @@ export function zoneWeights(worldZ) {
         const blendFactor = distToBoundary / BLEND_WIDTH;
         const w1 = smoothstep(0, 1, blendFactor);
         const w2 = 1.0 - w1;
-        return [
-            { idx: currIdx, w: w1, t: zoneT(wz, currIdx) },
-            { idx: nextIdx, w: w2, t: zoneT(wz, nextIdx) }
-        ];
+        _resultTwo[0].idx = currIdx;
+        _resultTwo[0].w = w1;
+        _resultTwo[0].t = zoneT(wz, currIdx);
+        _resultTwo[1].idx = nextIdx;
+        _resultTwo[1].w = w2;
+        _resultTwo[1].t = zoneT(wz, nextIdx);
+        return _resultTwo;
     } else {
-        return [{ idx: currIdx, w: 1.0, t: zoneT(wz, currIdx) }];
+        _resultOne[0].idx = currIdx;
+        _resultOne[0].w = 1.0;
+        _resultOne[0].t = zoneT(wz, currIdx);
+        return _resultOne;
     }
 }
-
-export const BIOME_ADJACENCY = {
-    '❄️ North Pole':       { temp: 'Cold',      neighbors: ['🏔️ Misty Mountains', '🌊 Open Ocean'] },
-    '🏔️ Misty Mountains': { temp: 'Cold',      neighbors: ['❄️ North Pole', '🌲 Ghibli Land', '💎 Crystal Land'] },
-    '🌲 Ghibli Land':     { temp: 'Temperate', neighbors: ['🏔️ Misty Mountains', '🌾 Vast Plains', '🌴 Lush Jungle'] },
-    '🌾 Vast Plains':     { temp: 'Temperate', neighbors: ['🌲 Ghibli Land', '⛰️ Badlands Canyon', '🏜️ Desert Dunes'] },
-    '🌴 Lush Jungle':      { temp: 'Hot',       neighbors: ['🌲 Ghibli Land', '🏝️ Archipelago', '💎 Crystal Land'] },
-    '⛰️ Badlands Canyon': { temp: 'Hot',       neighbors: ['🌾 Vast Plains', '🏜️ Desert Dunes'] },
-    '🏜️ Desert Dunes':    { temp: 'Hot',       neighbors: ['🌾 Vast Plains', '⛰️ Badlands Canyon', '💎 Crystal Land'] },
-    '🏝️ Archipelago':    { temp: 'Warm',      neighbors: ['🌴 Lush Jungle', '🌲 Ghibli Land', '🌾 Vast Plains'] },
-    '💎 Crystal Land':    { temp: 'Magical',   neighbors: ['🏔️ Misty Mountains', '🌴 Lush Jungle', '🏜️ Desert Dunes'] }
-};
-
-export const BARRIER_BIOMES = ['🏔️ Misty Mountains', '🌴 Lush Jungle', '🏜️ Desert Dunes'];

@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stylized Tree Viewer - Spring & Autumn Sandbox</title>
+  <style>
+    body { margin: 0; padding: 0; overflow: hidden; background: #78c0e0; font-family: sans-serif; }
+    #canvas-container { width: 100vw; height: 100vh; }
+    #ui-overlay {
+      position: absolute; top: 20px; left: 20px; background: rgba(15, 20, 25, 0.85);
+      backdrop-filter: blur(8px); padding: 16px 20px; border-radius: 8px; color: #f0f0f0;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3); max-width: 320px;
+    }
+    h1 { margin: 0 0 6px 0; font-size: 16px; letter-spacing: 0.05em; text-transform: uppercase; }
+    p { margin: 0 0 14px 0; font-size: 12px; color: #aaa; line-height: 1.4; }
+    .btn-group { display: flex; gap: 8px; margin-bottom: 12px; }
+    button {
+      flex: 1; padding: 8px 12px; border: 1px solid #444; background: #252830; color: #fff;
+      border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;
+    }
+    button:hover { background: #3a3f4d; }
+    button.active { background: #4f7c13; border-color: #79a01c; }
+    button.active.autumn { background: #c7611a; border-color: #ff1910; }
+    select {
+      width: 100%; padding: 8px 10px; border: 1px solid #444; background: #252830; color: #fff;
+      border-radius: 4px; font-size: 12px; margin-bottom: 10px; outline: none;
+    }
+    #loading {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #fff;
+      font-size: 16px; font-weight: 600; letter-spacing: 0.1em; background: rgba(0,0,0,0.7);
+      padding: 12px 24px; border-radius: 6px; pointer-events: none; display: none;
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="canvas-container"></div>
+  
+  <div id="ui-overlay">
+    <h1>Stylized Tree Sandbox</h1>
+    <p>Standalone extracted tree models, wind sway vertex shaders, bark shaders, and isolated Spring/Autumn presets.</p>
+    
+    <div style="font-size: 11px; text-transform: uppercase; color: #888; margin-bottom: 6px;">Season Preset</div>
+    <div class="btn-group">
+      <button id="btn-spring" class="active" onclick="setPreset('spring')">Spring</button>
+      <button id="btn-autumn" onclick="setPreset('autumn')">Autumn</button>
+    </div>
+
+    <div style="font-size: 11px; text-transform: uppercase; color: #888; margin-bottom: 6px;">Tree Model</div>
+    <select id="model-select" onchange="loadSelectedTree()">
+      <option value="pine_tree_01.glb" selected>Pine Tree 01 (Medium 6.0m)</option>
+      <option value="pine_tree_02.glb">Pine Tree 02 (Full Foliage 6.0m)</option>
+      <option value="pine_tree_03.glb">Pine Tree 03 (Dense Needles 6.0m)</option>
+      <option value="pine_tree_04.glb">Pine Tree 04 (Stylized 6.0m)</option>
+      <option value="pine_tree_05.glb">Pine Tree 05 (Tall Forest Pine 9.0m)</option>
+      <option value="pine_tree_06.glb">Pine Tree 06 (Giant Ancient Pine 11.0m)</option>
+      <option value="pine_tree_07.glb">Pine Tree 07 (Small Pine 3.0m)</option>
+      <option value="pine_tree_08.glb">Pine Tree 08 (Mini Sapling 2.0m)</option>
+      <option value="pine_forest_cluster.glb">Full Forest Grove (Natural Pine Cluster)</option>
+    </select>
+  </div>
+
+  <div id="loading">Loading Model...</div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+    import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+
+    let scene, camera, renderer, controls, currentTreeGroup;
+
+    function createFallbackTexture(r, g, b) {
+      const data = new Uint8Array([r, g, b, 255]);
+      const tex = new THREE.DataTexture(data, 1, 1, THREE.RGBAFormat);
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.needsUpdate = true;
+      return tex;
+    }
+
+    const uniforms = {
+      uTime: { value: 0 },
+      uWindSpeed: { value: 1.2 },
+      uWindFreq: { value: 0.5 },
+      uWindDir: { value: new THREE.Vector2(Math.cos(243 * Math.PI / 180), Math.sin(243 * Math.PI / 180)) },
+      uLeafWindStrength: { value: 0.15 },
+      uLeafFlutterAmp: { value: 0.03 },
+      uLeafFlutterSpeed: { value: 2.5 },
+      uLeafDip: { value: 0.05 },
+      uLeafBottom: { value: new THREE.Color('#1c3b23') },
+      uLeafTop: { value: new THREE.Color('#5c8338') },
+      uLeafBrightness: { value: 1.05 },
+      uLeafGradPower: { value: 1.1 },
+      uLeafVarColor: { value: new THREE.Color('#1e4430') },
+      uLeafVarStrength: { value: 0.6 },
+      uLeafVarScale: { value: 2.5 },
+
+      uBarkColorMap: { value: createFallbackTexture(110, 80, 50) },
+      uBarkAOMap: { value: createFallbackTexture(255, 255, 255) },
+      uBarkHeightMap: { value: createFallbackTexture(128, 128, 128) },
+      uBarkScale: { value: 5.6 },
+      uBarkTint: { value: new THREE.Color('#8a6a4a') },
+      uBarkTintStrength: { value: 0.0 },
+      uBarkSaturation: { value: 0.7 },
+      uBarkBrightness: { value: 1.55 },
+      uBarkAOStrength: { value: 0.45 },
+      uBarkRelief: { value: 1.5 }
+    };
+
+    const PRESETS = {
+      spring: {
+        leafBottom: '#1c3b23',
+        leafTop: '#5c8338',
+        leafVarColor: '#1e4430',
+        leafBrightness: 1.05,
+        leafGradPower: 1.1,
+        windStrength: 0.15,
+        windSpeed: 1.2,
+        barkScale: 5.6,
+        barkBrightness: 1.55
+      },
+      autumn: {
+        leafBottom: '#ffaf36',
+        leafTop: '#ff1910',
+        leafVarColor: '#1e4430',
+        leafBrightness: 1.05,
+        leafGradPower: 1.1,
+        windStrength: 0.15,
+        windSpeed: 1.2,
+        barkScale: 5.6,
+        barkBrightness: 1.55
+      }
+    };
+
+    const PINE_WIND_UNIFORMS = `
+      uniform float uTime;
+      uniform float uWindSpeed;
+      uniform float uWindFreq;
+      uniform vec2  uWindDir;
+      uniform float uLeafWindStrength;
+      uniform float uLeafFlutterAmp;
+      uniform float uLeafFlutterSpeed;
+      uniform float uLeafDip;
+      uniform float uLeafYMin;
+      uniform float uLeafYMax;
+    `;
+
+    const PINE_WIND_VERTEX = `
+      #include <begin_vertex>
+      float _pnT = clamp((position.y - uLeafYMin) / max(uLeafYMax - uLeafYMin, 0.001), 0.0, 1.0);
+      float _pnMask = _pnT * _pnT;
+      vec3 _pnWorld = (modelMatrix * vec4(position, 1.0)).xyz;
+      mat3 _pnRot = mat3(
+        normalize(vec3(modelMatrix[0])),
+        normalize(vec3(modelMatrix[1])),
+        normalize(vec3(modelMatrix[2]))
+      );
+      vec3 _pnWindLocal = transpose(_pnRot) * vec3(uWindDir.x, 0.0, uWindDir.y);
+      float _pnSway = sin(dot(_pnWorld.xz, uWindDir) * uWindFreq + uTime * uWindSpeed);
+      float _pnFlutter = sin(uTime * uWindSpeed * uLeafFlutterSpeed + _pnWorld.y * 2.3 + _pnWorld.x) * uLeafFlutterAmp;
+      float _pnWave = _pnSway + _pnFlutter;
+      transformed += _pnWindLocal * (_pnWave * uLeafWindStrength * _pnMask);
+      transformed.y -= abs(_pnWave) * uLeafWindStrength * _pnMask * uLeafDip;
+    `;
+
+    function canopyBounds(mesh) {
+      if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+      const bb = mesh.geometry.boundingBox;
+      return {
+        uLeafYMin: { value: bb.min.y },
+        uLeafYMax: { value: bb.max.y }
+      };
+    }
+
+    function createPineLeafMaterial(src, mesh) {
+      const bounds = canopyBounds(mesh);
+      const mat = new THREE.MeshLambertMaterial({
+        map: src ? src.map : null,
+        alphaTest: src && src.alphaTest > 0 ? src.alphaTest : 0.6,
+        side: THREE.DoubleSide,
+        fog: false
+      });
+
+      mat.onBeforeCompile = (shader) => {
+        Object.assign(shader.uniforms, uniforms, bounds);
+
+        shader.vertexShader = PINE_WIND_UNIFORMS + 'varying vec3 vLeafLocal;\nvarying vec3 vLeafWorld;\n' + shader.vertexShader;
+        shader.vertexShader = shader.vertexShader.replace(
+          '#include <begin_vertex>',
+          PINE_WIND_VERTEX + '\nvLeafLocal = position;\nvLeafWorld = (modelMatrix * vec4(position, 1.0)).xyz;'
+        );
+
+        shader.fragmentShader = `
+          varying vec3 vLeafLocal;
+          varying vec3 vLeafWorld;
+          uniform vec3 uLeafBottom;
+          uniform vec3 uLeafTop;
+          uniform float uLeafBrightness;
+          uniform float uLeafGradPower;
+          uniform vec3 uLeafVarColor;
+          uniform float uLeafVarStrength;
+          uniform float uLeafVarScale;
+          uniform float uLeafYMin;
+          uniform float uLeafYMax;
+
+          float _lfHash(vec3 p) {
+            p = fract(p * vec3(127.1, 311.7, 74.7));
+            p += dot(p, p.yzx + 19.19);
+            return fract((p.x + p.y) * p.z);
+          }
+          float _lfNoise(vec3 p) {
+            vec3 i = floor(p);
+            vec3 f = fract(p);
+            vec3 w = f * f * (3.0 - 2.0 * f);
+            return mix(
+              mix(mix(_lfHash(i), _lfHash(i + vec3(1,0,0)), w.x), mix(_lfHash(i + vec3(0,1,0)), _lfHash(i + vec3(1,1,0)), w.x), w.y),
+              mix(mix(_lfHash(i + vec3(0,0,1)), _lfHash(i + vec3(1,0,1)), w.x), mix(_lfHash(i + vec3(0,1,1)), _lfHash(i + vec3(1,1,1)), w.x), w.y),
+              w.z
+            );
+          }
+        ` + shader.fragmentShader;
+
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <map_fragment>',
+          `#include <map_fragment>
+          {
+            float _t = clamp((vLeafLocal.y - uLeafYMin) / max(uLeafYMax - uLeafYMin, 0.001), 0.0, 1.0);
+            _t = pow(_t, uLeafGradPower);
+            vec3 _leaf = mix(uLeafBottom, uLeafTop, _t);
+            float _n = _lfNoise(vLeafWorld * uLeafVarScale) - 0.5;
+            _leaf += (uLeafVarColor - _leaf) * _n * uLeafVarStrength;
+            diffuseColor.rgb = max(_leaf, vec3(0.0)) * uLeafBrightness;
+          }`
+        );
+      };
+      return mat;
+    }
+
+    function createPineLeafDepthMaterial(src) {
+      return new THREE.MeshDepthMaterial({
+        depthPacking: THREE.RGBADepthPacking,
+        map: src ? src.map : null,
+        alphaTest: src && src.alphaTest > 0 ? src.alphaTest : 0.6,
+        side: THREE.DoubleSide
+      });
+    }
+
+    function createBarkMaterial(mesh) {
+      const bounds = canopyBounds(mesh);
+      const mat = new THREE.MeshLambertMaterial({ side: THREE.DoubleSide, fog: false });
+      mat.onBeforeCompile = (shader) => {
+        Object.assign(shader.uniforms, uniforms, bounds);
+        shader.vertexShader = PINE_WIND_UNIFORMS + 'varying vec2 vBarkUv;\n' + shader.vertexShader;
+        shader.vertexShader = shader.vertexShader.replace(
+          '#include <begin_vertex>',
+          PINE_WIND_VERTEX + '\nvBarkUv = uv;'
+        );
+        shader.fragmentShader = `
+          varying vec2 vBarkUv;
+          uniform sampler2D uBarkColorMap;
+          uniform sampler2D uBarkAOMap;
+          uniform sampler2D uBarkHeightMap;
+          uniform float uBarkScale;
+          uniform vec3  uBarkTint;
+          uniform float uBarkTintStrength;
+          uniform float uBarkSaturation;
+          uniform float uBarkBrightness;
+          uniform float uBarkAOStrength;
+          uniform float uBarkRelief;
+        ` + shader.fragmentShader;
+
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <normal_fragment_begin>',
+          `#include <normal_fragment_begin>
+          if (uBarkRelief > 0.001) {
+            float _bh = texture2D(uBarkHeightMap, vBarkUv * uBarkScale).r;
+            normal = normalize(normal - uBarkRelief * vec3(dFdx(_bh), dFdy(_bh), 0.0));
+          }`
+        );
+
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <map_fragment>',
+          `#include <map_fragment>
+          {
+            vec2 _buv = vBarkUv * uBarkScale;
+            vec3 _bark = texture2D(uBarkColorMap, _buv).rgb;
+            float _luma = dot(_bark, vec3(0.2126, 0.7152, 0.0722));
+            _bark = mix(vec3(_luma), _bark, uBarkSaturation);
+            _bark = mix(_bark, _bark * uBarkTint, uBarkTintStrength);
+            float _ao = texture2D(uBarkAOMap, _buv).r;
+            _bark *= mix(1.0, _ao, uBarkAOStrength);
+            diffuseColor.rgb = _bark * uBarkBrightness;
+          }`
+        );
+      };
+      return mat;
+    }
+
+    function init() {
+      const container = document.getElementById('canvas-container');
+      scene = new THREE.Scene();
+      scene.fog = null;
+      scene.background = new THREE.Color('#78c0e0');
+
+      camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.set(0, 3.5, 10);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      container.appendChild(renderer.domElement);
+
+      controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.target.set(0, 2.5, 0);
+
+      // Lighting
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.85);
+      scene.add(ambientLight);
+
+      const dirLight = new THREE.DirectionalLight(0xfffaed, 1.8);
+      dirLight.position.set(-6, 12, 6);
+      dirLight.castShadow = true;
+      dirLight.shadow.mapSize.width = 2048;
+      dirLight.shadow.mapSize.height = 2048;
+      dirLight.shadow.camera.near = 0.5;
+      dirLight.shadow.camera.far = 40;
+      dirLight.shadow.camera.left = -8;
+      dirLight.shadow.camera.right = 8;
+      dirLight.shadow.camera.top = 8;
+      dirLight.shadow.camera.bottom = -8;
+      dirLight.shadow.bias = -0.0005;
+      scene.add(dirLight);
+
+      // Ground plane
+      const groundGeo = new THREE.PlaneGeometry(60, 60);
+      const groundMat = new THREE.MeshLambertMaterial({ color: '#4d692e', fog: false });
+      const ground = new THREE.Mesh(groundGeo, groundMat);
+      ground.rotation.x = -Math.PI / 2;
+      ground.position.y = -0.001;
+      ground.receiveShadow = true;
+      scene.add(ground);
+
+      // Load bark textures
+      const texLoader = new THREE.TextureLoader();
+      texLoader.load('./assets/textures/bark/bark_color.png', (t) => {
+        t.wrapS = t.wrapT = THREE.RepeatWrapping;
+        t.needsUpdate = true;
+        uniforms.uBarkColorMap.value = t;
+      });
+      texLoader.load('./assets/textures/bark/bark_AO.png', (t) => {
+        t.wrapS = t.wrapT = THREE.RepeatWrapping;
+        t.needsUpdate = true;
+        uniforms.uBarkAOMap.value = t;
+      });
+      texLoader.load('./assets/textures/bark/bark_height.png', (t) => {
+        t.wrapS = t.wrapT = THREE.RepeatWrapping;
+        t.needsUpdate = true;
+        uniforms.uBarkHeightMap.value = t;
+      });
+
+      setupGUI();
+      loadSelectedTree();
+
+      window.addEventListener('resize', onWindowResize);
+      animate();
+    }
+
+    function setupGUI() {
+      const gui = new GUI({ title: 'Tree Controls' });
+      
+      const fLeaves = gui.addFolder('Leaf Canopy Shaders');
+      const params = {
+        leafBottom: uniforms.uLeafBottom.value.getHexString(),
+        leafTop: uniforms.uLeafTop.value.getHexString(),
+        leafVarColor: uniforms.uLeafVarColor.value.getHexString()
+      };
+      fLeaves.addColor(params, 'leafBottom').name('Color Bottom (Inner)').onChange(c => uniforms.uLeafBottom.value.set(c));
+      fLeaves.addColor(params, 'leafTop').name('Color Top (Outer)').onChange(c => uniforms.uLeafTop.value.set(c));
+      fLeaves.add(uniforms.uLeafBrightness, 'value', 0.2, 3, 0.05).name('Brightness');
+      fLeaves.add(uniforms.uLeafGradPower, 'value', 0.2, 4, 0.1).name('Gradient Power');
+      fLeaves.addColor(params, 'leafVarColor').name('Variation Color').onChange(c => uniforms.uLeafVarColor.value.set(c));
+      fLeaves.add(uniforms.uLeafVarStrength, 'value', 0, 2, 0.05).name('Var Strength');
+
+      const fWind = gui.addFolder('Wind Sway & Flutter');
+      fWind.add(uniforms.uLeafWindStrength, 'value', 0, 0.6, 0.01).name('Wind Strength');
+      fWind.add(uniforms.uWindSpeed, 'value', 0.1, 4, 0.05).name('Wind Speed');
+      fWind.add(uniforms.uLeafFlutterAmp, 'value', 0, 0.1, 0.005).name('Flutter Amplitude');
+      fWind.add(uniforms.uLeafFlutterSpeed, 'value', 0.5, 8, 0.1).name('Flutter Speed');
+      fWind.add(uniforms.uLeafDip, 'value', 0, 0.2, 0.01).name('Pendulum Dip');
+
+      const fBark = gui.addFolder('Trunk Bark Shaders');
+      fBark.add(uniforms.uBarkScale, 'value', 1, 15, 0.1).name('Texture Scale');
+      fBark.add(uniforms.uBarkBrightness, 'value', 0.2, 3, 0.05).name('Brightness');
+      fBark.add(uniforms.uBarkAOStrength, 'value', 0, 1, 0.05).name('AO Strength');
+      fBark.add(uniforms.uBarkRelief, 'value', 0, 5, 0.1).name('Height Relief (Bump)');
+    }
+
+    window.setPreset = function(name) {
+      const p = PRESETS[name];
+      if (!p) return;
+      uniforms.uLeafBottom.value.set(p.leafBottom);
+      uniforms.uLeafTop.value.set(p.leafTop);
+      uniforms.uLeafVarColor.value.set(p.leafVarColor);
+      uniforms.uLeafBrightness.value = p.leafBrightness;
+      uniforms.uLeafGradPower.value = p.leafGradPower;
+      uniforms.uLeafWindStrength.value = p.windStrength;
+      uniforms.uWindSpeed.value = p.windSpeed;
+      uniforms.uBarkScale.value = p.barkScale;
+      uniforms.uBarkBrightness.value = p.barkBrightness;
+
+      document.getElementById('btn-spring').className = name === 'spring' ? 'active' : '';
+      document.getElementById('btn-autumn').className = name === 'autumn' ? 'active autumn' : '';
+
+      if (name === 'autumn') {
+        scene.background.set('#ffb088');
+      } else {
+        scene.background.set('#78c0e0');
+      }
+    };
+
+    window.loadSelectedTree = function() {
+      const select = document.getElementById('model-select');
+      const filename = select.value;
+      const url = './assets/models/trees/' + filename;
+      const loading = document.getElementById('loading');
+      loading.style.display = 'block';
+
+      if (currentTreeGroup) {
+        scene.remove(currentTreeGroup);
+      }
+
+      const loader = new GLTFLoader();
+      loader.load(url, (gltf) => {
+        currentTreeGroup = gltf.scene;
+
+        currentTreeGroup.traverse((child) => {
+          if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+            const matName = child.material?.name || '';
+            const meshName = child.name || '';
+            if (meshName.includes('Trunk') || matName.includes('Material.011') || matName.toLowerCase().includes('trunk') || matName.toLowerCase().includes('bark')) {
+              child.material = createBarkMaterial(child);
+            } else {
+              child.material = createPineLeafMaterial(child.material, child);
+              child.customDepthMaterial = createPineLeafDepthMaterial(child.material);
+            }
+          }
+        });
+
+        scene.add(currentTreeGroup);
+        loading.style.display = 'none';
+      }, undefined, (err) => {
+        console.error('Error loading tree GLB:', err);
+        loading.innerText = 'Failed to load model. Check console.';
+      });
+    };
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    const clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      const delta = clock.getDelta();
+      uniforms.uTime.value += delta;
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    init();
+  </script>
+</body>
+</html>

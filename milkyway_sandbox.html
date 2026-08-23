@@ -1,0 +1,1348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Milky Way Studio — High Contrast Galaxy Sandbox</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+    body {
+      background-color: #000000;
+      color: #e0e0e0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+    }
+    #canvas-container {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1;
+      cursor: grab;
+    }
+    #canvas-container:active {
+      cursor: grabbing;
+    }
+    #ui-panel {
+      position: absolute;
+      top: 15px;
+      left: 15px;
+      z-index: 10;
+      background: rgba(10, 12, 18, 0.94);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 8px;
+      padding: 14px 18px;
+      width: 360px;
+      max-height: calc(100vh - 30px);
+      overflow-y: auto;
+      box-shadow: 0 14px 40px rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(12px);
+    }
+    #ui-panel::-webkit-scrollbar {
+      width: 5px;
+    }
+    #ui-panel::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 3px;
+    }
+    .panel-header {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: #ffffff;
+      margin-bottom: 2px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+      padding-bottom: 6px;
+    }
+    .panel-subtitle {
+      font-size: 11px;
+      color: #8fa0b5;
+      margin-bottom: 12px;
+    }
+    .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #3b82f6;
+      margin-top: 12px;
+      margin-bottom: 8px;
+      padding-bottom: 3px;
+      border-bottom: 1px dashed rgba(59, 130, 246, 0.3);
+    }
+    .control-group {
+      margin-bottom: 10px;
+    }
+    .control-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: #c5d1de;
+      margin-bottom: 3px;
+    }
+    .control-value {
+      font-family: monospace;
+      color: #6bb9f0;
+      font-size: 11px;
+    }
+    input[type="range"] {
+      width: 100%;
+      accent-color: #3b82f6;
+      cursor: pointer;
+    }
+    select, button, input[type="color"] {
+      width: 100%;
+      background: #161b26;
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 4px;
+      padding: 6px 8px;
+      font-size: 11.5px;
+      cursor: pointer;
+      outline: none;
+      transition: background 0.15s ease;
+    }
+    input[type="color"] {
+      height: 28px;
+      padding: 2px 4px;
+    }
+    select:hover, button:hover {
+      background: #242c3b;
+    }
+    .btn-action {
+      background: #2563eb;
+      font-weight: 600;
+    }
+    .btn-action:hover {
+      background: #1d4ed8;
+    }
+    .btn-secondary {
+      background: #1f2937;
+    }
+    .btn-secondary:hover {
+      background: #374151;
+    }
+    .button-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .color-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11.5px;
+      color: #c5d1de;
+      margin-top: 6px;
+      cursor: pointer;
+    }
+    .checkbox-row input {
+      cursor: pointer;
+    }
+    #stats-badge {
+      position: absolute;
+      bottom: 15px;
+      left: 15px;
+      z-index: 10;
+      background: rgba(10, 12, 18, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 4px;
+      padding: 6px 12px;
+      font-size: 11px;
+      font-family: monospace;
+      color: #8fa0b5;
+    }
+    #toast-notification {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      z-index: 30;
+      background: #1e293b;
+      border: 1px solid #3b82f6;
+      border-radius: 6px;
+      padding: 12px 18px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #ffffff;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.7);
+      opacity: 0;
+      transform: translateY(-10px);
+      transition: all 0.25s ease;
+      pointer-events: none;
+    }
+    #toast-notification.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    #loading-indicator {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 20;
+      background: rgba(0, 0, 0, 0.92);
+      padding: 16px 28px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #6bb9f0;
+      pointer-events: none;
+    }
+    .hint-text {
+      font-size: 10.5px;
+      color: #94a3b8;
+      margin-top: 4px;
+      line-height: 1.3;
+    }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.185.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="canvas-container"></div>
+  <div id="loading-indicator">Loading 16K Milky Way Skybox...</div>
+  <div id="toast-notification">Settings Copied to Clipboard!</div>
+
+  <div id="ui-panel">
+    <div class="panel-header">Milky Way Studio</div>
+    <div class="panel-subtitle">Custom 16K Ultra-HD Master View</div>
+
+    <!-- Quick Presets -->
+    <div class="section-title">1-Click Presets</div>
+    <div class="button-row">
+      <button id="preset-neutral" class="btn-action">Neutral 1:1 (Your Edits)</button>
+      <button id="preset-cinematic" class="btn-secondary">Cinematic Glow</button>
+    </div>
+    <div class="button-row" style="margin-top: 4px;">
+      <button id="preset-golden" class="btn-secondary">Golden Starburst</button>
+      <button id="preset-cosmic" class="btn-secondary">Cosmic Nebula</button>
+    </div>
+
+    <!-- Save & Export -->
+    <div class="section-title">Save & Export Preset</div>
+    <button id="btn-copy-code" class="btn-action" style="margin-bottom: 6px;">Copy Code for main.js</button>
+    <div class="button-row">
+      <button id="btn-download-json" class="btn-secondary">Download JSON</button>
+      <button id="btn-save-local" class="btn-secondary">Save to Browser</button>
+    </div>
+    <button id="btn-reset-defaults" class="btn-secondary" style="margin-top: 6px; font-size: 10.5px; color: #94a3b8;">Reset to Neutral 1:1</button>
+
+    <!-- Texture Resolution & Quality -->
+    <div class="section-title">Resolution & Texture Source</div>
+    <div class="control-group">
+      <select id="sel-texture-mode">
+        <option value="compressed_16k" selected>16K Ultra-HD (16384 x 8192 — Your Custom Edit)</option>
+        <option value="ultra_8k">8K Ultra-HD (8192 x 4096)</option>
+        <option value="vivid_4k">4K High-Res (4096 x 2048)</option>
+      </select>
+    </div>
+
+    <!-- Astronomical Procedural Starfield Engine -->
+    <div class="section-title">Astronomical Starfield Engine</div>
+
+    <label class="checkbox-row">
+      <input type="checkbox" id="chk-starfield" checked>
+      <span>Enable Procedural Stars</span>
+    </label>
+
+    <div class="control-group" style="margin-top: 8px;">
+      <div class="control-label">
+        <span>Milky Way Avoidance / Extinction</span>
+        <span id="val-star-extinction" class="control-value">0.85</span>
+      </div>
+      <input type="range" id="rng-star-extinction" min="0.0" max="1.0" step="0.05" value="0.85">
+      <div class="hint-text">Clears stars out of the Milky Way core and gas clouds so your painting stays 100% clean.</div>
+    </div>
+
+    <div class="control-group">
+      <div class="control-label">
+        <span>Star Density / Count</span>
+        <span id="val-star-count" class="control-value">6,000</span>
+      </div>
+      <input type="range" id="rng-star-count" min="500" max="25000" step="500" value="6000">
+    </div>
+
+    <div class="control-group">
+      <div class="control-label">
+        <span>Star Sharpness & Scale</span>
+        <span id="val-star-size" class="control-value">0.80x</span>
+      </div>
+      <input type="range" id="rng-star-size" min="0.20" max="2.00" step="0.05" value="0.80">
+    </div>
+
+    <div class="control-group">
+      <div class="control-label">
+        <span>Star Luminosity / Brightness</span>
+        <span id="val-star-brightness" class="control-value">0.90</span>
+      </div>
+      <input type="range" id="rng-star-brightness" min="0.1" max="2.5" step="0.05" value="0.90">
+    </div>
+
+    <div class="control-group">
+      <div class="control-label">
+        <span>Scintillation (Twinkle Amount)</span>
+        <span id="val-star-twinkle" class="control-value">0.40</span>
+      </div>
+      <input type="range" id="rng-star-twinkle" min="0.0" max="1.0" step="0.05" value="0.40">
+    </div>
+
+    <div class="control-group">
+      <div class="control-label">
+        <span>Major Star Diffraction Glow</span>
+        <span id="val-star-spikes" class="control-value">0.40</span>
+      </div>
+      <input type="range" id="rng-star-spikes" min="0.0" max="1.5" step="0.05" value="0.40">
+    </div>
+
+    <!-- Color Grading Controls -->
+    <div class="section-title">Milky Way Color & Exposure</div>
+
+    <div class="control-group">
+      <div class="control-label">
+        <span>Brightness Multiplier</span>
+        <span id="val-brightness" class="control-value">1.00</span>
+      </div>
+      <input type="range" id="rng-brightness" min="0.0" max="4.0" step="0.05" value="1.00">
+    </div>
+
+    <div class="control-group">
+      <div class="control-label">
+        <span>Galactic Core Glow Boost</span>
+        <span id="val-core-boost" class="control-value">1.00</span>
+      </div>
+      <input type="range" id="rng-core-boost" min="1.0" max="4.0" step="0.05" value="1.00">
+    </div>
+
+    <div class="control-group">
+      <div class="control-label">
+        <span>Contrast</span>
+        <span id="val-contrast" class="control-value">1.00</span>
+      </div>
+      <input type="range" id="rng-contrast" min="0.5" max="2.0" step="0.05" value="1.00">
+    </div>
+
+    <div class="control-group">
+      <div class="control-label">
+        <span>Color Saturation</span>
+        <span id="val-saturation" class="control-value">1.00</span>
+      </div>
+      <input type="range" id="rng-saturation" min="0.0" max="3.0" step="0.05" value="1.00">
+    </div>
+
+    <div class="control-group">
+      <div class="control-label">
+        <span>Hue Shift</span>
+        <span id="val-hue" class="control-value">0 deg</span>
+      </div>
+      <input type="range" id="rng-hue" min="-180" max="180" step="1" value="0">
+    </div>
+
+    <div class="control-group">
+      <div class="control-label">
+        <span>Color Temperature</span>
+        <span id="val-temp" class="control-value">0.00</span>
+      </div>
+      <input type="range" id="rng-temp" min="-1.0" max="1.0" step="0.05" value="0.00">
+    </div>
+
+    <div class="control-group">
+      <div class="control-label">
+        <span>Background Space Cutoff</span>
+        <span id="val-black-level" class="control-value">0.000</span>
+      </div>
+      <input type="range" id="rng-black-level" min="0.000" max="0.100" step="0.002" value="0.000">
+    </div>
+
+    <div class="control-group">
+      <div class="control-label">
+        <span>Milky Way Color Tint</span>
+      </div>
+      <div class="color-row">
+        <div>
+          <span style="font-size: 10px; color: #8fa0b5;">Nebula Tint</span>
+          <input type="color" id="col-nebula" value="#ffffff">
+        </div>
+        <div>
+          <span style="font-size: 10px; color: #8fa0b5;">Core Tint</span>
+          <input type="color" id="col-core" value="#ffffff">
+        </div>
+      </div>
+    </div>
+
+    <!-- Camera & Celestial Orientation -->
+    <div class="section-title">Celestial View & FOV</div>
+
+    <div class="control-group">
+      <div class="control-label">
+        <span>Field of View (Zoom)</span>
+        <span id="val-fov" class="control-value">60 deg</span>
+      </div>
+      <input type="range" id="rng-fov" min="25" max="100" step="1" value="60">
+      <div class="hint-text">Drag anywhere to look around in full 360 degrees. Scroll wheel to zoom in/out.</div>
+    </div>
+
+    <div class="button-row">
+      <button id="btn-core-view">Look at Galactic Core</button>
+      <button id="btn-zenith-view">Look Straight Up</button>
+    </div>
+
+    <div class="control-group" style="margin-top: 10px;">
+      <div class="control-label">
+        <span>Galactic Tilt X (Pitch)</span>
+        <span id="val-tilt-x" class="control-value">-18 deg</span>
+      </div>
+      <input type="range" id="rng-tilt-x" min="-90" max="90" step="1" value="-18">
+    </div>
+
+    <div class="control-group">
+      <div class="control-label">
+        <span>Galactic Tilt Y (Yaw)</span>
+        <span id="val-tilt-y" class="control-value">42 deg</span>
+      </div>
+      <input type="range" id="rng-tilt-y" min="0" max="360" step="1" value="42">
+    </div>
+
+    <div class="control-group">
+      <div class="control-label">
+        <span>Galactic Tilt Z (Roll)</span>
+        <span id="val-tilt-z" class="control-value">42 deg</span>
+      </div>
+      <input type="range" id="rng-tilt-z" min="-90" max="90" step="1" value="42">
+    </div>
+
+    <label class="checkbox-row">
+      <input type="checkbox" id="chk-autorotate">
+      <span>Auto-Rotate Celestial Dome</span>
+    </label>
+  </div>
+
+  <div id="stats-badge">
+    FOV: <span id="stat-fov">60</span> deg | Texture: <span id="stat-mode">16K Ultra-HD (16384x8192)</span>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+
+    // Settings defaults
+    const defaultSettings = {
+      textureMode: 'compressed_16k',
+      brightness: 1.00,
+      coreBoost: 1.00,
+      contrast: 1.00,
+      saturation: 1.00,
+      hueShift: 0,
+      colorTemp: 0.00,
+      blackLevel: 0.000,
+      nebulaColor: '#ffffff',
+      coreColor: '#ffffff',
+      enableStarfield: true,
+      starCount: 6000,
+      starExtinction: 0.85,
+      starScale: 0.80,
+      starBrightness: 0.90,
+      starTwinkle: 0.40,
+      starSpikes: 0.40,
+      tiltX: -18,
+      tiltY: 42,
+      tiltZ: 42,
+      fov: 60
+    };
+
+    let currentSettings = { ...defaultSettings };
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast-notification');
+      toast.innerText = msg;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2600);
+    }
+
+    // Three.js Scene Setup (Immersive Planetarium View from Center)
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+
+    const camera = new THREE.PerspectiveCamera(currentSettings.fov, window.innerWidth / window.innerHeight, 0.1, 100000);
+    camera.position.set(0, 0, 0);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.toneMapping = THREE.NoToneMapping;
+    container.appendChild(renderer.domElement);
+
+    // First-person celestial look controls
+    let isDragging = false;
+    let previousMousePosition = { x: 0, y: 0 };
+    let lon = 140;
+    let lat = 15;
+    let autoRotate = false;
+
+    container.addEventListener('mousedown', (e) => {
+      if (e.target === renderer.domElement) {
+        isDragging = true;
+        previousMousePosition = { x: e.clientX, y: e.clientY };
+      }
+    });
+
+    window.addEventListener('mouseup', () => isDragging = false);
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      const deltaX = e.clientX - previousMousePosition.x;
+      const deltaY = e.clientY - previousMousePosition.y;
+
+      lon -= deltaX * 0.15;
+      lat += deltaY * 0.15;
+      lat = Math.max(-89.9, Math.min(89.9, lat));
+
+      previousMousePosition = { x: e.clientX, y: e.clientY };
+    });
+
+    // Touch controls
+    let previousTouchPosition = { x: 0, y: 0 };
+    container.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) {
+        isDragging = true;
+        previousTouchPosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      }
+    });
+    window.addEventListener('touchend', () => isDragging = false);
+    window.addEventListener('touchmove', (e) => {
+      if (!isDragging || e.touches.length !== 1) return;
+      const deltaX = e.touches[0].clientX - previousTouchPosition.x;
+      const deltaY = e.touches[0].clientY - previousTouchPosition.y;
+      lon -= deltaX * 0.2;
+      lat += deltaY * 0.2;
+      lat = Math.max(-89.9, Math.min(89.9, lat));
+      previousTouchPosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    });
+
+    // Zoom via mouse wheel
+    window.addEventListener('wheel', (e) => {
+      currentSettings.fov = Math.max(25, Math.min(100, currentSettings.fov + e.deltaY * 0.04));
+      camera.fov = currentSettings.fov;
+      camera.updateProjectionMatrix();
+      document.getElementById('rng-fov').value = Math.round(currentSettings.fov);
+      document.getElementById('val-fov').innerText = Math.round(currentSettings.fov) + ' deg';
+      document.getElementById('stat-fov').innerText = Math.round(currentSettings.fov);
+    });
+
+    // Texture Loader with cache busting and fallbacks
+    const textureLoader = new THREE.TextureLoader();
+    const textures = {
+      compressed_16k: null,
+      ultra_8k: null,
+      vivid_4k: null
+    };
+
+    const loadingElem = document.getElementById('loading-indicator');
+    const cb = '?t=' + Date.now();
+
+    function loadWithFallbacks(paths, key, isInitial = false) {
+      const tryLoad = (idx) => {
+        if (idx >= paths.length) {
+          console.error('All paths failed for', key);
+          return;
+        }
+        textureLoader.load(
+          paths[idx] + cb,
+          (tex) => {
+            tex.colorSpace = THREE.SRGBColorSpace;
+            tex.anisotropy = 8;
+            tex.minFilter = THREE.LinearMipmapLinearFilter;
+            tex.generateMipmaps = true;
+            textures[key] = tex;
+            if (isInitial || key === currentSettings.textureMode) {
+              mwUniforms.tMilkyWay.value = tex;
+              starUniforms.tMilkyWay.value = tex;
+              loadingElem.style.display = 'none';
+            }
+          },
+          undefined,
+          () => tryLoad(idx + 1)
+        );
+      };
+      tryLoad(0);
+    }
+
+    loadWithFallbacks([
+      'assets/skybox/milkyway_16k.jpg',
+      '/assets/skybox/milkyway_16k.jpg',
+      'public/assets/skybox/milkyway_16k.jpg'
+    ], 'compressed_16k', currentSettings.textureMode === 'compressed_16k');
+
+    loadWithFallbacks([
+      'assets/skybox/milkyway_8k.png',
+      '/assets/skybox/milkyway_8k.png',
+      'public/assets/skybox/milkyway_8k.png'
+    ], 'ultra_8k', currentSettings.textureMode === 'ultra_8k');
+
+    loadWithFallbacks([
+      'assets/skybox/milkyway_equirect.png',
+      '/assets/skybox/milkyway_equirect.png',
+      'public/assets/skybox/milkyway_equirect.png'
+    ], 'vivid_4k', currentSettings.textureMode === 'vivid_4k');
+
+    // Shader Uniforms for Milky Way
+    const mwUniforms = {
+      tMilkyWay: { value: null },
+      uBrightness: { value: currentSettings.brightness },
+      uCoreBoost: { value: currentSettings.coreBoost },
+      uContrast: { value: currentSettings.contrast },
+      uSaturation: { value: currentSettings.saturation },
+      uHueShift: { value: THREE.MathUtils.degToRad(currentSettings.hueShift) },
+      uColorTemp: { value: currentSettings.colorTemp },
+      uBlackLevel: { value: currentSettings.blackLevel },
+      uNebulaColor: { value: new THREE.Color(currentSettings.nebulaColor) },
+      uCoreColor: { value: new THREE.Color(currentSettings.coreColor) }
+    };
+
+    const mwShaderMat = new THREE.ShaderMaterial({
+      uniforms: mwUniforms,
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D tMilkyWay;
+        uniform float uBrightness;
+        uniform float uCoreBoost;
+        uniform float uContrast;
+        uniform float uSaturation;
+        uniform float uHueShift;
+        uniform float uColorTemp;
+        uniform float uBlackLevel;
+        uniform vec3 uNebulaColor;
+        uniform vec3 uCoreColor;
+        varying vec2 vUv;
+
+        vec3 applyHue(vec3 col, float angle) {
+          const vec3 k = vec3(0.57735, 0.57735, 0.57735);
+          float cosAngle = cos(angle);
+          return vec3(col * cosAngle + cross(k, col) * sin(angle) + k * dot(k, col) * (1.0 - cosAngle));
+        }
+
+        void main() {
+          vec4 rawTex = texture2D(tMilkyWay, vUv);
+          vec3 col = rawTex.rgb;
+
+          // 1. Black Level / Deep space threshold
+          if (uBlackLevel > 0.0005) {
+            col = max(vec3(0.0), (col - uBlackLevel) / max(0.001, 1.0 - uBlackLevel));
+          }
+
+          // 2. Core Luminance Boost
+          if (abs(uCoreBoost - 1.0) > 0.01) {
+            float luma = dot(col, vec3(0.299, 0.587, 0.114));
+            float coreMask = smoothstep(0.05, 0.40, luma);
+            col += col * coreMask * (uCoreBoost - 1.0);
+          }
+
+          // 3. Contrast / Gamma
+          if (abs(uContrast - 1.0) > 0.01) {
+            col = pow(max(vec3(0.0), col), vec3(uContrast));
+          }
+
+          // 4. Color Tinting
+          float lumaMask = dot(col, vec3(0.299, 0.587, 0.114));
+          float coreMask = smoothstep(0.05, 0.40, lumaMask);
+          vec3 tinted = mix(col * uNebulaColor, col * uCoreColor, coreMask);
+
+          // 5. Saturation
+          if (abs(uSaturation - 1.0) > 0.01) {
+            float finalLuma = dot(tinted, vec3(0.299, 0.587, 0.114));
+            tinted = mix(vec3(finalLuma), tinted, uSaturation);
+          }
+
+          // 6. Hue Shift
+          if (abs(uHueShift) > 0.001) {
+            tinted = applyHue(tinted, uHueShift);
+          }
+
+          // 7. Color Temperature
+          if (uColorTemp > 0.0) {
+            tinted.r *= (1.0 + uColorTemp * 0.4);
+            tinted.g *= (1.0 + uColorTemp * 0.15);
+            tinted.b *= (1.0 - uColorTemp * 0.25);
+          } else if (uColorTemp < 0.0) {
+            float t = -uColorTemp;
+            tinted.r *= (1.0 - t * 0.25);
+            tinted.g *= (1.0 + t * 0.1);
+            tinted.b *= (1.0 + t * 0.45);
+          }
+
+          // 8. Overall Brightness Gain
+          tinted *= uBrightness;
+
+          gl_FragColor = vec4(tinted, 1.0);
+        }
+      `,
+      side: THREE.BackSide,
+      depthWrite: false,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      fog: false
+    });
+
+    const mwEquirectGeo = new THREE.SphereGeometry(1000, 64, 32);
+    const mwMesh = new THREE.Mesh(mwEquirectGeo, mwShaderMat);
+    mwMesh.renderOrder = -999;
+    mwMesh.frustumCulled = false;
+    scene.add(mwMesh);
+
+    // =========================================================================
+    // ASTRONOMICAL STARFIELD ENGINE WITH INTERSTELLAR EXTINCTION MASKING
+    // =========================================================================
+    const starUniforms = {
+      tMilkyWay: { value: null },
+      uTime: { value: 0.0 },
+      uStarScale: { value: currentSettings.starScale },
+      uBrightness: { value: currentSettings.starBrightness },
+      uTwinkleAmp: { value: currentSettings.starTwinkle },
+      uSpikeIntensity: { value: currentSettings.starSpikes },
+      uExtinction: { value: currentSettings.starExtinction }
+    };
+
+    let starfieldMesh = null;
+
+    // Harvard Stellar Spectral Classes (Blackbody emission colors)
+    const stellarSpectra = [
+      { r: 0.70, g: 0.80, b: 1.00, weight: 0.08 }, // Class O/B (Blue-White Rigel/Spica)
+      { r: 0.85, g: 0.90, b: 1.00, weight: 0.22 }, // Class A (Diamond White Sirius/Vega)
+      { r: 0.98, g: 0.98, b: 1.00, weight: 0.26 }, // Class F (Crisp White Procyon)
+      { r: 1.00, g: 0.95, b: 0.88, weight: 0.26 }, // Class G (Warm Yellow Sun-like)
+      { r: 1.00, g: 0.82, b: 0.60, weight: 0.12 }, // Class K (Orange Giant Arcturus)
+      { r: 1.00, g: 0.58, b: 0.42, weight: 0.06 }  // Class M (Red Supergiant Betelgeuse)
+    ];
+
+    function getRandomStellarColor() {
+      let r = Math.random();
+      let acc = 0;
+      for (let s of stellarSpectra) {
+        acc += s.weight;
+        if (r <= acc) return s;
+      }
+      return stellarSpectra[2];
+    }
+
+    function buildAstronomicalStarfield() {
+      if (starfieldMesh) {
+        scene.remove(starfieldMesh);
+        starfieldMesh.geometry.dispose();
+      }
+
+      const count = currentSettings.starCount;
+      const positions = new Float32Array(count * 3);
+      const colors = new Float32Array(count * 3);
+      const starSizes = new Float32Array(count);
+      const starTwinkles = new Float32Array(count * 2);
+      const starTypes = new Float32Array(count); // 0 = faint pinpoint, 1 = medium star, 2 = major bright star
+      const starUvs = new Float32Array(count * 2);
+
+      const r = 1050; // Celestial dome radius
+
+      for (let i = 0; i < count; i++) {
+        // 1. Uniform Archimedes Spherical Distribution across 100% of the Cosmos
+        const z = 2.0 * Math.random() - 1.0;
+        const phi = Math.random() * Math.PI * 2.0;
+        const r_xy = Math.sqrt(Math.max(0.0, 1.0 - z * z));
+        const x = r_xy * Math.cos(phi);
+        const y = r_xy * Math.sin(phi);
+
+        positions[i * 3] = x * r;
+        positions[i * 3 + 1] = y * r;
+        positions[i * 3 + 2] = z * r;
+
+        // Compute UV mapping on the equirectangular sphere so the shader can sample Milky Way density
+        // Matching Three.js SphereGeometry UV formula:
+        // u = 1 - (atan2(x, z) / (2*PI) + 0.5)
+        // v = asin(y / r) / PI + 0.5
+        const u = 1.0 - (Math.atan2(x, -z) / (Math.PI * 2.0) + 0.5);
+        const v = Math.asin(Math.max(-1.0, Math.min(1.0, y))) / Math.PI + 0.5;
+        starUvs[i * 2] = (u % 1.0 + 1.0) % 1.0;
+        starUvs[i * 2 + 1] = Math.max(0.0, Math.min(1.0, v));
+
+        // 2. Realistic Astronomical Stellar Magnitude (Power-law distribution)
+        const magRand = Math.random();
+        let starClass = 0.0;
+        let baseSize = 0.0;
+        let luminance = 0.0;
+
+        if (magRand > 0.97) {
+          // Major Bright Stars: Optical diffraction cross
+          starClass = 2.0;
+          baseSize = 22.0 + Math.random() * 12.0;
+          luminance = 0.95 + Math.random() * 0.4;
+        } else if (magRand > 0.82) {
+          // Medium Stars: Clean, bright pinpoints
+          starClass = 1.0;
+          baseSize = 10.0 + Math.random() * 6.0;
+          luminance = 0.65 + Math.random() * 0.30;
+        } else {
+          // Faint Background Stars: Tiny crisp sub-pixel pinpoints
+          starClass = 0.0;
+          baseSize = 4.0 + Math.random() * 3.5;
+          luminance = 0.20 + Math.random() * 0.40;
+        }
+
+        starSizes[i] = baseSize;
+        starTypes[i] = starClass;
+
+        // 3. Blackbody Stellar Temperature Color
+        const spec = getRandomStellarColor();
+        colors[i * 3] = spec.r * luminance;
+        colors[i * 3 + 1] = spec.g * luminance;
+        colors[i * 3 + 2] = spec.b * luminance;
+
+        // 4. Organic Multi-Frequency Scintillation
+        starTwinkles[i * 2] = Math.random() * Math.PI * 2.0;
+        starTwinkles[i * 2 + 1] = 0.8 + Math.random() * 2.5;
+      }
+
+      const starGeo = new THREE.BufferGeometry();
+      starGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      starGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      starGeo.setAttribute('aStarSize', new THREE.BufferAttribute(starSizes, 1));
+      starGeo.setAttribute('aStarTwinkle', new THREE.BufferAttribute(starTwinkles, 2));
+      starGeo.setAttribute('aStarType', new THREE.BufferAttribute(starTypes, 1));
+      starGeo.setAttribute('aStarUv', new THREE.BufferAttribute(starUvs, 2));
+
+      const starShaderMat = new THREE.ShaderMaterial({
+        uniforms: starUniforms,
+        vertexShader: `
+          attribute vec3 color;
+          attribute float aStarSize;
+          attribute vec2 aStarTwinkle;
+          attribute float aStarType;
+          attribute vec2 aStarUv;
+          
+          uniform sampler2D tMilkyWay;
+          uniform float uTime;
+          uniform float uStarScale;
+          uniform float uBrightness;
+          uniform float uTwinkleAmp;
+          uniform float uExtinction;
+          
+          varying vec3 vColor;
+          varying float vTwinkle;
+          varying float vStarType;
+
+          void main() {
+            vStarType = aStarType;
+
+            // 1. Interstellar Extinction Mask:
+            // Sample underlying Milky Way gas density at this star position
+            float extinctionFactor = 1.0;
+            if (uExtinction > 0.001) {
+              vec4 mwSample = texture2D(tMilkyWay, aStarUv);
+              float mwLuma = dot(mwSample.rgb, vec3(0.299, 0.587, 0.114));
+              // Major bright stars can shine through faint gas, but faint stars are absorbed
+              float resistance = (aStarType > 1.5) ? 0.35 : 0.05;
+              extinctionFactor = clamp(1.0 - (mwLuma - resistance) * uExtinction * 3.5, 0.0, 1.0);
+            }
+
+            // Organic multi-harmonic atmospheric twinkle
+            float phase = aStarTwinkle.x;
+            float speed = aStarTwinkle.y;
+            float tw1 = sin(uTime * speed + phase);
+            float tw2 = cos(uTime * speed * 1.618 + phase * 2.3);
+            float tw = 0.70 * tw1 + 0.30 * tw2;
+
+            float amp = uTwinkleAmp * (0.30 + 0.70 * (aStarType * 0.5));
+            vTwinkle = clamp(1.0 + tw * amp, 0.15, 1.8) * extinctionFactor;
+
+            vColor = color * uBrightness * extinctionFactor;
+
+            vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+            
+            // Perspective-correct point size scaling
+            float pSize = aStarSize * uStarScale * (300.0 / -mvPosition.z);
+            gl_PointSize = max(1.2, pSize * (0.90 + 0.20 * tw));
+            gl_Position = projectionMatrix * mvPosition;
+          }
+        `,
+        fragmentShader: `
+          varying vec3 vColor;
+          varying float vTwinkle;
+          varying float vStarType;
+          uniform float uSpikeIntensity;
+
+          void main() {
+            if (vTwinkle < 0.01) discard;
+
+            vec2 coord = gl_PointCoord - vec2(0.5);
+            float dist = length(coord);
+            if (dist > 0.5) discard;
+
+            // 1. Razor-sharp Gaussian Airy core (Pinpoint astronomical center)
+            float core = exp(-dist * dist * 48.0);
+
+            // 2. Soft celestial halo / corona
+            float halo = 0.25 * exp(-dist * 8.0);
+
+            // 3. Faint optical cross diffraction spikes for major navigational stars
+            float spikes = 0.0;
+            if (vStarType > 1.5 && uSpikeIntensity > 0.01) {
+              float spikeX = exp(-abs(coord.x) * 42.0) * exp(-abs(coord.y) * 4.5);
+              float spikeY = exp(-abs(coord.y) * 42.0) * exp(-abs(coord.x) * 4.5);
+              spikes = (spikeX + spikeY) * 0.50 * uSpikeIntensity;
+            }
+
+            float alpha = (core + halo + spikes) * vTwinkle;
+            alpha = clamp(alpha, 0.0, 1.0);
+
+            gl_FragColor = vec4(vColor * vTwinkle, alpha);
+          }
+        `,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+
+      starfieldMesh = new THREE.Points(starGeo, starShaderMat);
+      starfieldMesh.visible = currentSettings.enableStarfield;
+      scene.add(starfieldMesh);
+    }
+    buildAstronomicalStarfield();
+
+    function applyTilt() {
+      const euler = new THREE.Euler(
+        THREE.MathUtils.degToRad(currentSettings.tiltX),
+        THREE.MathUtils.degToRad(currentSettings.tiltY),
+        THREE.MathUtils.degToRad(currentSettings.tiltZ),
+        'XYZ'
+      );
+      if (mwMesh) mwMesh.rotation.copy(euler);
+      if (starfieldMesh) starfieldMesh.rotation.copy(euler);
+    }
+    applyTilt();
+
+    function updateUniforms() {
+      mwUniforms.uBrightness.value = currentSettings.brightness;
+      mwUniforms.uCoreBoost.value = currentSettings.coreBoost;
+      mwUniforms.uContrast.value = currentSettings.contrast;
+      mwUniforms.uSaturation.value = currentSettings.saturation;
+      mwUniforms.uHueShift.value = THREE.MathUtils.degToRad(currentSettings.hueShift);
+      mwUniforms.uColorTemp.value = currentSettings.colorTemp;
+      mwUniforms.uBlackLevel.value = currentSettings.blackLevel;
+      mwUniforms.uNebulaColor.value.set(currentSettings.nebulaColor);
+      mwUniforms.uCoreColor.value.set(currentSettings.coreColor);
+      
+      starUniforms.uStarScale.value = currentSettings.starScale;
+      starUniforms.uBrightness.value = currentSettings.starBrightness;
+      starUniforms.uTwinkleAmp.value = currentSettings.starTwinkle;
+      starUniforms.uSpikeIntensity.value = currentSettings.starSpikes;
+      starUniforms.uExtinction.value = currentSettings.starExtinction;
+    }
+
+    function syncUI() {
+      document.getElementById('sel-texture-mode').value = currentSettings.textureMode;
+      document.getElementById('rng-brightness').value = currentSettings.brightness;
+      document.getElementById('val-brightness').innerText = currentSettings.brightness.toFixed(2);
+
+      document.getElementById('rng-core-boost').value = currentSettings.coreBoost;
+      document.getElementById('val-core-boost').innerText = currentSettings.coreBoost.toFixed(2);
+
+      document.getElementById('rng-contrast').value = currentSettings.contrast;
+      document.getElementById('val-contrast').innerText = currentSettings.contrast.toFixed(2);
+
+      document.getElementById('rng-saturation').value = currentSettings.saturation;
+      document.getElementById('val-saturation').innerText = currentSettings.saturation.toFixed(2);
+
+      document.getElementById('rng-hue').value = currentSettings.hueShift;
+      document.getElementById('val-hue').innerText = currentSettings.hueShift + ' deg';
+
+      document.getElementById('rng-temp').value = currentSettings.colorTemp;
+      document.getElementById('val-temp').innerText = currentSettings.colorTemp.toFixed(2);
+
+      document.getElementById('rng-black-level').value = currentSettings.blackLevel;
+      document.getElementById('val-black-level').innerText = currentSettings.blackLevel.toFixed(3);
+
+      document.getElementById('col-nebula').value = currentSettings.nebulaColor;
+      document.getElementById('col-core').value = currentSettings.coreColor;
+
+      document.getElementById('chk-starfield').checked = currentSettings.enableStarfield;
+      document.getElementById('rng-star-extinction').value = currentSettings.starExtinction;
+      document.getElementById('val-star-extinction').innerText = currentSettings.starExtinction.toFixed(2);
+
+      document.getElementById('rng-star-count').value = currentSettings.starCount;
+      document.getElementById('val-star-count').innerText = currentSettings.starCount.toLocaleString();
+
+      document.getElementById('rng-star-size').value = currentSettings.starScale;
+      document.getElementById('val-star-size').innerText = currentSettings.starScale.toFixed(2) + 'x';
+
+      document.getElementById('rng-star-brightness').value = currentSettings.starBrightness;
+      document.getElementById('val-star-brightness').innerText = currentSettings.starBrightness.toFixed(2);
+
+      document.getElementById('rng-star-twinkle').value = currentSettings.starTwinkle;
+      document.getElementById('val-star-twinkle').innerText = currentSettings.starTwinkle.toFixed(2);
+
+      document.getElementById('rng-star-spikes').value = currentSettings.starSpikes;
+      document.getElementById('val-star-spikes').innerText = currentSettings.starSpikes.toFixed(2);
+
+      document.getElementById('rng-fov').value = currentSettings.fov;
+      document.getElementById('val-fov').innerText = currentSettings.fov + ' deg';
+      document.getElementById('stat-fov').innerText = currentSettings.fov;
+
+      document.getElementById('rng-tilt-x').value = currentSettings.tiltX;
+      document.getElementById('val-tilt-x').innerText = currentSettings.tiltX + ' deg';
+
+      document.getElementById('rng-tilt-y').value = currentSettings.tiltY;
+      document.getElementById('val-tilt-y').innerText = currentSettings.tiltY + ' deg';
+
+      document.getElementById('rng-tilt-z').value = currentSettings.tiltZ;
+      document.getElementById('val-tilt-z').innerText = currentSettings.tiltZ + ' deg';
+    }
+    syncUI();
+
+    // 1-Click Presets
+    document.getElementById('preset-neutral').addEventListener('click', () => {
+      currentSettings.brightness = 1.00;
+      currentSettings.coreBoost = 1.00;
+      currentSettings.contrast = 1.00;
+      currentSettings.saturation = 1.00;
+      currentSettings.hueShift = 0;
+      currentSettings.colorTemp = 0.00;
+      currentSettings.blackLevel = 0.000;
+      currentSettings.nebulaColor = '#ffffff';
+      currentSettings.coreColor = '#ffffff';
+      currentSettings.starExtinction = 0.85;
+      currentSettings.starScale = 0.80;
+      currentSettings.starBrightness = 0.90;
+      updateUniforms();
+      syncUI();
+      showToast('Set to Neutral 1:1 (Raw Photoshop Edits)');
+    });
+
+    document.getElementById('preset-cinematic').addEventListener('click', () => {
+      currentSettings.brightness = 1.80;
+      currentSettings.coreBoost = 1.50;
+      currentSettings.contrast = 1.10;
+      currentSettings.saturation = 1.30;
+      currentSettings.hueShift = 0;
+      currentSettings.colorTemp = 0.00;
+      currentSettings.blackLevel = 0.000;
+      currentSettings.nebulaColor = '#ffffff';
+      currentSettings.coreColor = '#ffffff';
+      currentSettings.starExtinction = 0.90;
+      updateUniforms();
+      syncUI();
+      showToast('Applied Cinematic Glow Preset');
+    });
+
+    document.getElementById('preset-golden').addEventListener('click', () => {
+      currentSettings.brightness = 1.60;
+      currentSettings.coreBoost = 1.80;
+      currentSettings.contrast = 1.15;
+      currentSettings.saturation = 1.30;
+      currentSettings.hueShift = -10;
+      currentSettings.colorTemp = 0.40;
+      currentSettings.nebulaColor = '#fed7aa';
+      currentSettings.coreColor = '#ffffff';
+      currentSettings.starExtinction = 0.85;
+      updateUniforms();
+      syncUI();
+      showToast('Applied Golden Starburst Preset');
+    });
+
+    document.getElementById('preset-cosmic').addEventListener('click', () => {
+      currentSettings.brightness = 1.90;
+      currentSettings.coreBoost = 1.70;
+      currentSettings.contrast = 1.10;
+      currentSettings.saturation = 1.50;
+      currentSettings.hueShift = 25;
+      currentSettings.colorTemp = -0.30;
+      currentSettings.nebulaColor = '#d8b4fe';
+      currentSettings.coreColor = '#fef08a';
+      currentSettings.starExtinction = 0.80;
+      updateUniforms();
+      syncUI();
+      showToast('Applied Cosmic Nebula Preset');
+    });
+
+    // Export & Save Handlers
+    document.getElementById('btn-copy-code').addEventListener('click', () => {
+      const codeStr = `// Milky Way & Starfield Preset Configuration
+export const milkyWayCustomConfig = {
+    texturePath: 'assets/skybox/${currentSettings.textureMode === 'compressed_16k' ? 'milkyway_16k.jpg' : (currentSettings.textureMode === 'ultra_8k' ? 'milkyway_8k.png' : 'milkyway_equirect.png')}',
+    brightness: ${currentSettings.brightness},
+    coreBoost: ${currentSettings.coreBoost},
+    contrast: ${currentSettings.contrast},
+    saturation: ${currentSettings.saturation},
+    hueShift: ${currentSettings.hueShift},
+    colorTemp: ${currentSettings.colorTemp},
+    blackLevel: ${currentSettings.blackLevel},
+    nebulaColor: '${currentSettings.nebulaColor}',
+    coreColor: '${currentSettings.coreColor}',
+    tiltX: ${currentSettings.tiltX},
+    tiltY: ${currentSettings.tiltY},
+    tiltZ: ${currentSettings.tiltZ},
+    starfield: {
+        enabled: ${currentSettings.enableStarfield},
+        count: ${currentSettings.starCount},
+        extinction: ${currentSettings.starExtinction},
+        scale: ${currentSettings.starScale},
+        brightness: ${currentSettings.starBrightness},
+        twinkle: ${currentSettings.starTwinkle},
+        spikes: ${currentSettings.starSpikes}
+    }
+};`;
+
+      navigator.clipboard.writeText(codeStr).then(() => {
+        showToast('JavaScript config copied to clipboard!');
+      }).catch(() => {
+        prompt('Copy code manually:', codeStr);
+      });
+    });
+
+    document.getElementById('btn-download-json').addEventListener('click', () => {
+      const blob = new Blob([JSON.stringify(currentSettings, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'milkyway_preset.json';
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('Downloaded milkyway_preset.json');
+    });
+
+    document.getElementById('btn-save-local').addEventListener('click', () => {
+      localStorage.setItem('milkyway_vivid_preset', JSON.stringify(currentSettings));
+      showToast('Preset saved to browser storage!');
+    });
+
+    document.getElementById('btn-reset-defaults').addEventListener('click', () => {
+      currentSettings = { ...defaultSettings };
+      localStorage.removeItem('milkyway_vivid_preset');
+      syncUI();
+      updateUniforms();
+      buildAstronomicalStarfield();
+      applyTilt();
+      showToast('Reset to 1:1 Neutral Pass-through');
+    });
+
+    // UI Event Listeners
+    document.getElementById('sel-texture-mode').addEventListener('change', (e) => {
+      const mode = e.target.value;
+      currentSettings.textureMode = mode;
+      if (textures[mode]) {
+        mwUniforms.tMilkyWay.value = textures[mode];
+        starUniforms.tMilkyWay.value = textures[mode];
+        const labels = {
+          compressed_16k: '16K Ultra-HD (16384x8192)',
+          ultra_8k: '8K Ultra-HD (8192x4096)',
+          vivid_4k: '4K High-Res (4096x2048)'
+        };
+        document.getElementById('stat-mode').innerText = labels[mode];
+      }
+    });
+
+    document.getElementById('rng-brightness').addEventListener('input', (e) => {
+      const v = parseFloat(e.target.value);
+      currentSettings.brightness = v;
+      mwUniforms.uBrightness.value = v;
+      document.getElementById('val-brightness').innerText = v.toFixed(2);
+    });
+
+    document.getElementById('rng-core-boost').addEventListener('input', (e) => {
+      const v = parseFloat(e.target.value);
+      currentSettings.coreBoost = v;
+      mwUniforms.uCoreBoost.value = v;
+      document.getElementById('val-core-boost').innerText = v.toFixed(2);
+    });
+
+    document.getElementById('rng-contrast').addEventListener('input', (e) => {
+      const v = parseFloat(e.target.value);
+      currentSettings.contrast = v;
+      mwUniforms.uContrast.value = v;
+      document.getElementById('val-contrast').innerText = v.toFixed(2);
+    });
+
+    document.getElementById('rng-saturation').addEventListener('input', (e) => {
+      const v = parseFloat(e.target.value);
+      currentSettings.saturation = v;
+      mwUniforms.uSaturation.value = v;
+      document.getElementById('val-saturation').innerText = v.toFixed(2);
+    });
+
+    document.getElementById('rng-hue').addEventListener('input', (e) => {
+      const deg = parseInt(e.target.value);
+      currentSettings.hueShift = deg;
+      mwUniforms.uHueShift.value = THREE.MathUtils.degToRad(deg);
+      document.getElementById('val-hue').innerText = deg + ' deg';
+    });
+
+    document.getElementById('rng-temp').addEventListener('input', (e) => {
+      const v = parseFloat(e.target.value);
+      currentSettings.colorTemp = v;
+      mwUniforms.uColorTemp.value = v;
+      document.getElementById('val-temp').innerText = v.toFixed(2);
+    });
+
+    document.getElementById('rng-black-level').addEventListener('input', (e) => {
+      const v = parseFloat(e.target.value);
+      currentSettings.blackLevel = v;
+      mwUniforms.uBlackLevel.value = v;
+      document.getElementById('val-black-level').innerText = v.toFixed(3);
+    });
+
+    document.getElementById('col-nebula').addEventListener('input', (e) => {
+      currentSettings.nebulaColor = e.target.value;
+      mwUniforms.uNebulaColor.value.set(e.target.value);
+    });
+
+    document.getElementById('col-core').addEventListener('input', (e) => {
+      currentSettings.coreColor = e.target.value;
+      mwUniforms.uCoreColor.value.set(e.target.value);
+    });
+
+    // Astronomical Starfield Controls
+    document.getElementById('chk-starfield').addEventListener('change', (e) => {
+      currentSettings.enableStarfield = e.target.checked;
+      if (starfieldMesh) starfieldMesh.visible = e.target.checked;
+    });
+
+    document.getElementById('rng-star-extinction').addEventListener('input', (e) => {
+      const ext = parseFloat(e.target.value);
+      currentSettings.starExtinction = ext;
+      starUniforms.uExtinction.value = ext;
+      document.getElementById('val-star-extinction').innerText = ext.toFixed(2);
+    });
+
+    document.getElementById('rng-star-count').addEventListener('change', (e) => {
+      const c = parseInt(e.target.value);
+      currentSettings.starCount = c;
+      document.getElementById('val-star-count').innerText = c.toLocaleString();
+      buildAstronomicalStarfield();
+      applyTilt();
+    });
+
+    document.getElementById('rng-star-size').addEventListener('input', (e) => {
+      const s = parseFloat(e.target.value);
+      currentSettings.starScale = s;
+      starUniforms.uStarScale.value = s;
+      document.getElementById('val-star-size').innerText = s.toFixed(2) + 'x';
+    });
+
+    document.getElementById('rng-star-brightness').addEventListener('input', (e) => {
+      const b = parseFloat(e.target.value);
+      currentSettings.starBrightness = b;
+      starUniforms.uBrightness.value = b;
+      document.getElementById('val-star-brightness').innerText = b.toFixed(2);
+    });
+
+    document.getElementById('rng-star-twinkle').addEventListener('input', (e) => {
+      const t = parseFloat(e.target.value);
+      currentSettings.starTwinkle = t;
+      starUniforms.uTwinkleAmp.value = t;
+      document.getElementById('val-star-twinkle').innerText = t.toFixed(2);
+    });
+
+    document.getElementById('rng-star-spikes').addEventListener('input', (e) => {
+      const sp = parseFloat(e.target.value);
+      currentSettings.starSpikes = sp;
+      starUniforms.uSpikeIntensity.value = sp;
+      document.getElementById('val-star-spikes').innerText = sp.toFixed(2);
+    });
+
+    // Orientation & Toggles
+    document.getElementById('rng-fov').addEventListener('input', (e) => {
+      const fov = parseInt(e.target.value);
+      currentSettings.fov = fov;
+      camera.fov = fov;
+      camera.updateProjectionMatrix();
+      document.getElementById('val-fov').innerText = fov + ' deg';
+      document.getElementById('stat-fov').innerText = fov;
+    });
+
+    document.getElementById('btn-core-view').addEventListener('click', () => {
+      lon = 140;
+      lat = 15;
+    });
+
+    document.getElementById('btn-zenith-view').addEventListener('click', () => {
+      lat = 89.0;
+    });
+
+    document.getElementById('rng-tilt-x').addEventListener('input', (e) => {
+      currentSettings.tiltX = parseInt(e.target.value);
+      document.getElementById('val-tilt-x').innerText = currentSettings.tiltX + ' deg';
+      applyTilt();
+    });
+
+    document.getElementById('rng-tilt-y').addEventListener('input', (e) => {
+      currentSettings.tiltY = parseInt(e.target.value);
+      document.getElementById('val-tilt-y').innerText = currentSettings.tiltY + ' deg';
+      applyTilt();
+    });
+
+    document.getElementById('rng-tilt-z').addEventListener('input', (e) => {
+      currentSettings.tiltZ = parseInt(e.target.value);
+      document.getElementById('val-tilt-z').innerText = currentSettings.tiltZ + ' deg';
+      applyTilt();
+    });
+
+    document.getElementById('chk-autorotate').addEventListener('change', (e) => {
+      autoRotate = e.target.checked;
+    });
+
+    // Window Resize
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // Animation Loop
+    let clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      const elapsedTime = clock.getElapsedTime();
+      starUniforms.uTime.value = elapsedTime;
+
+      if (autoRotate) {
+        lon += 0.08;
+      }
+
+      const phi = THREE.MathUtils.degToRad(90 - lat);
+      const theta = THREE.MathUtils.degToRad(lon);
+
+      const targetX = 500 * Math.sin(phi) * Math.cos(theta);
+      const targetY = 500 * Math.cos(phi);
+      const targetZ = 500 * Math.sin(phi) * Math.sin(theta);
+
+      camera.lookAt(targetX, targetY, targetZ);
+
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>

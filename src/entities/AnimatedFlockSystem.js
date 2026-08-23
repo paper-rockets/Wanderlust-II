@@ -103,6 +103,7 @@ export class AnimatedFlockSystem {
         const count = this.count;
         const data = this.birdData;
 
+        // Dynamic periodic swoop: birds gently descend closer to the player then climb high again
         const swoopWave = Math.sin(time * 0.12);
         const dynamicAltitude = this.altitudeOffset - (swoopWave > 0 ? swoopWave * 35.0 : 0);
         const dynamicForwardZ  = 40.0 - (swoopWave > 0 ? swoopWave * 20.0 : 0);

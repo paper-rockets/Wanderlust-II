@@ -1,0 +1,134 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Ghibli Flight ΓÇö Dense & Varied</title>
+  <link rel="stylesheet" href="./src/index.css" />
+</head>
+<body>
+<div id="debug-overlay" style="position: absolute; z-index: 9999; background: red; color: white; font-size: 24px; padding: 20px; display: none;"></div>
+<script>
+function showError(msg) {
+    var overlay = document.getElementById('debug-overlay');
+    overlay.style.display = 'block';
+    overlay.innerHTML += msg + '<br><br>';
+}
+window.onerror = function(msg, url, line, col, error) {
+    showError('Error: ' + msg + ' at line ' + line);
+};
+window.addEventListener("unhandledrejection", function(event) {
+    showError('Unhandled Promise Rejection: ' + (event.reason ? event.reason.message || event.reason : "unknown"));
+});
+const origConsoleError = console.error;
+console.error = function(...args) {
+    showError('Console Error: ' + args.join(' '));
+    origConsoleError.apply(console, args);
+};
+</script>
+  <div id="app"></div>
+
+  
+  <div id="top-bar" style="position: fixed; top: 16px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; z-index: 10; background: rgba(0,0,0,0.5); padding: 6px 12px; border-radius: 6px;">
+    <button id="pause-toggle" style="background: none; border: none; color: white; cursor: pointer; font-size: 16px; padding: 0;" title="Pause Flight">ΓÅ╕</button>
+    <div id="fps-counter" style="color: #fff; font-family: monospace; font-size: 13px; font-weight: bold; pointer-events: none;">0 FPS</div>
+    <div id="time-label" style="color: #aaddff; font-family: monospace; font-size: 13px; font-weight: bold; pointer-events: none;">≡ƒîà Morning</div>
+    <div id="biome-label" style="color: #ffe066; font-family: monospace; font-size: 13px; font-weight: bold; pointer-events: none; opacity: 0.9;"></div>
+    <button id="time-toggle" style="background: none; border: none; color: white; cursor: pointer; font-size: 16px; padding: 0;" title="Toggle Time">ΓÿÇ∩╕Å</button>
+    <button id="god-mode-btn" style="background: #ffaa00; border: none; color: #000; cursor: pointer; font-size: 12px; font-weight: bold; padding: 3px 8px; border-radius: 4px; margin-left: 6px; text-transform: uppercase;">≡ƒæü∩╕Å God Mode</button>
+    <button id="gui-toggle-btn" style="background: rgba(255,255,255,0.25); border: 1px solid rgba(255,255,255,0.5); color: white; cursor: pointer; font-size: 12px; font-weight: bold; padding: 3px 8px; border-radius: 4px;">ΓÜÖ∩╕Å Settings (H)</button>
+  </div>
+
+  <!-- World Map Overlay -->
+  <div id="world-map" style="position: fixed; bottom: 20px; left: 20px; z-index: 15; background: rgba(0,0,0,0.88); backdrop-filter: blur(12px); border-radius: 12px; padding: 12px; border: 1px solid rgba(255,255,255,0.3); width: 230px; box-sizing: border-box; box-shadow: 0 8px 32px rgba(0,0,0,0.6); transition: all 0.25s ease-in-out;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+      <div id="map-title-text" style="color: #ffe066; font-family: monospace; font-size: 11px; font-weight: bold; letter-spacing: 0.5px;">≡ƒù║∩╕Å RADAR MAP</div>
+      <div style="display: flex; gap: 4px; align-items: center;">
+        <button id="zoom-out-btn" title="Zoom Out" style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); color: #fff; font-family: monospace; font-size: 12px; font-weight: bold; cursor: pointer; padding: 1px 6px; border-radius: 4px; line-height: 1.2;">-</button>
+        <button id="zoom-in-btn" title="Zoom In" style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); color: #fff; font-family: monospace; font-size: 12px; font-weight: bold; cursor: pointer; padding: 1px 6px; border-radius: 4px; line-height: 1.2;">+</button>
+        <button id="expand-map-btn" title="Expand / Collapse Map (M)" style="background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); color: #66ccff; font-family: monospace; font-size: 12px; font-weight: bold; cursor: pointer; padding: 1px 6px; border-radius: 4px; line-height: 1.2;">Γ¢╢</button>
+        <button id="close-map-btn" title="Hide Map" style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); color: #ff6666; font-family: monospace; font-size: 12px; font-weight: bold; cursor: pointer; padding: 1px 6px; border-radius: 4px; line-height: 1.2;">Γ£û</button>
+      </div>
+    </div>
+    <canvas id="map-canvas" width="200" height="200" style="display: block; border-radius: 8px; margin: 0 auto; border: 1px solid rgba(255,255,255,0.35); max-width: 100%;"></canvas>
+    <div id="map-info-text" style="color: #ffffff; font-family: monospace; font-size: 10px; margin-top: 6px; opacity: 0.95; text-align: center; font-weight: bold;">Z: 0m</div>
+  </div>
+
+  
+
+  <div id="hidden-ui" style="display: none;">
+      <button id="editor-toggle">Terrain Editor</button>
+      <button id="crystal-edit-toggle">Edit Crystals</button>
+      <button id="char-toggle">Switch to Whale</button>
+      <button id="invis-toggle">Model: VISIBLE</button>
+      <button id="summer-toggle">Summer Filter: ON</button>
+      <button id="music-toggle">Music</button>
+      <button id="track-toggle">Track: Valley Wind</button>
+      <button id="wind-toggle">Wind: ON</button>
+      <button id="fullscreen-toggle">Fullscreen</button>
+  </div>
+
+
+  
+  
+
+
+
+  
+  <!-- Crystal Editor UI -->
+  <div id="crystal-editor" style="display: none; position: fixed; left: 20px; top: 20px; width: 240px; box-sizing: border-box; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); color: white; padding: 15px; border-radius: 10px; font-family: sans-serif; z-index: 100; max-height: 80vh; overflow-y: auto; border: 1px solid rgba(255,255,255,0.2);">
+    <h3 style="margin-top:0; margin-bottom:10px; font-size:16px;">≡ƒÆÄ Crystal & Env Editor</h3>
+    <div style="margin-bottom: 10px; padding-bottom: 5px; border-bottom: 1px solid #444;">
+      <strong style="font-size:13px; display:block; margin-bottom:5px; color:#aaa;">Flying Crystals</strong>
+      <div style="display:flex; flex-wrap:wrap; gap:5px; margin-bottom: 5px;">
+        <input type="color" id="c-f-col0" value="#6a00ff" style="width:25px;height:25px;padding:0;border:none;cursor:pointer;">
+        <input type="color" id="c-f-col1" value="#ff0066" style="width:25px;height:25px;padding:0;border:none;cursor:pointer;">
+        <input type="color" id="c-f-col2" value="#ff6600" style="width:25px;height:25px;padding:0;border:none;cursor:pointer;">
+        <input type="color" id="c-f-col3" value="#ffcc00" style="width:25px;height:25px;padding:0;border:none;cursor:pointer;">
+        <input type="color" id="c-f-col4" value="#00ffaa" style="width:25px;height:25px;padding:0;border:none;cursor:pointer;">
+        <input type="color" id="c-f-col5" value="#00aaff" style="width:25px;height:25px;padding:0;border:none;cursor:pointer;">
+      </div>
+      <label style="font-size:12px; display:block; margin-bottom:4px;">Opacity <input type="range" id="c-fly-opacity" min="0" max="1" step="0.05" value="1.0" style="width:100%; box-sizing:border-box; display:block;"></label>
+      <label style="font-size:12px; display:block; margin-bottom:4px;">Contrast <input type="range" id="c-fly-contrast" min="0.1" max="3" step="0.1" value="1.0" style="width:100%; box-sizing:border-box; display:block;"></label>
+      <label style="font-size:12px; display:block; margin-bottom:4px;">Hue Shift <input type="range" id="c-fly-hue" min="0" max="1" step="0.01" value="0.0" style="width:100%; box-sizing:border-box; display:block;"></label>
+      <label style="font-size:12px; display:block; margin-bottom:4px;">Base Glow <input type="range" id="c-baseGlow" min="0" max="3" step="0.1" value="1.2" style="width:100%; box-sizing:border-box; display:block;"></label>
+      <label style="font-size:12px; display:block; margin-bottom:4px;">Night Glow <input type="range" id="c-nightGlow" min="0" max="5" step="0.1" value="1.5" style="width:100%; box-sizing:border-box; display:block;"></label>
+      <label style="font-size:12px; display:block; margin-bottom:4px;">Roughness <input type="range" id="c-roughness" min="0" max="1" step="0.05" value="0.08" style="width:100%; box-sizing:border-box; display:block;"></label>
+      <label style="font-size:12px; display:block; margin-bottom:4px;">Metalness <input type="range" id="c-metalness" min="0" max="1" step="0.05" value="0.15" style="width:100%; box-sizing:border-box; display:block;"></label>
+      <label style="font-size:12px; display:block; margin-bottom:4px;">Transmission <input type="range" id="c-transmission" min="0" max="1" step="0.05" value="0.0" style="width:100%; box-sizing:border-box; display:block;"></label>
+      <label style="font-size:12px; display:block; margin-bottom:4px;">Thickness <input type="range" id="c-thickness" min="0" max="20" step="0.5" value="10.0" style="width:100%; box-sizing:border-box; display:block;"></label>
+    </div>
+    <div style="margin-bottom: 5px;">
+      <strong style="font-size:13px; display:block; margin-bottom:5px; color:#aaa;">Ground Crystals (Colors)</strong>
+      <div style="display:flex; flex-wrap:wrap; gap:5px;">
+        <input type="color" id="c-col0" value="#aa00ff" style="width:25px;height:25px;padding:0;border:none;cursor:pointer;">
+        <input type="color" id="c-col1" value="#00ccff" style="width:25px;height:25px;padding:0;border:none;cursor:pointer;">
+        <input type="color" id="c-col2" value="#ff0088" style="width:25px;height:25px;padding:0;border:none;cursor:pointer;">
+        <input type="color" id="c-col3" value="#00ff88" style="width:25px;height:25px;padding:0;border:none;cursor:pointer;">
+        <input type="color" id="c-col4" value="#ffaa00" style="width:25px;height:25px;padding:0;border:none;cursor:pointer;">
+        <input type="color" id="c-col5" value="#ff00cc" style="width:25px;height:25px;padding:0;border:none;cursor:pointer;">
+      </div>
+    </div>
+    <button id="c-close" style="margin-top: 15px; width: 100%; padding: 6px; cursor:pointer; background: #333; color: white; border: 1px solid #555; border-radius: 4px; font-weight: bold; box-sizing: border-box;">Close Editor</button>
+  </div>
+
+  <div id="touch-controls">
+    <div id="joystick-base"><div id="joystick-knob"></div></div>
+    <div id="boost-btn">BOOST</div>
+  </div>
+  
+  <div id="pc-controls-hint" style="display: none; position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.5); color: white; padding: 10px 20px; border-radius: 8px; font-family: sans-serif; pointer-events: none; z-index: 100;">
+    Controls: WASD/Arrows to move, Shift to Boost, Space to Brake, Scroll Wheel to Zoom
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.185.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

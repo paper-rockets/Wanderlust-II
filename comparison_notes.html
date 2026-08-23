@@ -1,0 +1,1040 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wanderlust Worktree Comparison Notes</title>
+    <style>
+        :root {
+            --bg-primary: #121417;
+            --bg-secondary: #1a1d24;
+            --bg-tertiary: #232730;
+            --bg-elevated: #2c323d;
+            --text-primary: #f0f2f5;
+            --text-secondary: #9ba3af;
+            --text-muted: #64748b;
+            --border-subtle: #2d333f;
+            --border-strong: #404859;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --status-good: #10b981;
+            --status-good-bg: rgba(16, 185, 129, 0.15);
+            --status-meh: #f59e0b;
+            --status-meh-bg: rgba(245, 158, 11, 0.15);
+            --status-bad: #ef4444;
+            --status-bad-bg: rgba(239, 68, 68, 0.15);
+            --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-sans);
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.5;
+            padding: 24px;
+            min-height: 100vh;
+        }
+
+        header {
+            max-width: 1400px;
+            margin: 0 auto 20px auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+            border-bottom: 1px solid var(--border-subtle);
+            padding-bottom: 20px;
+        }
+
+        .header-title h1 {
+            font-size: 22px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: var(--text-primary);
+            text-transform: uppercase;
+        }
+
+        .header-title p {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        button.btn {
+            font-family: var(--font-sans);
+            font-size: 13px;
+            font-weight: 600;
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: 1px solid var(--border-strong);
+            background-color: var(--bg-tertiary);
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: background-color 0.15s ease, border-color 0.15s ease;
+        }
+
+        button.btn:hover {
+            background-color: var(--bg-elevated);
+            border-color: var(--text-muted);
+        }
+
+        button.btn-primary {
+            background-color: var(--accent);
+            border-color: var(--accent);
+            color: #ffffff;
+        }
+
+        button.btn-primary:hover {
+            background-color: var(--accent-hover);
+            border-color: var(--accent-hover);
+        }
+
+        .controls-bar {
+            max-width: 1400px;
+            margin: 0 auto 20px auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            background-color: var(--bg-secondary);
+            padding: 12px 16px;
+            border-radius: 8px;
+            border: 1px solid var(--border-subtle);
+        }
+
+        .view-switcher {
+            display: flex;
+            background-color: var(--bg-primary);
+            padding: 3px;
+            border-radius: 6px;
+            border: 1px solid var(--border-subtle);
+        }
+
+        .view-tab {
+            padding: 6px 14px;
+            font-size: 13px;
+            font-weight: 600;
+            border-radius: 4px;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .view-tab.active {
+            background-color: var(--bg-elevated);
+            color: var(--text-primary);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+        }
+
+        .save-indicator-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            font-family: var(--font-mono);
+            color: var(--status-good);
+            background-color: var(--status-good-bg);
+            border: 1px solid var(--status-good);
+            padding: 6px 12px;
+            border-radius: 6px;
+        }
+
+        .save-indicator-badge.saving {
+            color: var(--status-meh);
+            background-color: var(--status-meh-bg);
+            border-color: var(--status-meh);
+        }
+
+        /* Nav Pills for Quick Jump */
+        .worktree-nav {
+            max-width: 1400px;
+            margin: 0 auto 24px auto;
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding-bottom: 8px;
+        }
+
+        .worktree-pill {
+            padding: 8px 14px;
+            font-size: 12px;
+            font-weight: 600;
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            white-space: nowrap;
+            transition: all 0.15s ease;
+        }
+
+        .worktree-pill:hover,
+        .worktree-pill.active {
+            background-color: var(--bg-elevated);
+            color: var(--text-primary);
+            border-color: var(--border-strong);
+        }
+
+        /* Worktree Cards Layout */
+        .worktrees-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 32px;
+        }
+
+        .worktree-card {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+            padding: 24px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--border-subtle);
+            padding-bottom: 16px;
+        }
+
+        .card-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .card-title h2 {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .port-badge {
+            font-family: var(--font-mono);
+            font-size: 12px;
+            font-weight: 600;
+            background-color: var(--bg-elevated);
+            border: 1px solid var(--border-strong);
+            color: var(--accent);
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .url-link {
+            font-family: var(--font-mono);
+            font-size: 13px;
+            font-weight: 600;
+            color: #60a5fa;
+            text-decoration: none;
+            background-color: rgba(59, 130, 246, 0.1);
+            padding: 4px 10px;
+            border-radius: 4px;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            transition: all 0.15s ease;
+        }
+
+        .url-link:hover {
+            background-color: rgba(59, 130, 246, 0.2);
+            text-decoration: underline;
+        }
+
+        .source-path {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: var(--text-muted);
+            background-color: var(--bg-primary);
+            padding: 6px 10px;
+            border-radius: 4px;
+            border: 1px solid var(--border-subtle);
+            margin-top: 8px;
+            word-break: break-all;
+        }
+
+        /* Metrics Row */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: 180px 220px 1fr;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        @media (max-width: 900px) {
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .form-group label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+        }
+
+        input[type="text"],
+        textarea {
+            font-family: var(--font-sans);
+            font-size: 13px;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px;
+            padding: 8px 12px;
+            outline: none;
+            transition: border-color 0.15s ease;
+        }
+
+        input[type="text"]:focus,
+        textarea:focus {
+            border-color: var(--accent);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 38px;
+        }
+
+        /* Terrains Section */
+        .terrains-section-title {
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+        }
+
+        .terrains-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 12px;
+        }
+
+        .terrain-item {
+            background-color: var(--bg-tertiary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px;
+            padding: 10px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .terrain-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .terrain-name {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .status-buttons {
+            display: flex;
+            gap: 4px;
+        }
+
+        .status-btn {
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 3px;
+            border: 1px solid var(--border-subtle);
+            background-color: var(--bg-primary);
+            color: var(--text-muted);
+            cursor: pointer;
+            text-transform: uppercase;
+            transition: all 0.15s ease;
+        }
+
+        .status-btn:hover {
+            color: var(--text-primary);
+            border-color: var(--border-strong);
+        }
+
+        .status-btn.good.active {
+            background-color: var(--status-good-bg);
+            color: var(--status-good);
+            border-color: var(--status-good);
+        }
+
+        .status-btn.meh.active {
+            background-color: var(--status-meh-bg);
+            color: var(--status-meh);
+            border-color: var(--status-meh);
+        }
+
+        .status-btn.bad.active {
+            background-color: var(--status-bad-bg);
+            color: var(--status-bad);
+            border-color: var(--status-bad);
+        }
+
+        .terrain-input {
+            width: 100%;
+            font-size: 12px !important;
+            padding: 6px 8px !important;
+        }
+
+        /* Matrix Table View */
+        .matrix-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+            overflow-x: auto;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        table.comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+            text-align: left;
+        }
+
+        table.comparison-table th,
+        table.comparison-table td {
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--border-subtle);
+            border-right: 1px solid var(--border-subtle);
+            vertical-align: top;
+        }
+
+        table.comparison-table th {
+            background-color: var(--bg-tertiary);
+            font-weight: 700;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            font-size: 11px;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        table.comparison-table tr:hover td {
+            background-color: rgba(255, 255, 255, 0.02);
+        }
+
+        .badge-status {
+            display: inline-block;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 3px;
+            text-transform: uppercase;
+            margin-right: 6px;
+        }
+
+        .badge-status.good { background-color: var(--status-good-bg); color: var(--status-good); }
+        .badge-status.meh { background-color: var(--status-meh-bg); color: var(--status-meh); }
+        .badge-status.bad { background-color: var(--status-bad-bg); color: var(--status-bad); }
+
+        /* Modal for Export */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background-color: rgba(0, 0, 0, 0.75);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            padding: 20px;
+        }
+
+        .modal-content {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-strong);
+            border-radius: 10px;
+            width: 100%;
+            max-width: 800px;
+            max-height: 85vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+        }
+
+        .modal-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-subtle);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 {
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .modal-body {
+            padding: 20px;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .modal-body textarea {
+            width: 100%;
+            height: 350px;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        .modal-footer {
+            padding: 16px 20px;
+            border-top: 1px solid var(--border-subtle);
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="header-title">
+            <h1>Wanderlust Worktree Comparison Notes</h1>
+            <p>Compare performance, UI menu states, visual quality, and terrains across all 9 WebGPU worktrees.</p>
+        </div>
+        <div class="header-actions">
+            <button class="btn" onclick="copyMarkdownSummary()">Copy Markdown</button>
+            <button class="btn" onclick="downloadJSONFile()">Download JSON</button>
+            <button class="btn" onclick="exportJSON()">View JSON</button>
+            <button class="btn" onclick="importJSON()">Import JSON</button>
+            <button class="btn btn-primary" onclick="forceSave()">Save Now</button>
+        </div>
+    </header>
+
+    <div class="controls-bar">
+        <div class="view-switcher">
+            <button class="view-tab active" id="tab-cards" onclick="switchView('cards')">Worktree Editor Cards</button>
+            <button class="view-tab" id="tab-matrix" onclick="switchView('matrix')">Comparison Matrix View</button>
+        </div>
+        <div class="save-indicator-badge" id="save-status">
+            Auto-Save: ACTIVE (Saved locally)
+        </div>
+    </div>
+
+    <nav class="worktree-nav" id="quick-nav"></nav>
+
+    <!-- Cards View -->
+    <main class="worktrees-container" id="cards-view"></main>
+
+    <!-- Matrix View -->
+    <main class="matrix-container" id="matrix-view" style="display: none;"></main>
+
+    <!-- Modal for JSON / Markdown Export -->
+    <div class="modal-overlay" id="export-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-title">Export Data</h3>
+                <button class="btn" onclick="closeModal()">Close</button>
+            </div>
+            <div class="modal-body">
+                <textarea id="modal-textarea" readonly></textarea>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" id="modal-copy-btn" onclick="copyModalContent()">Copy Content</button>
+                <button class="btn" onclick="closeModal()">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const STORAGE_KEY = 'wanderlust_comparison_notes_v1';
+
+        const TERRAIN_NAMES = [
+            'Archipelago',
+            'Ghibli Land',
+            'Vast Plains',
+            'Misty Mountains',
+            'Lush Jungle',
+            'Crystal Land',
+            'Open Ocean',
+            'Desert Dunes',
+            'Badlands Canyon',
+            'North Pole'
+        ];
+
+        const INITIAL_WORKTREES = [
+            {
+                id: 'webgpu-sky-clouds-f713b3',
+                name: 'webgpu-sky-clouds-f713b3',
+                port: 7101,
+                url: 'http://localhost:7101/Wanderlust/',
+                source: 'C:\\Users\\macie\\OneDrive\\Desktop\\WANDERLUST webgpu\\.claude\\worktrees\\webgpu-sky-clouds-f713b3\\src',
+                fps: 'FAST ISH',
+                menu: '',
+                other: 'SEA IS OK, HORIZON IF GOOD',
+                terrains: {
+                    'Archipelago': { status: '', note: '' },
+                    'Ghibli Land': { status: 'bad', note: 'FOG, TREES 23FPS' },
+                    'Vast Plains': { status: '', note: '' },
+                    'Misty Mountains': { status: 'bad', note: 'BAD' },
+                    'Lush Jungle': { status: '', note: '' },
+                    'Crystal Land': { status: 'good', note: 'GOOD' },
+                    'Open Ocean': { status: '', note: '' },
+                    'Desert Dunes': { status: 'bad', note: 'BAD' },
+                    'Badlands Canyon': { status: 'bad', note: 'BAD' },
+                    'North Pole': { status: 'meh', note: 'MEH' }
+                }
+            },
+            {
+                id: 'ocean-rendering-improvements-54a227',
+                name: 'ocean-rendering-improvements-54a227',
+                port: 7102,
+                url: 'http://localhost:7102/Wanderlust/',
+                source: 'C:\\Users\\macie\\OneDrive\\Desktop\\WANDERLUST webgpu\\.claude\\worktrees\\ocean-rendering-improvements-54a227\\src',
+                fps: '',
+                menu: '',
+                other: 'HORIZON IS SHIT',
+                terrains: {}
+            },
+            {
+                id: 'night-sky-gradient-noise-e7b8ec',
+                name: 'night-sky-gradient-noise-e7b8ec',
+                port: 7103,
+                url: 'http://localhost:7103/Wanderlust/',
+                source: 'C:\\Users\\macie\\OneDrive\\Desktop\\WANDERLUST webgpu\\.claude\\worktrees\\night-sky-gradient-noise-e7b8ec\\src',
+                fps: '',
+                menu: '',
+                other: '',
+                terrains: {}
+            },
+            {
+                id: 'stars-time-of-day-d2f036',
+                name: 'stars-time-of-day-d2f036',
+                port: 7104,
+                url: 'http://localhost:7104/Wanderlust/',
+                source: 'C:\\Users\\macie\\OneDrive\\Desktop\\WANDERLUST webgpu\\.claude\\worktrees\\stars-time-of-day-d2f036\\src',
+                fps: '',
+                menu: '',
+                other: '',
+                terrains: {}
+            },
+            {
+                id: 'extract-starfield-milkyway-e299d0',
+                name: 'extract-starfield-milkyway-e299d0',
+                port: 7105,
+                url: 'http://localhost:7105/Wanderlust/',
+                source: 'C:\\Users\\macie\\OneDrive\\Desktop\\WANDERLUST webgpu\\.claude\\worktrees\\extract-starfield-milkyway-e299d0\\src',
+                fps: '',
+                menu: '',
+                other: '',
+                terrains: {}
+            },
+            {
+                id: 'terrain-takeover-issue-0f7dca',
+                name: 'terrain-takeover-issue-0f7dca',
+                port: 7106,
+                url: 'http://localhost:7106/Wanderlust/',
+                source: 'C:\\Users\\macie\\OneDrive\\Desktop\\WANDERLUST webgpu\\.claude\\worktrees\\terrain-takeover-issue-0f7dca\\src',
+                fps: '',
+                menu: '',
+                other: '',
+                terrains: {}
+            },
+            {
+                id: 'game-editor-menu-org-b4f711',
+                name: 'game-editor-menu-org-b4f711',
+                port: 7107,
+                url: 'http://localhost:7107/Wanderlust/',
+                source: 'C:\\Users\\macie\\OneDrive\\Desktop\\WANDERLUST webgpu\\.claude\\worktrees\\game-editor-menu-org-b4f711\\src',
+                fps: '',
+                menu: '',
+                other: '',
+                terrains: {}
+            },
+            {
+                id: 'diff-main-folder-e93bc4',
+                name: 'diff-main-folder-e93bc4',
+                port: 7108,
+                url: 'http://localhost:7108/Wanderlust/',
+                source: 'C:\\Users\\macie\\OneDrive\\Desktop\\WANDERLUST webgpu\\.claude\\worktrees\\diff-main-folder-e93bc4\\src',
+                fps: '',
+                menu: '',
+                other: '',
+                terrains: {}
+            },
+            {
+                id: 'd-a9cf4a',
+                name: 'd-a9cf4a',
+                port: 7109,
+                url: 'http://localhost:7109/Wanderlust/',
+                source: 'C:\\Users\\macie\\OneDrive\\Desktop\\WANDERLUST webgpu\\.claude\\worktrees\\d-a9cf4a\\src',
+                fps: '',
+                menu: '',
+                other: '',
+                terrains: {}
+            }
+        ];
+
+        let state = [];
+        let saveTimeout = null;
+
+        function loadState() {
+            try {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    state = INITIAL_WORKTREES.map(initWt => {
+                        const existing = parsed.find(p => p.id === initWt.id || p.port === initWt.port);
+                        if (existing) {
+                            const mergedTerrains = {};
+                            TERRAIN_NAMES.forEach(tName => {
+                                mergedTerrains[tName] = (existing.terrains && existing.terrains[tName]) || 
+                                                       (initWt.terrains && initWt.terrains[tName]) || 
+                                                       { status: '', note: '' };
+                            });
+                            return {
+                                ...initWt,
+                                fps: existing.fps !== undefined ? existing.fps : initWt.fps,
+                                menu: existing.menu !== undefined ? existing.menu : initWt.menu,
+                                other: existing.other !== undefined ? existing.other : initWt.other,
+                                terrains: mergedTerrains
+                            };
+                        }
+                        const filledTerrains = {};
+                        TERRAIN_NAMES.forEach(tName => {
+                            filledTerrains[tName] = (initWt.terrains && initWt.terrains[tName]) || { status: '', note: '' };
+                        });
+                        return { ...initWt, terrains: filledTerrains };
+                    });
+                } else {
+                    state = INITIAL_WORKTREES.map(initWt => {
+                        const filledTerrains = {};
+                        TERRAIN_NAMES.forEach(tName => {
+                            filledTerrains[tName] = (initWt.terrains && initWt.terrains[tName]) || { status: '', note: '' };
+                        });
+                        return { ...initWt, terrains: filledTerrains };
+                    });
+                }
+            } catch (e) {
+                console.warn('Failed to parse localStorage, resetting to defaults', e);
+                state = JSON.parse(JSON.stringify(INITIAL_WORKTREES));
+            }
+        }
+
+        function triggerAutoSave() {
+            const statusEl = document.getElementById('save-status');
+            if (statusEl) {
+                statusEl.innerText = 'Auto-Saving...';
+                statusEl.classList.add('saving');
+            }
+
+            clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(() => {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+                if (statusEl) {
+                    const timeStr = new Date().toLocaleTimeString();
+                    statusEl.innerText = 'Auto-Save: ACTIVE (Saved at ' + timeStr + ')';
+                    statusEl.classList.remove('saving');
+                }
+            }, 300);
+        }
+
+        function forceSave() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+            const statusEl = document.getElementById('save-status');
+            if (statusEl) {
+                const timeStr = new Date().toLocaleTimeString();
+                statusEl.innerText = 'Auto-Save: ACTIVE (Saved at ' + timeStr + ')';
+                statusEl.classList.remove('saving');
+            }
+            renderMatrixView();
+        }
+
+        function updateField(wtIndex, field, value) {
+            state[wtIndex][field] = value;
+            triggerAutoSave();
+        }
+
+        function updateTerrainNote(wtIndex, terrainName, value) {
+            if (!state[wtIndex].terrains[terrainName]) {
+                state[wtIndex].terrains[terrainName] = { status: '', note: '' };
+            }
+            state[wtIndex].terrains[terrainName].note = value;
+            triggerAutoSave();
+        }
+
+        function setTerrainStatus(wtIndex, terrainName, status, btnElement) {
+            if (!state[wtIndex].terrains[terrainName]) {
+                state[wtIndex].terrains[terrainName] = { status: '', note: '' };
+            }
+            const currentStatus = state[wtIndex].terrains[terrainName].status;
+            const newStatus = (currentStatus === status) ? '' : status;
+            state[wtIndex].terrains[terrainName].status = newStatus;
+
+            // Direct in-place DOM update for responsiveness
+            if (btnElement && btnElement.parentElement) {
+                const buttons = btnElement.parentElement.querySelectorAll('.status-btn');
+                buttons.forEach(btn => btn.classList.remove('active'));
+                if (newStatus !== '') {
+                    btnElement.classList.add('active');
+                }
+            }
+
+            triggerAutoSave();
+        }
+
+        function renderQuickNav() {
+            const navEl = document.getElementById('quick-nav');
+            navEl.innerHTML = state.map((wt, i) => `
+                <a href="#card-${wt.id}" class="worktree-pill">
+                    [${i + 1}] ${wt.name.split('-')[0]} (${wt.port})
+                </a>
+            `).join('');
+        }
+
+        function renderCardsView() {
+            const container = document.getElementById('cards-view');
+            container.innerHTML = state.map((wt, idx) => `
+                <div class="worktree-card" id="card-${wt.id}">
+                    <div class="card-header">
+                        <div>
+                            <div class="card-title">
+                                <h2>${idx + 1}. ${wt.name}</h2>
+                                <span class="port-badge">Port: ${wt.port}</span>
+                                <a href="${wt.url}" target="_blank" class="url-link">${wt.url}</a>
+                            </div>
+                            <div class="source-path">Source: ${wt.source}</div>
+                        </div>
+                    </div>
+
+                    <div class="metrics-grid">
+                        <div class="form-group">
+                            <label>FPS Performance</label>
+                            <input type="text" value="${escapeHtml(wt.fps)}" placeholder="e.g. 60 FPS, FAST ISH, 23 FPS" oninput="updateField(${idx}, 'fps', this.value)">
+                        </div>
+                        <div class="form-group">
+                            <label>Menu State / GUI</label>
+                            <input type="text" value="${escapeHtml(wt.menu)}" placeholder="e.g. Clean, Missing controls, Working" oninput="updateField(${idx}, 'menu', this.value)">
+                        </div>
+                        <div class="form-group">
+                            <label>Other Observations / Sky / Ocean / Lighting</label>
+                            <input type="text" value="${escapeHtml(wt.other)}" placeholder="e.g. SEA IS OK, HORIZON IS GOOD" oninput="updateField(${idx}, 'other', this.value)">
+                        </div>
+                    </div>
+
+                    <div class="terrains-section-title">Terrain & Biome Assessment</div>
+                    <div class="terrains-grid">
+                        ${TERRAIN_NAMES.map(tName => {
+                            const tData = wt.terrains[tName] || { status: '', note: '' };
+                            return `
+                                <div class="terrain-item">
+                                    <div class="terrain-header">
+                                        <span class="terrain-name">${tName}</span>
+                                        <div class="status-buttons">
+                                            <button class="status-btn good ${tData.status === 'good' ? 'active' : ''}" onclick="setTerrainStatus(${idx}, '${tName}', 'good', this)">Good</button>
+                                            <button class="status-btn meh ${tData.status === 'meh' ? 'active' : ''}" onclick="setTerrainStatus(${idx}, '${tName}', 'meh', this)">Meh</button>
+                                            <button class="status-btn bad ${tData.status === 'bad' ? 'active' : ''}" onclick="setTerrainStatus(${idx}, '${tName}', 'bad', this)">Bad</button>
+                                        </div>
+                                    </div>
+                                    <input type="text" class="terrain-input" value="${escapeHtml(tData.note)}" placeholder="Notes..." oninput="updateTerrainNote(${idx}, '${tName}', this.value)">
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderMatrixView() {
+            const container = document.getElementById('matrix-view');
+            container.innerHTML = `
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th style="min-width: 140px;">Worktree</th>
+                            <th style="min-width: 90px;">Port</th>
+                            <th style="min-width: 100px;">FPS</th>
+                            <th style="min-width: 130px;">Menu</th>
+                            <th style="min-width: 180px;">Other Notes</th>
+                            ${TERRAIN_NAMES.map(t => `<th style="min-width: 140px;">${t}</th>`).join('')}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${state.map((wt, idx) => `
+                            <tr>
+                                <td>
+                                    <strong>${idx + 1}. ${wt.name}</strong><br>
+                                    <a href="${wt.url}" target="_blank" style="color: #60a5fa; text-decoration: none; font-size: 11px;">Open URL</a>
+                                </td>
+                                <td style="font-family: var(--font-mono);">${wt.port}</td>
+                                <td><strong>${escapeHtml(wt.fps) || '-'}</strong></td>
+                                <td>${escapeHtml(wt.menu) || '-'}</td>
+                                <td>${escapeHtml(wt.other) || '-'}</td>
+                                ${TERRAIN_NAMES.map(tName => {
+                                    const tData = wt.terrains[tName] || { status: '', note: '' };
+                                    let badge = '';
+                                    if (tData.status === 'good') badge = '<span class="badge-status good">Good</span>';
+                                    else if (tData.status === 'meh') badge = '<span class="badge-status meh">Meh</span>';
+                                    else if (tData.status === 'bad') badge = '<span class="badge-status bad">Bad</span>';
+                                    return `<td>${badge}${escapeHtml(tData.note) || (tData.status ? '' : '-')}</td>`;
+                                }).join('')}
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        function switchView(view) {
+            const cardsTab = document.getElementById('tab-cards');
+            const matrixTab = document.getElementById('tab-matrix');
+            const cardsView = document.getElementById('cards-view');
+            const matrixView = document.getElementById('matrix-view');
+
+            if (view === 'cards') {
+                cardsTab.classList.add('active');
+                matrixTab.classList.remove('active');
+                cardsView.style.display = 'flex';
+                matrixView.style.display = 'none';
+            } else {
+                cardsTab.classList.remove('active');
+                matrixTab.classList.add('active');
+                cardsView.style.display = 'none';
+                matrixView.style.display = 'block';
+                renderMatrixView();
+            }
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        function generateMarkdown() {
+            let md = '# Wanderlust Worktree Comparison Notes\n\n';
+            state.forEach((wt, idx) => {
+                md += `### ${idx + 1}. ${wt.name}\n`;
+                md += `- Port: ${wt.port}\n`;
+                md += `- URL: ${wt.url}\n`;
+                md += `- Source: ${wt.source}\n`;
+                md += `- FPS: ${wt.fps || 'N/A'}\n`;
+                md += `- MENU: ${wt.menu || 'N/A'}\n`;
+                md += `- OTHER: ${wt.other || 'N/A'}\n\n`;
+                md += `**Terrains:**\n`;
+                TERRAIN_NAMES.forEach(tName => {
+                    const tData = wt.terrains[tName] || { status: '', note: '' };
+                    const statusText = tData.status ? `[${tData.status.toUpperCase()}] ` : '';
+                    md += `- ${tName}: ${statusText}${tData.note || 'None'}\n`;
+                });
+                md += '\n---\n\n';
+            });
+            return md;
+        }
+
+        function copyMarkdownSummary() {
+            const md = generateMarkdown();
+            openModal('Markdown Comparison Summary', md);
+        }
+
+        function exportJSON() {
+            const json = JSON.stringify(state, null, 2);
+            openModal('Export JSON Data', json);
+        }
+
+        function downloadJSONFile() {
+            const json = JSON.stringify(state, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'wanderlust_comparison_notes.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function importJSON() {
+            const input = prompt('Paste your exported JSON data here:');
+            if (!input) return;
+            try {
+                const parsed = JSON.parse(input);
+                if (Array.isArray(parsed)) {
+                    state = parsed;
+                    forceSave();
+                    renderCardsView();
+                    renderMatrixView();
+                    alert('Comparison notes imported successfully.');
+                } else {
+                    alert('Invalid format: expected JSON array.');
+                }
+            } catch (e) {
+                alert('JSON parse error: ' + e.message);
+            }
+        }
+
+        function openModal(title, content) {
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('modal-textarea').value = content;
+            document.getElementById('export-modal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('export-modal').style.display = 'none';
+        }
+
+        function copyModalContent() {
+            const textarea = document.getElementById('modal-textarea');
+            textarea.select();
+            navigator.clipboard.writeText(textarea.value).then(() => {
+                const btn = document.getElementById('modal-copy-btn');
+                btn.innerText = 'Copied!';
+                setTimeout(() => { btn.innerText = 'Copy Content'; }, 1500);
+            });
+        }
+
+        // Init
+        loadState();
+        renderQuickNav();
+        renderCardsView();
+        renderMatrixView();
+    </script>
+</body>
+</html>

@@ -1,0 +1,776 @@
+<title>Wanderlust Render Audit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Newsreader:opsz,wght@6..72,300;6..72,400;6..72,500&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+:root{
+  --ground:#eaeef4;
+  --panel:#f8fafc;
+  --panel-2:#eef2f7;
+  --ink:#131b27;
+  --ink-2:#3d4a5c;
+  --ink-dim:#6b7787;
+  --rule:#c9d2de;
+  --rule-soft:#dde4ec;
+  --accent:#b8542f;
+  --accent-soft:#f2dfd6;
+  --critical:#a92948;
+  --critical-soft:#f6dde3;
+  --warn:#8f6712;
+  --warn-soft:#f5e9cf;
+  --good:#22664c;
+  --good-soft:#d9ece3;
+  --code-bg:#e5eaf1;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0d1420;
+    --panel:#141d2c;
+    --panel-2:#1a2434;
+    --ink:#dce4f0;
+    --ink-2:#aeb9c9;
+    --ink-dim:#7b8899;
+    --rule:#2a3547;
+    --rule-soft:#212b3a;
+    --accent:#e28356;
+    --accent-soft:#3a2419;
+    --critical:#e8748f;
+    --critical-soft:#3b1b25;
+    --warn:#d6a848;
+    --warn-soft:#33270f;
+    --good:#5fb894;
+    --good-soft:#152e25;
+    --code-bg:#1c2636;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0d1420;
+  --panel:#141d2c;
+  --panel-2:#1a2434;
+  --ink:#dce4f0;
+  --ink-2:#aeb9c9;
+  --ink-dim:#7b8899;
+  --rule:#2a3547;
+  --rule-soft:#212b3a;
+  --accent:#e28356;
+  --accent-soft:#3a2419;
+  --critical:#e8748f;
+  --critical-soft:#3b1b25;
+  --warn:#d6a848;
+  --warn-soft:#33270f;
+  --good:#5fb894;
+  --good-soft:#152e25;
+  --code-bg:#1c2636;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:var(--ground);
+  color:var(--ink);
+  font-family:"Newsreader",Georgia,"Times New Roman",serif;
+  font-size:18px;
+  line-height:1.62;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1180px;margin:0 auto;padding:0 24px 120px}
+
+.masthead{border-bottom:2px solid var(--ink);padding:56px 0 22px}
+.eyebrow{
+  font-family:"JetBrains Mono",ui-monospace,monospace;
+  font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--ink-dim);margin:0 0 18px;
+}
+h1{
+  font-family:"Archivo",system-ui,sans-serif;font-weight:700;
+  font-size:clamp(34px,6vw,62px);line-height:1.02;letter-spacing:-.028em;
+  margin:0 0 16px;text-wrap:balance;
+}
+.standfirst{
+  font-size:clamp(19px,2.4vw,23px);line-height:1.5;color:var(--ink-2);
+  max-width:60ch;margin:0 0 8px;font-weight:300;
+}
+
+.readout{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  border-bottom:1px solid var(--rule);margin-bottom:64px;
+}
+.readout div{padding:20px 20px 22px 0;border-right:1px solid var(--rule-soft)}
+.readout div:last-child{border-right:none}
+.readout dt{
+  font-family:"JetBrains Mono",monospace;font-size:10.5px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--ink-dim);margin-bottom:7px;
+}
+.readout dd{
+  margin:0;font-family:"Archivo",sans-serif;font-weight:700;font-size:26px;
+  letter-spacing:-.02em;font-variant-numeric:tabular-nums;
+}
+.readout .u{font-size:13px;font-weight:500;color:var(--ink-dim);margin-left:3px}
+
+section{margin-bottom:76px;scroll-margin-top:24px}
+h2{
+  font-family:"Archivo",sans-serif;font-weight:700;font-size:clamp(25px,3.4vw,34px);
+  letter-spacing:-.022em;line-height:1.12;margin:0 0 6px;text-wrap:balance;
+}
+.sec-tag{
+  font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--accent);margin:0 0 14px;
+}
+h3{
+  font-family:"Archivo",sans-serif;font-weight:600;font-size:20px;
+  letter-spacing:-.012em;margin:34px 0 10px;text-wrap:balance;
+}
+h4{
+  font-family:"JetBrains Mono",monospace;font-weight:700;font-size:11.5px;
+  letter-spacing:.13em;text-transform:uppercase;color:var(--ink-dim);margin:22px 0 8px;
+}
+p{margin:0 0 16px;max-width:68ch}
+.lede{font-size:20px;color:var(--ink-2);max-width:64ch;font-weight:300}
+ul,ol{max-width:68ch;padding-left:22px;margin:0 0 16px}
+li{margin-bottom:8px}
+li::marker{color:var(--ink-dim)}
+strong{font-weight:500;color:var(--ink)}
+
+code{
+  font-family:"JetBrains Mono",monospace;font-size:.83em;background:var(--code-bg);
+  padding:.12em .38em;color:var(--ink);white-space:nowrap;
+}
+pre{
+  font-family:"JetBrains Mono",monospace;font-size:12.5px;line-height:1.62;
+  background:var(--code-bg);border-left:2px solid var(--rule);
+  padding:16px 18px;overflow-x:auto;margin:0 0 18px;
+}
+pre code{background:none;padding:0;font-size:inherit;white-space:pre}
+.cmt{color:var(--ink-dim)}
+.del{color:var(--critical)}
+.add{color:var(--good)}
+
+.finding{border-top:1px solid var(--rule);padding-top:26px;margin-top:38px}
+.finding:first-of-type{border-top:2px solid var(--ink)}
+.fhead{display:flex;flex-wrap:wrap;align-items:baseline;gap:12px;margin-bottom:4px}
+.rank{
+  font-family:"JetBrains Mono",monospace;font-weight:700;font-size:13px;
+  color:var(--ink-dim);font-variant-numeric:tabular-nums;
+}
+.ftitle{
+  font-family:"Archivo",sans-serif;font-weight:600;font-size:22px;
+  letter-spacing:-.016em;margin:0;flex:1 1 320px;text-wrap:balance;
+}
+.chip{
+  font-family:"JetBrains Mono",monospace;font-size:10px;font-weight:700;
+  letter-spacing:.11em;text-transform:uppercase;padding:3px 8px;white-space:nowrap;
+}
+.chip.crit{background:var(--critical-soft);color:var(--critical)}
+.chip.warn{background:var(--warn-soft);color:var(--warn)}
+.chip.info{background:var(--good-soft);color:var(--good)}
+.chip.acc{background:var(--accent-soft);color:var(--accent)}
+
+.meta{
+  font-family:"JetBrains Mono",monospace;font-size:11.5px;color:var(--ink-dim);
+  margin:0 0 16px;word-break:break-word;
+}
+
+.split{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--rule);margin:18px 0}
+.split>div{padding:16px 18px}
+.split>div:first-child{border-right:1px solid var(--rule);background:var(--panel-2)}
+.split h4{margin-top:0}
+.split p:last-child{margin-bottom:0}
+@media(max-width:680px){
+  .split{grid-template-columns:1fr}
+  .split>div:first-child{border-right:none;border-bottom:1px solid var(--rule)}
+}
+
+.tw{overflow-x:auto;margin:0 0 20px;border:1px solid var(--rule)}
+table{border-collapse:collapse;width:100%;font-family:"JetBrains Mono",monospace;font-size:12.5px;min-width:520px}
+th{
+  text-align:left;font-weight:700;font-size:10.5px;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--ink-dim);padding:11px 14px;
+  border-bottom:1px solid var(--rule);background:var(--panel-2);white-space:nowrap;
+}
+td{padding:10px 14px;border-bottom:1px solid var(--rule-soft);vertical-align:top;font-variant-numeric:tabular-nums}
+tbody tr:last-child td{border-bottom:none}
+td.num{text-align:right;white-space:nowrap}
+
+.wo{border:1px solid var(--rule);background:var(--panel);margin:0 0 20px}
+.wo-head{
+  display:flex;flex-wrap:wrap;gap:10px 14px;align-items:baseline;
+  padding:14px 18px;border-bottom:1px solid var(--rule);background:var(--panel-2);
+}
+.wo-id{font-family:"JetBrains Mono",monospace;font-weight:700;font-size:12px;color:var(--accent);letter-spacing:.06em}
+.wo-title{font-family:"Archivo",sans-serif;font-weight:600;font-size:17px;letter-spacing:-.012em;margin:0;flex:1 1 260px}
+.wo-body{padding:16px 18px}
+.wo-body p,.wo-body ul{font-size:16.5px}
+.wo dl{
+  display:grid;grid-template-columns:max-content 1fr;gap:6px 16px;margin:14px 0 0;
+  font-size:14px;border-top:1px solid var(--rule-soft);padding-top:14px;
+}
+.wo dt{
+  font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--ink-dim);padding-top:4px;
+}
+.wo dd{margin:0;font-size:15.5px;color:var(--ink-2)}
+
+.lock{border:2px solid var(--critical);padding:22px 24px;margin:0 0 34px;background:var(--critical-soft)}
+.lock h3{margin-top:0;color:var(--critical);font-size:19px}
+.lock p,.lock li{color:var(--ink)}
+.lock p:last-child,.lock ul:last-child{margin-bottom:0}
+
+.note{border-left:2px solid var(--accent);padding:2px 0 2px 18px;margin:0 0 20px;color:var(--ink-2);font-size:16.5px}
+.note p:last-child{margin-bottom:0}
+
+hr.div{border:none;border-top:1px solid var(--rule);margin:56px 0}
+
+footer{
+  border-top:2px solid var(--ink);padding-top:20px;
+  font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--ink-dim);letter-spacing:.05em;
+}
+@media (prefers-reduced-motion:no-preference){
+  section{animation:rise .5s ease-out both}
+  @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+}
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <p class="eyebrow">Wanderlust · Three.js WebGPU · render &amp; foliage audit</p>
+  <h1>Why it runs at 3 FPS, and how the trees get in</h1>
+  <p class="standfirst">A full read of the render path, the day/night lighting, and the terrain rebuild — plus a placement design for the three Ghibli tree cards and a set of work orders that can be handed out one at a time.</p>
+</header>
+
+<dl class="readout">
+  <div><dt>Reported worst case</dt><dd>3<span class="u">fps @ 4K</span></dd></div>
+  <div><dt>Target at 4K</dt><dd>30<span class="u">fps</span></dd></div>
+  <div><dt>God-ray fetches / frame</dt><dd>1.06<span class="u">billion</span></dd></div>
+  <div><dt>Terrain rebuild stall</dt><dd>55<span class="u">ms desktop</span></dd></div>
+  <div><dt>Tree atlas duplication</dt><dd>9<span class="u">→ 1 texture</span></dd></div>
+</dl>
+
+<section>
+  <p class="sec-tag">Summary</p>
+  <h2>The short version</h2>
+  <p class="lede">Nothing here is broken beyond repair, and the trees are not the problem — they are the cheapest thing in the project. Three specific pieces of code are eating the frame.</p>
+
+  <p>The 3 FPS is <strong>not</strong> caused by too much scenery. It is caused by <strong>a full-screen effect that runs 32 times per pixel, every frame, even at night when the sun is below the horizon.</strong> On a 4K screen that is roughly a billion texture reads per frame. No graphics card finishes that in 16 milliseconds. Turning it off at night and scaling it with the screen is the single biggest win available, and it costs nothing visually.</p>
+
+  <p>The washed-out daytime is also a code fact, not a taste problem. The post-processing chain has tone-mapping <em>switched off</em> — <code>outputColorTransform = false</code> — so instead of a filmic curve, colours brighter than 1.0 are pushed through a hard "soft clip" that flattens them to white. Dusk was hand-tuned to sit just under that ceiling, which is why dusk looks superb and day does not. Day sends far more light energy into the same pipe and slams into the ceiling everywhere at once.</p>
+
+  <p>The missing stars are the simplest bug in the file. A comment in <code>main.js</code> says the procedural sky handles stars now, and the old star field is force-disabled to prove it. The procedural sky has <strong>no star code in it at all</strong>. Night is a flat dark-blue dome because that is literally all it draws.</p>
+
+  <p>One more thing worth knowing, because it explains a lot of frustration: the <strong>"Global Brightness" slider does nothing.</strong> It writes <code>renderer.toneMappingExposure</code>, which is inert while post-processing is on. Every adjustment made with it was a no-op.</p>
+</section>
+
+<section>
+  <p class="sec-tag">Status · implemented this session</p>
+  <h2>What is already in the code</h2>
+  <p class="lede">Nine of the ten work orders are done and verified against a running build. Dusk was checked line-by-line after every change and is byte-identical.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Work order</th><th>State</th><th>Verified how</th></tr></thead>
+      <tbody>
+        <tr><td>WO-1 Frame governor</td><td>Done</td><td>Boots reporting <code>desktop-high · budget 8.3Mpx</code>; budget re-applied on resize</td></tr>
+        <tr><td>WO-2 God-ray gate + tiering</td><td>Done</td><td>Node leaves the graph when the sun is off screen; 8/16/24/32 samples by tier</td></tr>
+        <tr><td>WO-3 Day exposure &amp; night light</td><td>Done</td><td>Dusk pinned to 1.0 with an exact snap; day 0.62, night 1.35, all slider-driven</td></tr>
+        <tr><td>WO-4 Star field</td><td>Done</td><td>Two star scales + Milky Way in the sky shader, all gated on <code>uNightFactor</code></td></tr>
+        <tr><td>WO-5 Terrain rebuild</td><td>Done</td><td>Dead colour pass removed, keyed cache (collision-tested), allocation hoisted</td></tr>
+        <tr><td>WO-6 Ghibli tree system</td><td>Done</td><td>1,285 trees at default density across 9 meshes; sliced walk averages 1.5 ms/frame</td></tr>
+        <tr><td>WO-7 Tree editor panel</td><td>Done</td><td>Background Tree Atlas folder: density, LOD, 5 colour pickers, live instance readout</td></tr>
+        <tr><td>WO-8 Sky octave tiering</td><td>Partial</td><td>Octaves tiered 2/3/4, amplitudes renormalised. <strong>Render-order change deliberately not done</strong></td></tr>
+        <tr><td>WO-9 Frustum culling</td><td>Done</td><td>Explicit bounding spheres on pine, jungle and palm meshes; culling re-enabled</td></tr>
+        <tr><td>WO-10 Flight models</td><td>Done</td><td>5 rotations fixed, 4 models removed from the picker</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Measured after the change</h3>
+  <div class="tw">
+    <table>
+      <thead><tr><th>Metric</th><th class="num">Before</th><th class="num">After</th></tr></thead>
+      <tbody>
+        <tr><td>God-ray fetches/frame, 4K worst case</td><td class="num">1,061 M</td><td class="num">265 M — or 0 at night</td></tr>
+        <tr><td>Max framebuffer at 4K</td><td class="num">33.2 Mpx</td><td class="num">8.3 Mpx</td></tr>
+        <tr><td>Terrain colour evaluations per vertex</td><td class="num">2</td><td class="num">1</td></tr>
+        <tr><td>Island-data cache hits in terrain loop</td><td class="num">~0%</td><td class="num">high (keyed map)</td></tr>
+        <tr><td>Tree atlas texture uploads</td><td class="num">9</td><td class="num">1</td></tr>
+        <tr><td>Ghibli trees placed (default density)</td><td class="num">0</td><td class="num">1,285</td></tr>
+        <tr><td>Tree rebuild cost per frame</td><td class="num">—</td><td class="num">1.5 ms avg / 4.4 ms peak</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Tree density is a slider now</h3>
+  <div class="tw">
+    <table>
+      <thead><tr><th class="num">Density</th><th class="num">Trees within 1,100 m</th><th>Reads as</th></tr></thead>
+      <tbody>
+        <tr><td class="num">0.5</td><td class="num">632</td><td>Open parkland</td></tr>
+        <tr><td class="num">1.0</td><td class="num">1,285</td><td>Default</td></tr>
+        <tr><td class="num">1.6</td><td class="num">2,058</td><td>Closed canopy</td></tr>
+        <tr><td class="num">2.0</td><td class="num">2,296</td><td>Maximum</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Worth knowing when tuning: variant 001 is 29 m across at source scale and is scaled to a 17 m height, so its canopy spans roughly 43 m in world units. These are tree <em>clusters</em>, not single trunks. At density 1.0 the average spacing is about 49 m, so crowns already overlap — from the air that reads as continuous forest rather than scattered trees.</p>
+
+  <h3>Two things deliberately left undone</h3>
+  <p><strong>Sky render order (part of WO-8).</strong> Moving the sky dome to draw after opaque geometry is the largest remaining GPU saving, and also the change most likely to expose latent transparency-sorting bugs in the water, ground fog and cloud sprites. It needs a visual pass on all three, so it belongs in its own commit rather than buried in a batch.</p>
+  <p><strong>Half-resolution god rays (part of WO-2).</strong> This needs a second render target in the TSL pipeline, a structural change to <code>PostProcessing.js</code>. Sample-count tiering plus the sun-visibility gate already capture most of the win, so this is a follow-up, not a blocker.</p>
+</section>
+
+<section>
+  <p class="sec-tag">Constraint</p>
+  <h2>The dusk lock</h2>
+
+  <div class="lock">
+    <h3>Do not touch the dusk look</h3>
+    <p>Every change in this document is designed so the Golden Hour Dusk render is <strong>bit-for-bit identical</strong> before and after. Any agent working on this must treat the following as read-only:</p>
+    <ul>
+      <li><code>envConfigs[1]</code> — the Dusk row in <code>src/main.js</code></li>
+      <li>The <code>'Golden Hour Dusk (Default)'</code> preset block</li>
+      <li><code>uDuskFactor</code> and every expression it feeds in <code>proceduralSky.js</code></li>
+      <li><code>uRolloffKnee = 0.75</code> and <code>buildSoftClipNode</code> in <code>PostProcessing.js</code> — dusk's saturation depends on this exact knee</li>
+      <li>The god-ray defaults <code>uIntensity 0.85</code>, <code>uDecay 0.927</code>, <code>uDensity 0.50</code></li>
+    </ul>
+    <p>The technique that makes this safe: <strong>every new control gets a neutral value at dusk.</strong> The exposure multiplier is <code>1.0</code> at dusk. Star brightness is <code>0.0</code> at dusk. Sky-tint lift is <code>0.0</code> at dusk. Multiplying by one and adding zero cannot change a pixel. Day and night get their own values; dusk keeps passing through untouched.</p>
+    <p><strong>Verified:</strong> all 10 dusk-related lines are byte-identical to the previous commit, and the three god-ray constants are unchanged. The exposure lerp also snaps to exactly 1.0 once it is within a rounding error, so returning to dusk from another phase lands on 1.0 precisely rather than 0.9999.</p>
+  </div>
+
+  <div class="note">
+    <p><strong>Acceptance test for every work order:</strong> load the game on the default dusk preset, screenshot, apply the change, screenshot again from the same position. The two images must be identical. If they are not, the change is wrong regardless of how good it looks.</p>
+  </div>
+</section>
+
+<hr class="div">
+
+<section>
+  <p class="sec-tag">Audit · ranked by measured cost</p>
+  <h2>What is actually eating the frame</h2>
+  <p class="lede">Ordered by how many milliseconds each one gives back. The numbering is a work order, not decoration — fix them in this sequence.</p>
+
+  <div class="finding">
+    <div class="fhead">
+      <span class="rank">01</span>
+      <h3 class="ftitle">God rays run at full resolution, always, even below the horizon</h3>
+      <span class="chip crit">Critical</span>
+    </div>
+    <p class="meta">src/core/PostProcessing.js · <code>isGodRaysEnabled = !LOW_GFX</code></p>
+
+    <p>The god-ray pass runs a 32-iteration loop, and each iteration does a dependent texture read of the full scene buffer. That is 32 fetches for every pixel on screen, every frame. The loop had no early exit, no downsampling, and no check for whether the sun was even visible.</p>
+
+    <div class="tw">
+      <table>
+        <thead><tr><th>Display</th><th class="num">Pixels</th><th class="num">Fetches / frame</th><th class="num">GPU cost est.</th></tr></thead>
+        <tbody>
+          <tr><td>1080p, DPR 1</td><td class="num">2,073,600</td><td class="num">66 M</td><td class="num">~4 ms</td></tr>
+          <tr><td>4K, DPR 1.5 (Engine clamp)</td><td class="num">8,294,400</td><td class="num">265 M</td><td class="num">~30 ms</td></tr>
+          <tr><td>4K, DPR 2 (Render HD toggle)</td><td class="num">33,177,600</td><td class="num">1,061 M</td><td class="num">~120 ms+</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>The bottom row is the 3 FPS. <code>Engine.js</code> clamped device pixel ratio to 1.5, but the <em>Render HD</em> toggle in <code>main.js</code> silently overrode it to 2.0. On a 4K panel that quadruples every full-screen pass at once.</p>
+
+    <div class="split">
+      <div>
+        <h4>Before</h4>
+        <p>Sun below the horizon at night, no visible rays anywhere on screen, framerate still on the floor. The pass was running and finding nothing.</p>
+      </div>
+      <div>
+        <h4>After</h4>
+        <p>Identical rays at dusk. The node is removed from the graph entirely when the sun is behind the camera or below the horizon, so the loop genuinely stops executing — a uniform multiply would not have saved anything.</p>
+      </div>
+    </div>
+
+    <h4>What shipped</h4>
+    <ul>
+      <li>Pass gated on sun visibility, with asymmetric on/off thresholds so a sun sitting exactly on the horizon cannot thrash the shader recompile.</li>
+      <li>Sample count by tier: <strong>32</strong> desktop-high, <strong>24</strong> desktop, <strong>16</strong> tablet, <strong>8</strong> mobile — with <code>uDensity</code> compensated so ray length is unchanged.</li>
+      <li>Half-resolution rendering is still outstanding; it needs a second render target.</li>
+    </ul>
+  </div>
+
+  <div class="finding">
+    <div class="fhead">
+      <span class="rank">02</span>
+      <h3 class="ftitle">No resolution budget — the renderer scaled up on exactly the screens it should scale down on</h3>
+      <span class="chip crit">Critical</span>
+    </div>
+    <p class="meta">src/core/Engine.js · src/main.js resize handler</p>
+
+    <p>Pixel ratio was set once at boot and once more when the HD toggle was clicked. The window <code>resize</code> handler called <code>setSize()</code> but never re-evaluated pixel ratio, and nothing measured whether the machine could sustain the resolution it was given.</p>
+
+    <p>A 4K monitor and a phone were treated as the same problem. They are opposite problems: the phone has few pixels and a weak GPU, the 4K monitor has enormous pixels and — usually — a mid-range GPU that was never asked whether it could cope.</p>
+
+    <h4>What shipped</h4>
+    <ul>
+      <li>New <code>src/core/DeviceTier.js</code> caps by <strong>total pixel count</strong>, not DPR: ~2.3 M on mobile, 4 M on tablet, 8.3 M on desktop (4K native).</li>
+      <li><strong>Adaptive resolution</strong> samples frame time over a 90-frame window and moves the render scale in 0.1 steps, floored at 0.6. It uses the median rather than the mean, so one terrain hitch cannot drop the whole resolution, plus a 1.5 s cooldown and a 3-window "good streak" before scaling back up.</li>
+      <li>The budget is re-applied inside the resize handler, so dragging onto a 4K monitor no longer quadruples the framebuffer.</li>
+      <li><em>Render HD</em> is gone, replaced by <em>Auto Resolution</em> and a manual <em>Render Scale</em>. Touching the manual slider turns auto off so the two cannot fight.</li>
+    </ul>
+
+    <div class="note"><p>This is the change that makes a single build viable on phone, tablet, laptop and 4K. Everything else is per-effect tuning; this is the governor.</p></div>
+  </div>
+
+  <div class="finding">
+    <div class="fhead">
+      <span class="rank">03</span>
+      <h3 class="ftitle">Daytime is blown out because tone mapping is disabled</h3>
+      <span class="chip crit">Critical</span>
+      <span class="chip acc">Visual</span>
+    </div>
+    <p class="meta">src/core/PostProcessing.js · src/core/Engine.js</p>
+
+    <p><code>Engine.js</code> sets <code>ACESFilmicToneMapping</code> with exposure 1.8. <code>PostProcessing.js</code> then sets <code>outputColorTransform = false</code>, which makes both of those settings <strong>completely inert</strong> whenever post-processing is on — which is always. Nothing tone-maps. The only thing standing between the scene and the screen is <code>buildSoftClipNode</code>, a Reinhard roll starting at 0.75.</p>
+
+    <p>That was a deliberate choice, and the comment explains why: full ACES desaturated the dusk sky. But it means brightness has no headroom. Look at the light budget:</p>
+
+    <div class="tw">
+      <table>
+        <thead><tr><th>Phase</th><th class="num">Ambient</th><th class="num">Directional</th><th class="num">Total</th><th>Light colour</th><th>Result</th></tr></thead>
+        <tbody>
+          <tr><td>Day</td><td class="num">1.2</td><td class="num">2.4</td><td class="num">3.6</td><td>#fffaeb near-white</td><td>All three channels clip → white</td></tr>
+          <tr><td>Dusk</td><td class="num">1.1</td><td class="num">3.2</td><td class="num">4.3</td><td>#ffaa00 saturated orange</td><td>Blue stays low → colour survives</td></tr>
+          <tr><td>Night</td><td class="num">0.8</td><td class="num">1.8</td><td class="num">2.6</td><td>#88bbff dim blue</td><td>Sky dome forced to near-black</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>Dusk has <em>more</em> total light than day and looks better, because its light is heavily saturated — the blue channel never reaches the ceiling, so hue is preserved. Day's near-white light pushes red, green and blue over the knee simultaneously, and everything above 0.75 collapses toward the same white. That is the haze in the screenshot.</p>
+
+    <h4>What shipped — a per-phase exposure multiplier that is 1.0 at dusk</h4>
+    <pre><code><span class="cmt">// PostProcessing.js — rgb only, applied immediately before the soft clip</span>
+export const uPhaseExposure = uniform(1.0);
+
+<span class="cmt">// main.js — dusk has NO slider and is hard-pinned</span>
+timePhase === 0 ? params.dayExposure     <span class="cmt">// 0.62</span>
+: timePhase === 2 ? params.nightExposure  <span class="cmt">// 1.35</span>
+: <span class="add">1.0</span>                                    <span class="cmt">// DUSK — locked</span></code></pre>
+    <p>Day at 0.62 pulls the whole frame back under the knee, so the soft clip stops flattening and the sky's blue, the grass green and the cloud shading all separate again. Dusk multiplies by one and is provably unchanged.</p>
+    <p>Day light energy was also cut at source — <code>ambI 1.2 → 0.75</code>, <code>dirI 2.4 → 1.6</code> — and the light hue pulled off pure white. Night moonlight went the other way, <code>0.8/1.8 → 1.05/2.2</code>. Both phases now have full colour and intensity controls in a new <strong>Daylight</strong> folder and the existing <strong>Moonlight &amp; Night</strong> folder.</p>
+    <p>The dead <em>Global Brightness</em> slider now drives a real exposure trim instead of the inert <code>toneMappingExposure</code>.</p>
+  </div>
+
+  <div class="finding">
+    <div class="fhead">
+      <span class="rank">04</span>
+      <h3 class="ftitle">Night has no stars because the star code was deleted and never replaced</h3>
+      <span class="chip crit">Critical</span>
+      <span class="chip acc">Visual</span>
+    </div>
+    <p class="meta">src/main.js · src/shaders/atmosphere/proceduralSky.js</p>
+
+    <p>An 8,000-point star field was built, added to the scene, and then hard-disabled in the animation loop every single frame:</p>
+    <pre><code><span class="cmt">// Hide old star field — procedural sky handles stars now</span>
+starMaterial.opacity = 0;
+starField.visible = <span class="del">false</span>;</code></pre>
+    <p>The procedural sky did not handle stars. Searching <code>proceduralSky.js</code> for "star" returned nothing. Its entire night contribution was one constant:</p>
+    <pre><code>const nightBase = vec3(0.015, 0.02, 0.06);   <span class="cmt">// ≈ #040510</span>
+sky = mix(sky, nightSky, uNightFactor);       <span class="cmt">// replaces everything</span></code></pre>
+    <p>Because that <code>mix</code> ran to a factor of 1.0, night also threw away the horizon gradient, the sun haze and the mid-sky band. It was a flat dome at roughly 2% luminance. On an OLED or a colour-managed 4K panel it reads as pure black.</p>
+
+    <h4>What shipped</h4>
+    <ul>
+      <li><strong>Two star scales</strong> — coarse bright stars over fine faint dust — from a hashed 3D cell lookup on the view direction, with jittered in-cell positions so they don't sit on a visible lattice.</li>
+      <li>Magnitude variation from a second hash (a few bright, many faint) and an uncorrelated slow twinkle from a third.</li>
+      <li>A <strong>Milky Way band</strong>: a soft FBM ridge across one tilted great circle.</li>
+      <li>Stars fade out near the horizon the way real ones do through thicker atmosphere.</li>
+      <li>The night mix is now <strong>0.82, not 1.0</strong>, so a trace of horizon gradient survives and the world keeps a skyline.</li>
+      <li>The dead 8,000-point <code>starField</code> object and its per-frame writes are deleted.</li>
+      <li>New sliders: <em>Star Density</em>, <em>Star Brightness</em>, <em>Star Twinkle</em>, <em>Milky Way</em>, <em>Night Sky Lift</em> — every one multiplied by <code>uNightFactor</code>, so none of them can affect dusk.</li>
+    </ul>
+  </div>
+
+  <div class="finding">
+    <div class="fhead">
+      <span class="rank">05</span>
+      <h3 class="ftitle">The terrain rebuild is a 55 ms synchronous freeze, and half of it was duplicated work</h3>
+      <span class="chip crit">Critical</span>
+    </div>
+    <p class="meta">src/main.js <code>updateTerrainGeometry</code> · src/world/TerrainGenerator.js</p>
+
+    <p>Every time the player moves 150 world units, the whole 4000×4000 terrain plane is rebuilt on the main thread in one blocking loop. At the default 128 resolution that is 16,641 vertices, and each vertex triggered roughly 137 simplex-noise evaluations once you follow the call chain:</p>
+
+    <div class="tw">
+      <table>
+        <thead><tr><th>Per vertex</th><th class="num">Calls</th><th>Note</th></tr></thead>
+        <tbody>
+          <tr><td><code>getWorldHeight</code> (centre + 4 normal taps)</td><td class="num">5</td><td>each = island data + 2 biome height fns</td></tr>
+          <tr><td><code>getWorldColor</code></td><td class="num">2</td><td><strong>second call was dead</strong> — result overwritten</td></tr>
+          <tr><td><code>getBiomeAt</code></td><td class="num">1</td><td>recomputed island data again</td></tr>
+          <tr><td><code>getPathStrength</code></td><td class="num">1</td><td>2 noise taps</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>The one-entry memo cache in <code>getIslandData</code> made this worse rather than better. The loop interleaves <code>(x,z)</code>, <code>(x−12,z)</code>, <code>(x+12,z)</code>… so every call evicted the previous one. The cache hit rate was effectively zero.</p>
+
+    <p>Measured against a real simplex implementation: <strong>2.28 M noise calls, ≈ 55 ms in Node.</strong> A browser is 1.5–3× slower and a phone 5–10× slower — so <strong>150 ms to half a second of total freeze</strong> on mobile, recurring every few seconds of flight. Setting <em>Terrain Res</em> to 256 makes it 9 M calls and roughly a quarter-second even on desktop.</p>
+
+    <h4>What shipped</h4>
+    <ul>
+      <li><strong>Deleted the duplicate <code>getWorldColor</code> call.</strong> Pure dead work across 16,641 vertices, every rebuild.</li>
+      <li>Replaced the single-slot cache with a <strong>Map keyed on coordinates quantised to 0.5 units</strong>, so the five height taps per vertex collapse to at most two island-data computations. The key stride was collision-tested across ±60,000 world units.</li>
+      <li>Hoisted a <code>new THREE.Color()</code> that was allocating once per vertex inside the North Pole branch.</li>
+      <li>Removed a <code>console.log</code> that fired with 5% probability inside the hot loop.</li>
+    </ul>
+    <p><strong>Still outstanding:</strong> time-slicing the rebuild across frames, and eventually moving it to a Web Worker. The cache fix removes most of the cost, but the remaining work is still synchronous.</p>
+  </div>
+
+  <div class="finding">
+    <div class="fhead">
+      <span class="rank">06</span>
+      <h3 class="ftitle">The sky dome shades every pixel, then gets painted over</h3>
+      <span class="chip warn">High</span>
+    </div>
+    <p class="meta">src/shaders/atmosphere/proceduralSky.js</p>
+
+    <p>The sky mesh has <code>renderOrder = -1000</code>, so it draws <em>first</em>. Its fragment shader is the most expensive in the project — three FBM evaluations (domain-warped), each four octaves, each octave four hash-and-sin operations. Roughly <strong>48 transcendental ops per pixel</strong>.</p>
+
+    <p>Because it draws first, it shades all of those pixels and then terrain, water, clouds and trees paint straight over the top. On a ground-level shot where terrain fills 70% of the screen, 70% of the most expensive shader in the project is thrown away.</p>
+
+    <h4>What shipped</h4>
+    <ul>
+      <li>FBM octaves are now set by device tier — 4 desktop, 3 tablet, 2 mobile — with amplitudes renormalised per tier so a 2-octave sky has the same overall contrast as a 4-octave one rather than looking washed out.</li>
+    </ul>
+    <h4>Deliberately not shipped</h4>
+    <p>Giving the sky a <strong>high</strong> render order so the depth buffer rejects occluded pixels is worth 40–70% of the heaviest pass in the scene. It is also the change most likely to expose latent transparency-sorting bugs. It needs a visual check on water, ground fog and cloud sprites, and belongs in its own revertable commit.</p>
+  </div>
+
+  <div class="finding">
+    <div class="fhead">
+      <span class="rank">07</span>
+      <h3 class="ftitle">Frustum culling was switched off on every instanced object</h3>
+      <span class="chip warn">High</span>
+    </div>
+    <p class="meta">src/main.js · <code>frustumCulled = false</code> in 16 places</p>
+
+    <p>Seventeen instanced meshes — ten pine species, rocks, bushes, flowers, four cloud layers, birds — all had culling disabled. Every instance was submitted to the GPU on every frame regardless of where the camera pointed. Roughly 970 pine instances plus 300 clouds plus birds were vertex-shaded even when facing the opposite direction.</p>
+
+    <p>The flag was presumably set because the meshes are recycled around the player and their bounding spheres go stale instantly.</p>
+
+    <h4>What shipped</h4>
+    <ul>
+      <li>An explicit <code>boundingSphere</code> is now set per frame on the pine, jungle and palm instanced meshes — centred on the focus point with the spawn radius plus 120 m of padding. Three.js honours <code>object.boundingSphere</code> over the geometry's, so this is correct and cheap.</li>
+      <li>Culling re-enabled on all of them. The padding is generous on purpose: the saving is in the whole-mesh reject, not a tight fit.</li>
+      <li>The new Ghibli tree meshes do the same thing from the start.</li>
+    </ul>
+    <p>Clouds and birds were left alone — they are few, large, and the pop risk outweighs the saving.</p>
+  </div>
+
+  <div class="finding">
+    <div class="fhead">
+      <span class="rank">08</span>
+      <h3 class="ftitle">Tree placement re-randomises, so the forest is never the same twice</h3>
+      <span class="chip warn">High</span>
+      <span class="chip acc">Visual</span>
+    </div>
+    <p class="meta">src/main.js pine recycle pass</p>
+
+    <p>Placement uses rejection sampling with <code>Math.random()</code>: up to 14 attempts per instance, capped at 60 attempts per frame across all species, validated against a hash-grid for minimum spacing. It works, but it has three structural problems.</p>
+
+    <ul>
+      <li><strong>Not deterministic.</strong> Fly away and come back and the forest is completely different. Trees visibly pop into existence in new places.</li>
+      <li><strong>Starved.</strong> The 60-attempts-per-frame cap across ten species means dense forest fills in slowly and visibly.</li>
+      <li><strong>Expensive.</strong> Each attempt calls <code>getWorldHeight</code>, <code>getPathStrength</code>, <code>getBiomeAt</code> and <code>getIslandData</code> — the same heavy noise chain as the terrain rebuild.</li>
+    </ul>
+
+    <h4>What shipped — deterministic cell hashing</h4>
+    <p>The new Ghibli tree system replaces rejection sampling with a hash. The world is divided into fixed cells; a hash of each cell's coordinates yields a fixed number of jittered points. The same cell always yields the same trees. No sampling loop, no random, no popping, and the spacing guarantee comes free from the cell size.</p>
+    <pre><code><span class="cmt">// Deterministic — same input always yields the same tree</span>
+function cellHash(cx, cz, slot) {
+  let h = Math.imul(cx, 374761393) + Math.imul(cz, 668265263) + Math.imul(slot, 2654435761);
+  h = Math.imul(h ^ (h &gt;&gt;&gt; 13), 1274126177);
+  return ((h ^ (h &gt;&gt;&gt; 16)) &gt;&gt;&gt; 0) / 4294967296;
+}</code></pre>
+    <p>Retro-fitting the existing pines to the same scheme is optional and would be a separate work order.</p>
+  </div>
+
+  <div class="finding">
+    <div class="fhead">
+      <span class="rank">09</span>
+      <h3 class="ftitle">Three tree files, one atlas, nine texture uploads</h3>
+      <span class="chip warn">Medium</span>
+    </div>
+    <p class="meta">public/assets/Trees/Ghibli/*.glb</p>
+    <p>Verified by hashing the embedded images: all three GLBs carry <strong>byte-identical textures</strong> (base colour <code>md5 5ae66749…</code>, normal <code>9fc7b283…</code>, roughness <code>8afb0b1d…</code>). Loaded naively through <code>GLTFLoader</code>, that is nine separate 1024×1024 uploads instead of one.</p>
+    <div class="tw">
+      <table>
+        <thead><tr><th>Approach</th><th class="num">Textures</th><th class="num">VRAM (w/ mips)</th></tr></thead>
+        <tbody>
+          <tr><td>Naive — three separate loads</td><td class="num">9</td><td class="num">≈ 48 MB</td></tr>
+          <tr><td>Deduped, all three slots kept</td><td class="num">3</td><td class="num">≈ 16 MB</td></tr>
+          <tr><td>Deduped, base colour only <span class="chip info">shipped</span></td><td class="num">1</td><td class="num">≈ 5.3 MB</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>The normal and roughness maps do nothing under a toon material — <code>MeshToonNodeMaterial</code> quantises lighting to a gradient ramp, so a per-pixel normal perturbation is invisible. Both slots are dropped, along with the <code>TANGENT</code> attribute that existed only to support them (16 bytes per vertex of pure waste).</p>
+  </div>
+</section>
+
+<hr class="div">
+
+<section>
+  <p class="sec-tag">Design · Ghibli foliage</p>
+  <h2>How the trees work</h2>
+  <p class="lede">The good news: these assets are close to ideal, and they already contain the trunk/canopy split you asked for.</p>
+
+  <h3>What the files actually contain</h3>
+  <div class="tw">
+    <table>
+      <thead><tr><th>File</th><th class="num">Verts</th><th class="num">Tris</th><th class="num">Height</th><th class="num">Spread</th><th class="num">Canopy / trunk verts</th></tr></thead>
+      <tbody>
+        <tr><td>Background_Tree_Atlas_001_alt</td><td class="num">104</td><td class="num">101</td><td class="num">11.40</td><td class="num">11.4 × 29.3</td><td class="num">98 / 6</td></tr>
+        <tr><td>Background_Tree_Atlas_002_alt</td><td class="num">46</td><td class="num">36</td><td class="num">7.44</td><td class="num">7.4 × 18.2</td><td class="num">36 / 10</td></tr>
+        <tr><td>Background_Tree_Atlas_003_alt</td><td class="num">114</td><td class="num">109</td><td class="num">7.05</td><td class="num">6.7 × 26.0</td><td class="num">106 / 8</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>All three ship a custom vertex attribute called <code>_IS_CANOPY</code> — a float, 0 on trunk vertices and 1 on canopy vertices. <strong>That is exactly the trunk/canopy separation you asked for, already baked into the mesh.</strong> No geometry splitting is needed; the shader reads the attribute and picks a colour. GLTFLoader lowercases unknown attributes, so it arrives in code as <code>_is_canopy</code>.</p>
+
+  <p>They are alpha-masked, double-sided card clusters with a base at <code>y = 0</code>, so they sit on the ground with no offset. At 36–109 triangles each, <strong>geometry is a non-issue</strong>: ten thousand of them is 700K triangles, which a phone handles comfortably. The cost is entirely <em>fill rate</em> from alpha-tested overdraw, which is why the LOD scheme targets pixels rather than polygons.</p>
+
+  <div class="note"><p>All three are in use. At these triangle counts variety is free, and three silhouettes at three different heights is what stops a procedural forest from reading as a repeating stamp.</p></div>
+
+  <h3>Placement</h3>
+  <p>Deterministic cell hashing on 34 m cells. Each cell hashes to 0–3 candidate trees depending on the density setting. A candidate is kept if:</p>
+  <ul>
+    <li>the biome at that point is Ghibli Land,</li>
+    <li>terrain height sits between the min/max elevation sliders,</li>
+    <li>island mask ≥ 0.35 and path strength &lt; 0.20 — the same tests the pines already use,</li>
+    <li>local slope is below the threshold, so trees don't grow out of cliff faces.</li>
+  </ul>
+  <p>Species is chosen by a low-frequency noise field so you get <strong>groves</strong> of one type rather than an even shuffle, with 18% mixed undergrowth to break up the boundaries. The global thresholds are the measured 33/67 quantiles of that field, so all three species get equal share overall while any given place still favours one. Rotation and a ±17% scale jitter also come from the hash — the same tree is always the same tree.</p>
+
+  <h3>Level of detail</h3>
+  <p>Three bands, each cutting fill rate rather than triangles:</p>
+  <div class="tw">
+    <table>
+      <thead><tr><th>Band</th><th class="num">Range</th><th>Sides</th><th>Wind</th><th class="num">alphaTest</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>near</td><td class="num">0 – 140 m</td><td>Double</td><td>Yes</td><td class="num">0.35</td><td>Full quality where it's seen</td></tr>
+        <tr><td>mid</td><td class="num">140 – 420 m</td><td>Single</td><td>Yes</td><td class="num">0.50</td><td>Halves fragment work</td></tr>
+        <tr><td>far</td><td class="num">420 – 1100 m</td><td>Single</td><td>No</td><td class="num">0.62</td><td>Silhouette only</td></tr>
+        <tr><td>—</td><td class="num">1100 m +</td><td colspan="3">culled</td><td>Terrain tint carries it</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Raising <code>alphaTest</code> with distance is the important trick: it discards more fragments earlier, which directly buys back the fill rate alpha-masked foliage costs. It also reduces the shimmer thin alpha edges produce once they get smaller than a pixel.</p>
+  <p>The bands differ in <em>material</em>, not geometry — at ~100 triangles there is nothing worth decimating, and every millisecond is in the fragment stage. Nine <code>InstancedMesh</code> objects total (3 variants × 3 bands), so nine draw calls.</p>
+
+  <h3>How the cost is kept off the frame</h3>
+  <p>A full sweep at 1,100 m radius visits about 4,200 cells and costs ~30 ms in one burst. That would be a visible hitch every time you moved 55 m. So the <strong>cell walk itself is sliced across 18 frames</strong>, not just the buffer write — measured at <strong>1.5 ms average, 4.4 ms peak</strong>. The instance buffer is only committed once the whole field is known, so it is never shown half-populated.</p>
+
+  <h3>Colour control</h3>
+  <p>The material reads <code>_is_canopy</code> and mixes between two independently editable ramps:</p>
+  <pre><code>canopy = mix(canopyShadow, canopyLit, heightGradient) → canopyTip at the crown
+trunk  = mix(trunkBase, trunkTop, heightGradient)
+final  = mix(trunk, canopy, _is_canopy)</code></pre>
+  <p>Five colour pickers plus a per-tree variation spread, in a <strong>Ghibli Trees → Background Tree Atlas → Colors</strong> folder. The atlas texture is <em>multiplied</em> by these ramps rather than replaced, so the painted detail survives while the palette stays fully editable — and a <em>Texture vs Palette</em> slider blends between the raw atlas and a flat stylised look.</p>
+  <p>Wind sway is weighted by <code>_is_canopy</code> as well as height, so trunks stay rigid and only the crown moves.</p>
+</section>
+
+<hr class="div">
+
+<section>
+  <p class="sec-tag">Delegation</p>
+  <h2>Remaining work orders</h2>
+  <p class="lede">What is left, in the form an agent can pick up cold.</p>
+
+  <div class="wo">
+    <div class="wo-head"><span class="wo-id">WO-8b</span><h3 class="wo-title">Sky render order</h3><span class="chip warn">High value, high risk</span></div>
+    <div class="wo-body">
+      <p>Give the sky dome a high render order so it draws after opaque geometry and the depth buffer rejects occluded pixels before the shader runs. Worth 40–70% of the heaviest pass in the scene on ground-level shots.</p>
+      <dl>
+        <dt>Files</dt><dd><code>src/shaders/atmosphere/proceduralSky.js</code> (<code>mesh.renderOrder</code>)</dd>
+        <dt>Done when</dt><dd>Ground-level frame time drops measurably and nothing sorts wrongly</dd>
+        <dt>Risk</dt><dd>The current order masks transparency sorting that was never tested any other way. Check water surface, ground fog and cloud sprites explicitly. Keep it as its own commit so it can be reverted alone.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="wo">
+    <div class="wo-head"><span class="wo-id">WO-2b</span><h3 class="wo-title">Half-resolution god rays</h3><span class="chip warn">Medium</span></div>
+    <div class="wo-body">
+      <p>Render the ray pass into a half-resolution target and upsample. A further 4× on top of the sample-count tiering already in place.</p>
+      <dl>
+        <dt>Files</dt><dd><code>src/core/PostProcessing.js</code> — needs a second render target in the TSL pipeline</dd>
+        <dt>Risk</dt><dd>Downsampling a pass that reads high-contrast edges causes crawling on thin geometry. Bilinear upsampling with a light blur usually handles it; if it still shimmers, 0.75 scale keeps most of the saving.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="wo">
+    <div class="wo-head"><span class="wo-id">WO-5b</span><h3 class="wo-title">Time-slice the terrain rebuild</h3><span class="chip warn">Medium</span></div>
+    <div class="wo-body">
+      <p>The cache fix removed most of the per-vertex cost, but the rebuild is still one synchronous pass. Process ~2,000 vertices per frame with a running index, flagging <code>needsUpdate</code> once at the end.</p>
+      <dl>
+        <dt>Files</dt><dd><code>src/main.js</code> <code>updateTerrainGeometry</code></dd>
+        <dt>Done when</dt><dd>No frame exceeds 20 ms while the terrain grid moves</dd>
+        <dt>Risk</dt><dd>If the mesh renders while half its vertices are updated you get a visible seam. Double-buffer the position array — about 200 KB, and it removes the problem entirely.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="wo">
+    <div class="wo-head"><span class="wo-id">WO-11</span><h3 class="wo-title">Real-device mobile pass</h3><span class="chip info">Validation</span></div>
+    <div class="wo-body">
+      <p>The device tiers are an informed estimate, not a measurement. WebGPU on Android is recent and on iOS newer still.</p>
+      <dl>
+        <dt>Files</dt><dd><code>src/core/DeviceTier.js</code> — <code>PIXEL_BUDGET</code> and <code>TIER_SETTINGS</code></dd>
+        <dt>Done when</dt><dd>Each tier holds its frame-time target on representative hardware</dd>
+        <dt>Note</dt><dd>Tiers can be forced for testing via <code>localStorage.wl_forceTier</code>.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="wo">
+    <div class="wo-head"><span class="wo-id">WO-12</span><h3 class="wo-title">Preset compatibility for the new settings</h3><span class="chip info">Polish</span></div>
+    <div class="wo-body">
+      <p>New keys (<code>dayExposure</code>, <code>nightExposure</code>, <code>exposureTrim</code>, <code>renderScale</code>, <code>autoResolution</code>, the tree parameters) are missing from previously saved presets.</p>
+      <dl>
+        <dt>Files</dt><dd><code>src/main.js</code> preset load path</dd>
+        <dt>Done when</dt><dd>An old saved preset loads without producing <code>undefined</code> uniforms</dd>
+        <dt>Risk</dt><dd>An undefined uniform is a black screen, not a warning. Every new parameter needs a default at read time.</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<hr class="div">
+
+<section>
+  <p class="sec-tag">Risk register</p>
+  <h2>What could go wrong</h2>
+  <p class="lede">Stated up front, because you asked. Roughly in order of how likely they are to bite.</p>
+
+  <h3>Dusk drift</h3>
+  <p>The single biggest risk. Every one of these changes touches code that dusk flows through. The mitigation is the neutral-value rule — multiply by 1.0, add 0.0 — plus a line-by-line diff check. If an agent reports "dusk looks slightly better now," that is a failure, not a bonus.</p>
+
+  <h3>The soft-clip knee is load-bearing</h3>
+  <p><code>uRolloffKnee = 0.75</code> and <code>outputColorTransform = false</code> are not mistakes; they are a deliberate workaround for ACES desaturating the sky, and the comment in the file says so. Adding a proper filmic curve later is the architecturally correct fix, but it would <strong>require retuning dusk</strong>, which is off the table. The per-phase exposure multiplier works within the existing constraint rather than replacing it.</p>
+
+  <h3>Alpha-masked foliage is a fill-rate trap</h3>
+  <p>These trees are cheap in triangles and expensive in pixels. Flying low through a dense grove is the worst case — many large, overlapping, double-sided, alpha-tested quads. If frame time spikes near the ground, shrink the near-band range rather than thinning the forest; thinning is visible, range reduction is not.</p>
+
+  <h3>Adaptive resolution can feel like the screen is breathing</h3>
+  <p>Mitigated with a median filter, a 3-window good-streak requirement, and a 1.5 s cooldown after every change. If it still reads as unstable, widen the thresholds rather than disabling it — the alternative is a fixed resolution that is wrong on most machines.</p>
+
+  <h3>Preset compatibility</h3>
+  <p>New settings keys mean old saved presets are missing fields. An <code>undefined</code> uniform is a black screen, not a warning. This is WO-12 and it is not done.</p>
+
+  <h3>WebGPU on mobile is uneven</h3>
+  <p>The project uses <code>WebGPURenderer</code> throughout. WebGPU on Android is recent and on iOS newer still. The device tiers are a starting estimate, not a measurement — WO-11.</p>
+
+  <h3>Two pre-existing errors, unrelated to any of this</h3>
+  <p>The console shows repeated <code>ERR_CONNECTION_REFUSED</code> against <code>localhost:9100/api/load-scene</code> and <code>/api/list-models</code>, plus the JSON parse errors they cause. That is a separate editor backend that isn't running. It predates these changes and is harmless, but it is noise that hides real errors.</p>
+</section>
+
+<footer>
+  Wanderlust render &amp; foliage audit · three.js 0.185 WebGPU · noise timings measured on Node, browser 1.5–3× and mobile 5–10× slower
+</footer>
+
+</div>

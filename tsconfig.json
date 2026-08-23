@@ -23,5 +23,5 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "exclude": ["castle-generator-v2", "node_modules", "dist"]
+  "exclude": ["castle-generator-v2", "node_modules", "dist", "external"]
 }

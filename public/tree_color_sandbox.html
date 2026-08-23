@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tree Sandbox Editor - 1 Draw Call & Color Studio</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: monospace, system-ui, -apple-system, sans-serif;
+      background: #0b1120;
+      color: #f8fafc;
+    }
+    #canvas-container {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1;
+    }
+    .panel {
+      position: absolute;
+      z-index: 10;
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid #334155;
+      padding: 16px;
+      border-radius: 8px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 12px 30px rgba(0,0,0,0.6);
+    }
+    #control-panel {
+      top: 16px;
+      left: 16px;
+      width: 360px;
+      max-height: calc(100vh - 32px);
+      overflow-y: auto;
+    }
+    #info-panel {
+      top: 16px;
+      right: 16px;
+      width: 370px;
+      max-height: calc(100vh - 32px);
+      overflow-y: auto;
+    }
+    h2 {
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 12px;
+      color: #38bdf8;
+      border-bottom: 1px solid #334155;
+      padding-bottom: 6px;
+    }
+    h3 {
+      font-size: 12px;
+      text-transform: uppercase;
+      margin-top: 14px;
+      margin-bottom: 8px;
+      color: #94a3b8;
+    }
+    .control-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      font-size: 12px;
+    }
+    .control-row label {
+      color: #cbd5e1;
+    }
+    input[type="color"] {
+      width: 48px;
+      height: 28px;
+      border: 1px solid #475569;
+      border-radius: 4px;
+      background: transparent;
+      cursor: pointer;
+    }
+    input[type="range"] {
+      width: 130px;
+      accent-color: #38bdf8;
+    }
+    select, button {
+      background: #1e293b;
+      color: #f8fafc;
+      border: 1px solid #475569;
+      padding: 8px 12px;
+      font-family: monospace;
+      font-size: 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      width: 100%;
+      text-align: left;
+      margin-bottom: 8px;
+      transition: all 0.2s ease;
+    }
+    button:hover, select:hover {
+      background: #334155;
+      border-color: #38bdf8;
+    }
+    .btn-action {
+      text-align: center;
+      font-weight: bold;
+      background: #0284c7;
+      border-color: #38bdf8;
+    }
+    .btn-action:hover {
+      background: #0369a1;
+    }
+    .btn-special {
+      text-align: center;
+      font-weight: bold;
+      background: #7c3aed;
+      border-color: #a78bfa;
+    }
+    .btn-special:hover {
+      background: #6d28d9;
+    }
+    .btn-secondary {
+      text-align: center;
+      background: #334155;
+    }
+    .tree-item {
+      padding: 8px 10px;
+      background: #1e293b;
+      margin-bottom: 5px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      border: 1px solid transparent;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: all 0.15s;
+    }
+    .tree-item:hover {
+      border-color: #38bdf8;
+      background: #334155;
+    }
+    .tree-item.active {
+      border-color: #38bdf8;
+      background: #0369a1;
+      font-weight: bold;
+    }
+    .tag {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      background: #059669;
+      color: #fff;
+    }
+    .tag-2mat {
+      background: #7c3aed;
+    }
+    #status-bar {
+      position: absolute;
+      bottom: 16px;
+      left: 16px;
+      z-index: 10;
+      background: rgba(15, 23, 42, 0.95);
+      padding: 10px 18px;
+      border-radius: 6px;
+      border: 1px solid #334155;
+      font-size: 12px;
+      color: #38bdf8;
+      max-width: calc(100vw - 32px);
+    }
+    .preset-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .preset-btn {
+      text-align: center;
+      padding: 6px;
+      font-size: 10px;
+      margin-bottom: 0;
+    }
+    #file-input {
+      display: none;
+    }
+    .stats-box {
+      background: #0f172a;
+      border: 1px solid #334155;
+      padding: 8px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      color: #cbd5e1;
+      margin-bottom: 10px;
+      line-height: 1.5;
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="canvas-container"></div>
+  
+  <div id="control-panel" class="panel">
+    <h2>Tree Color Sandbox</h2>
+    
+    <h3>Color Presets</h3>
+    <div class="preset-grid">
+      <button class="preset-btn" id="pre-summer">Summer</button>
+      <button class="preset-btn" id="pre-autumn">Autumn</button>
+      <button class="preset-btn" id="pre-blossom">Blossom</button>
+      <button class="preset-btn" id="pre-frost">Frost</button>
+      <button class="preset-btn" id="pre-golden">Golden</button>
+      <button class="preset-btn" id="pre-reset">Original</button>
+    </div>
+
+    <h3>Global Color Tuning</h3>
+    <div class="control-row">
+      <label>Trunk Tint Color:</label>
+      <input type="color" id="global-trunk-color" value="#7a4d2b">
+    </div>
+    <div class="control-row">
+      <label>Canopy Foliage Color:</label>
+      <input type="color" id="global-canopy-color" value="#2d7a3e">
+    </div>
+    <div class="control-row">
+      <label>Color Intensity:</label>
+      <input type="range" id="color-intensity" min="0.1" max="2.0" step="0.05" value="1.0">
+    </div>
+    <button id="btn-apply-global" class="btn-action">[ Apply Colors to All Trees ]</button>
+    <button id="btn-reset-colors" class="btn-secondary">[ Reset Original Colors ]</button>
+    
+    <h3>Selected Tree Tuning</h3>
+    <div id="selected-stats" class="stats-box">Click any tree in the scene or catalog list to tune it.</div>
+    <div class="control-row">
+      <label>Selected Trunk Color:</label>
+      <input type="color" id="sel-trunk-color" value="#8b5a2b">
+    </div>
+    <div class="control-row">
+      <label>Selected Canopy Color:</label>
+      <input type="color" id="sel-canopy-color" value="#34d399">
+    </div>
+    <button id="btn-apply-selected" class="btn-secondary">[ Apply to Selected Tree Only ]</button>
+
+    <h3>Instancing & Draw Calls</h3>
+    <button id="btn-test-instancing" class="btn-special">[ Test 1 Draw Call Instancing (1,000 Trees) ]</button>
+    <button id="btn-grid-view">[ Return to 5x5 Grid View ]</button>
+
+    <h3>Environment</h3>
+    <div class="control-row">
+      <label>Lighting Preset:</label>
+      <select id="lighting-select" style="width: 140px; margin: 0;">
+        <option value="noon">Noon Sun</option>
+        <option value="sunset">Sunset Gold</option>
+        <option value="foggy">Moody Fog</option>
+      </select>
+    </div>
+    <button id="btn-toggle-wireframe">[ Toggle Wireframe: OFF ]</button>
+    
+    <label for="file-input" style="display: block; width: 100%;">
+      <button type="button" onclick="document.getElementById('file-input').click()" class="btn-secondary">[ Choose / Drop Local GLB Files ]</button>
+    </label>
+    <input type="file" id="file-input" accept=".glb,.gltf" multiple>
+  </div>
+
+  <div id="info-panel" class="panel">
+    <h2>Tree Catalog (25 / 25 Instanced)</h2>
+    <div style="font-size: 11px; color: #94a3b8; margin-bottom: 8px;">
+      100% of models converted: Single-mesh, uncompressed, upright (+Y), centered at origin, with editable materials.
+    </div>
+    <div id="tree-list"></div>
+  </div>
+
+  <div id="status-bar">Initializing 3D viewport...</div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+    const MODEL_FILES = [
+      "Palm_Tropical_01.glb",
+      "Palm_Tropical_02.glb",
+      "Palm_Tropical_03.glb",
+      "Palm_Tropical_04.glb",
+      "Palm_Tropical_05.glb",
+      "Palm_Tropical_Golden_01.glb",
+      "Palm_Tropical_Golden_02.glb",
+      "Pine model  A (2).glb",
+      "Pine model  A (3).glb",
+      "Pine model  A (4).glb",
+      "Pine model  A (5).glb",
+      "Pine model  A (6).glb",
+      "Pine model  A (7).glb",
+      "Pine model  A (8).glb",
+      "Pine model B (1).glb",
+      "Pine model B (2).glb",
+      "Pine model B (3).glb",
+      "Pine model B (4).glb",
+      "Pine model B (6).glb",
+      "Pine_Ghibli_02.glb",
+      "Pine_Stylized_03_Tree.glb",
+      "Pine_Stylized_04_Tree.glb",
+      "Pine_Stylized_05_Tree.glb",
+      "Pine_Stylized_07_Tree.glb",
+      "Pine_Stylized_08_Tree.glb"
+    ];
+
+    const CANDIDATE_BASE_PATHS = [
+      './assets/Trees/Working Folder/',
+      './public/assets/Trees/Working Folder/',
+      '/public/assets/Trees/Working Folder/',
+      '/assets/Trees/Working Folder/',
+      './'
+    ];
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0b1120);
+    scene.fog = new THREE.FogExp2(0x0b1120, 0.007);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 18, 42);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.target.set(0, 5, 0);
+
+    const gridHelper = new THREE.GridHelper(80, 80, 0x38bdf8, 0x1e293b);
+    gridHelper.position.y = -0.01;
+    scene.add(gridHelper);
+
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0xfffaed, 2.2);
+    dirLight.position.set(25, 40, 20);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.width = 2048;
+    dirLight.shadow.mapSize.height = 2048;
+    scene.add(dirLight);
+
+    const hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x1e293b, 0.6);
+    scene.add(hemiLight);
+
+    const gltfLoader = new GLTFLoader();
+    const loadedTrees = [];
+    let selectedTreeIndex = -1;
+    let isWireframe = false;
+    let instancedGroup = null;
+
+    const COLS = 5;
+    const SPACING = 8.0;
+
+    const treeListEl = document.getElementById('tree-list');
+    const statusBar = document.getElementById('status-bar');
+    const selectedStatsEl = document.getElementById('selected-stats');
+
+    // Build Catalog List UI
+    MODEL_FILES.forEach((file, index) => {
+      const itemEl = document.createElement('div');
+      itemEl.className = 'tree-item';
+      itemEl.id = 'catalog-item-' + index;
+      const isDual = file.includes('Pine model  A') || file.includes('Pine_Stylized') || file.includes('Pine_Ghibli');
+      itemEl.innerHTML = '<span>' + file + '</span><span class="tag ' + (isDual ? 'tag-2mat' : '') + '">' + (isDual ? 'Trunk + Canopy' : 'Single Mat') + '</span>';
+      itemEl.addEventListener('click', () => selectTree(index));
+      treeListEl.appendChild(itemEl);
+    });
+
+    async function tryLoadGltf(fileName) {
+      for (const basePath of CANDIDATE_BASE_PATHS) {
+        const fullUrl = encodeURI(basePath + fileName);
+        try {
+          const res = await fetch(fullUrl, { method: 'HEAD' });
+          if (res.ok) {
+            return await gltfLoader.loadAsync(fullUrl);
+          }
+        } catch (e) {}
+      }
+      return await gltfLoader.loadAsync(encodeURI(CANDIDATE_BASE_PATHS[0] + fileName));
+    }
+
+    async function loadAllTrees() {
+      let loadedCount = 0;
+      for (let i = 0; i < MODEL_FILES.length; i++) {
+        const file = MODEL_FILES[i];
+        const col = i % COLS;
+        const row = Math.floor(i / COLS);
+        const posX = (col - (COLS - 1) / 2) * SPACING;
+        const posZ = (row - 2) * SPACING;
+
+        try {
+          const gltf = await tryLoadGltf(file);
+          const rootNode = gltf.scene;
+
+          let targetMesh = null;
+          rootNode.traverse((child) => {
+            if (child.isMesh) {
+              targetMesh = child;
+              child.castShadow = true;
+              child.receiveShadow = true;
+            }
+          });
+
+          if (!targetMesh) continue;
+
+          rootNode.position.set(posX, 0, posZ);
+          scene.add(rootNode);
+
+          let materials;
+          if (Array.isArray(targetMesh.material)) {
+            materials = targetMesh.material.map(m => m.clone());
+            targetMesh.material = materials;
+          } else {
+            materials = [targetMesh.material.clone()];
+            targetMesh.material = materials[0];
+          }
+
+          const originalColors = materials.map(m => m.color ? m.color.clone() : new THREE.Color(0xffffff));
+
+          const treeData = {
+            index: i,
+            file,
+            rootNode,
+            mesh: targetMesh,
+            materials,
+            originalColors,
+            position: new THREE.Vector3(posX, 0, posZ)
+          };
+          loadedTrees[i] = treeData;
+
+          const itemEl = document.getElementById('catalog-item-' + i);
+          if (itemEl) itemEl.style.opacity = '1';
+
+          loadedCount++;
+          statusBar.textContent = 'Loaded ' + loadedCount + '/' + MODEL_FILES.length + ': ' + file;
+        } catch (err) {
+          console.error('Failed loading ' + file, err);
+          const itemEl = document.getElementById('catalog-item-' + i);
+          if (itemEl) itemEl.style.opacity = '0.5';
+        }
+      }
+      statusBar.textContent = 'Successfully loaded all 25 models (100% Upright, Single-Mesh, Uncompressed).';
+    }
+
+    function selectTree(index) {
+      selectedTreeIndex = index;
+      const tree = loadedTrees[index];
+
+      const items = treeListEl.querySelectorAll('.tree-item');
+      items.forEach((it, idx) => {
+        if (idx === index) it.classList.add('active');
+        else it.classList.remove('active');
+      });
+
+      if (!tree) {
+        selectedStatsEl.innerHTML = '<strong>' + MODEL_FILES[index] + '</strong><br>Loading or not yet parsed.';
+        return;
+      }
+
+      controls.target.copy(tree.position).add(new THREE.Vector3(0, 4, 0));
+      camera.position.set(tree.position.x, 6, tree.position.z + 12);
+
+      const matNames = tree.materials.map(m => m.name || 'unnamed').join(', ');
+      const polyCount = tree.mesh.geometry.index ? (tree.mesh.geometry.index.count / 3) : (tree.mesh.geometry.attributes.position.count / 3);
+      selectedStatsEl.innerHTML = '<strong>' + tree.file + '</strong><br>Mesh: 1 | Nodes: 1 (Upright +Y)<br>Primitives / Materials: ' + tree.materials.length + '<br>Material Names: ' + matNames + '<br>Triangles: ' + Math.round(polyCount).toLocaleString();
+      statusBar.textContent = 'Selected: ' + tree.file + ' (' + tree.materials.length + ' separate material primitives on 1 single mesh).';
+    }
+
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+
+    window.addEventListener('pointerdown', (e) => {
+      if (e.target.tagName !== 'CANVAS') return;
+      mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+
+      const meshes = loadedTrees.filter(Boolean).map(t => t.mesh);
+      const intersects = raycaster.intersectObjects(meshes, true);
+      if (intersects.length > 0) {
+        const hitMesh = intersects[0].object;
+        const hitTree = loadedTrees.find(t => t && t.mesh === hitMesh);
+        if (hitTree) {
+          selectTree(hitTree.index);
+        }
+      }
+    });
+
+    function applyColors(trunkColorHex, canopyColorHex, intensity) {
+      const trunkCol = new THREE.Color(trunkColorHex).multiplyScalar(intensity);
+      const canopyCol = new THREE.Color(canopyColorHex).multiplyScalar(intensity);
+
+      loadedTrees.forEach((tree) => {
+        if (!tree) return;
+        if (tree.materials.length >= 2) {
+          tree.materials.forEach((mat) => {
+            const name = (mat.name || '').toLowerCase();
+            if (name.includes('trunk') || name.includes('bark') || name.includes('wood')) {
+              mat.color.copy(trunkCol);
+            } else {
+              mat.color.copy(canopyCol);
+            }
+          });
+        } else if (tree.materials.length === 1) {
+          tree.materials[0].color.copy(canopyCol);
+        }
+      });
+      statusBar.textContent = 'Applied custom Trunk (' + trunkColorHex + ') and Canopy (' + canopyColorHex + ') colors to all trees.';
+    }
+
+    function applySelectedColors() {
+      if (selectedTreeIndex < 0 || !loadedTrees[selectedTreeIndex]) {
+        alert('Please click a tree in the catalog first to select it.');
+        return;
+      }
+      const tree = loadedTrees[selectedTreeIndex];
+      const trunkColorHex = document.getElementById('sel-trunk-color').value;
+      const canopyColorHex = document.getElementById('sel-canopy-color').value;
+      const trunkCol = new THREE.Color(trunkColorHex);
+      const canopyCol = new THREE.Color(canopyColorHex);
+
+      if (tree.materials.length >= 2) {
+        tree.materials.forEach((mat) => {
+          const name = (mat.name || '').toLowerCase();
+          if (name.includes('trunk') || name.includes('bark') || name.includes('wood')) {
+            mat.color.copy(trunkCol);
+          } else {
+            mat.color.copy(canopyCol);
+          }
+        });
+      } else if (tree.materials.length === 1) {
+        tree.materials[0].color.copy(canopyCol);
+      }
+      statusBar.textContent = 'Customized colors for selected tree: ' + tree.file;
+    }
+
+    function resetColors() {
+      loadedTrees.forEach((tree) => {
+        if (!tree) return;
+        tree.materials.forEach((mat, idx) => {
+          if (tree.originalColors[idx]) {
+            mat.color.copy(tree.originalColors[idx]);
+          }
+        });
+      });
+      statusBar.textContent = 'Reset all tree materials to original base colors.';
+    }
+
+    function testInstancedRendering() {
+      if (instancedGroup) {
+        scene.remove(instancedGroup);
+        instancedGroup = null;
+      }
+
+      loadedTrees.forEach(t => { if (t) t.rootNode.visible = false; });
+      gridHelper.visible = false;
+
+      instancedGroup = new THREE.Group();
+      const sampleTree = loadedTrees[selectedTreeIndex >= 0 ? selectedTreeIndex : 8] || loadedTrees.find(Boolean);
+      if (!sampleTree) return;
+
+      const geom = sampleTree.mesh.geometry;
+      const mats = sampleTree.materials;
+
+      const COUNT = 1000;
+      const instMesh = new THREE.InstancedMesh(geom, mats, COUNT);
+      instMesh.castShadow = true;
+      instMesh.receiveShadow = true;
+
+      const dummy = new THREE.Object3D();
+      for (let i = 0; i < COUNT; i++) {
+        const radius = 12 + Math.random() * 80;
+        const angle = Math.random() * Math.PI * 2;
+        const x = Math.cos(angle) * radius;
+        const z = Math.sin(angle) * radius;
+        const scale = 0.6 + Math.random() * 0.8;
+
+        dummy.position.set(x, 0, z);
+        dummy.rotation.y = Math.random() * Math.PI * 2;
+        dummy.scale.set(scale, scale, scale);
+        dummy.updateMatrix();
+
+        instMesh.setMatrixAt(i, dummy.matrix);
+      }
+      instMesh.instanceMatrix.needsUpdate = true;
+
+      instancedGroup.add(instMesh);
+      scene.add(instancedGroup);
+
+      controls.target.set(0, 5, 0);
+      camera.position.set(0, 35, 100);
+      statusBar.textContent = 'Spawned 1,000 Instanced Trees (' + sampleTree.file + ') standing upright on ground.';
+    }
+
+    function returnToGridView() {
+      if (instancedGroup) {
+        scene.remove(instancedGroup);
+        instancedGroup = null;
+      }
+      loadedTrees.forEach(t => { if (t) t.rootNode.visible = true; });
+      gridHelper.visible = true;
+      controls.target.set(0, 5, 0);
+      camera.position.set(0, 18, 42);
+      statusBar.textContent = 'Returned to 5x5 Grid View.';
+    }
+
+    // Presets
+    document.getElementById('pre-summer').addEventListener('click', () => applyColors('#6b4226', '#22c55e', 1.0));
+    document.getElementById('pre-autumn').addEventListener('click', () => applyColors('#5c3a21', '#f97316', 1.1));
+    document.getElementById('pre-blossom').addEventListener('click', () => applyColors('#78350f', '#f472b6', 1.2));
+    document.getElementById('pre-frost').addEventListener('click', () => applyColors('#334155', '#38bdf8', 1.1));
+    document.getElementById('pre-golden').addEventListener('click', () => applyColors('#854d0e', '#eab308', 1.2));
+    document.getElementById('pre-reset').addEventListener('click', resetColors);
+
+    // Event listeners
+    document.getElementById('btn-apply-global').addEventListener('click', () => {
+      const trunk = document.getElementById('global-trunk-color').value;
+      const canopy = document.getElementById('global-canopy-color').value;
+      const intensity = parseFloat(document.getElementById('color-intensity').value);
+      applyColors(trunk, canopy, intensity);
+    });
+
+    document.getElementById('btn-apply-selected').addEventListener('click', applySelectedColors);
+    document.getElementById('btn-reset-colors').addEventListener('click', resetColors);
+    document.getElementById('btn-test-instancing').addEventListener('click', testInstancedRendering);
+    document.getElementById('btn-grid-view').addEventListener('click', returnToGridView);
+
+    document.getElementById('btn-toggle-wireframe').addEventListener('click', (e) => {
+      isWireframe = !isWireframe;
+      e.target.textContent = '[ Toggle Wireframe: ' + (isWireframe ? 'ON ]' : 'OFF ]');
+      loadedTrees.forEach(t => {
+        if (t) t.materials.forEach(m => m.wireframe = isWireframe);
+      });
+    });
+
+    document.getElementById('lighting-select').addEventListener('change', (e) => {
+      const mode = e.target.value;
+      if (mode === 'noon') {
+        dirLight.color.setHex(0xfffaed);
+        dirLight.intensity = 2.2;
+        ambientLight.color.setHex(0xffffff);
+        scene.background.setHex(0x0b1120);
+      } else if (mode === 'sunset') {
+        dirLight.color.setHex(0xff7733);
+        dirLight.intensity = 2.8;
+        ambientLight.color.setHex(0x4a2810);
+        scene.background.setHex(0x2a1510);
+      } else if (mode === 'foggy') {
+        dirLight.color.setHex(0x90caf9);
+        dirLight.intensity = 1.2;
+        ambientLight.color.setHex(0x37474f);
+        scene.background.setHex(0x1e293b);
+      }
+    });
+
+    const fileInput = document.getElementById('file-input');
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files.length > 0) {
+        handleLocalFiles(e.target.files);
+      }
+    });
+
+    window.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    });
+
+    window.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        handleLocalFiles(e.dataTransfer.files);
+      }
+    });
+
+    async function handleLocalFiles(files) {
+      statusBar.textContent = 'Loading dropped files...';
+      for (const file of files) {
+        if (!file.name.endsWith('.glb') && !file.name.endsWith('.gltf')) continue;
+        const url = URL.createObjectURL(file);
+        try {
+          const gltf = await gltfLoader.loadAsync(url);
+          const root = gltf.scene;
+          let mesh = null;
+          root.traverse((c) => { if (c.isMesh) mesh = c; });
+          if (mesh) {
+            const index = MODEL_FILES.indexOf(file.name);
+            const targetIdx = index >= 0 ? index : loadedTrees.length;
+            const col = targetIdx % COLS;
+            const row = Math.floor(targetIdx / COLS);
+            root.position.set((col - (COLS - 1) / 2) * SPACING, 0, (row - 2) * SPACING);
+            scene.add(root);
+
+            let materials = Array.isArray(mesh.material) ? mesh.material.map(m => m.clone()) : [mesh.material.clone()];
+            mesh.material = materials.length > 1 ? materials : materials[0];
+
+            loadedTrees[targetIdx] = {
+              index: targetIdx,
+              file: file.name,
+              rootNode: root,
+              mesh,
+              materials,
+              originalColors: materials.map(m => m.color ? m.color.clone() : new THREE.Color(0xffffff)),
+              position: root.position.clone()
+            };
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      statusBar.textContent = 'Loaded dropped files into sandbox.';
+    }
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    loadAllTrees();
+    animate();
+  </script>
+</body>
+</html>

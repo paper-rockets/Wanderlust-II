@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wanderlust Sandbox Terrain Island</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #0d1527;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #f8fafc;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            padding: 20px;
+            border-radius: 16px;
+            user-select: none;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+            width: 290px;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .header {
+            font-weight: 800;
+            font-size: 16px;
+            margin-bottom: 6px;
+            color: #38bdf8;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .subtitle {
+            font-size: 11px;
+            color: #94a3b8;
+            margin-bottom: 16px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 16px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .control-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .control-label {
+            display: flex;
+            justify-content: space-between;
+            font-weight: 500;
+            color: #cbd5e1;
+        }
+        .control-val {
+            color: #38bdf8;
+            font-weight: bold;
+        }
+        input[type="range"] {
+            width: 100%;
+            accent-color: #38bdf8;
+            background: #334155;
+            height: 6px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(255, 255, 255, 0.04);
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .checkbox-item:hover {
+            background: rgba(255, 255, 255, 0.08);
+        }
+        .checkbox-item input {
+            cursor: pointer;
+            accent-color: #38bdf8;
+        }
+        button {
+            width: 100%;
+            background: #0284c7;
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 8px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.2s ease;
+            box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3);
+        }
+        button:hover {
+            background: #0369a1;
+        }
+        .tip {
+            font-size: 11px;
+            color: #64748b;
+            text-align: center;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="hud">
+        <div class="header">🏝️ Sandbox Island</div>
+        <div class="subtitle">Wanderlust Procedural Test</div>
+        
+        <div class="control-group">
+            <div class="control-item">
+                <div class="control-label">
+                    <span>Island Roughness</span>
+                    <span id="roughness-val" class="control-val">1.0</span>
+                </div>
+                <input type="range" id="roughness" min="0.2" max="2.5" step="0.1" value="1.0">
+            </div>
+
+            <div class="control-item">
+                <div class="control-label">
+                    <span>Water Level</span>
+                    <span id="water-val" class="control-val">1.8</span>
+                </div>
+                <input type="range" id="water" min="0.0" max="6.0" step="0.1" value="1.8">
+            </div>
+
+            <div class="control-item">
+                <div class="control-label">
+                    <span>Island Size</span>
+                    <span id="island-radius-val" class="control-val">80m</span>
+                </div>
+                <input type="range" id="island-radius" min="30" max="180" step="5" value="80">
+            </div>
+
+            <div class="control-item">
+                <div class="control-label">
+                    <span>Island Elevation</span>
+                    <span id="island-elevation-val" class="control-val">24.0</span>
+                </div>
+                <input type="range" id="island-elevation" min="5.0" max="60.0" step="1.0" value="24.0">
+            </div>
+
+            <div class="control-item">
+                <div class="control-label">
+                    <span>Hill Frequency</span>
+                    <span id="noise-frequency-val" class="control-val">1.0x</span>
+                </div>
+                <input type="range" id="noise-frequency" min="0.2" max="3.0" step="0.1" value="1.0">
+            </div>
+
+            <div class="control-item">
+                <div class="control-label">
+                    <span>Tree Density</span>
+                    <span id="trees-val" class="control-val">75</span>
+                </div>
+                <input type="range" id="trees" min="0" max="250" step="5" value="75">
+            </div>
+            
+            <label class="checkbox-item">
+                <span>Auto-Rotating Sun</span>
+                <input type="checkbox" id="rotatesun" checked>
+            </label>
+        </div>
+
+        <button id="regen-btn" style="margin-bottom: 8px;">🔄 Regenerate Terrain</button>
+        <button id="upload-btn" style="margin-bottom: 8px;">📂 Load 3D Model (.glb/.gltf)</button>
+        <input type="file" id="model-upload" accept=".glb,.gltf" style="display:none;">
+        <button id="move-model-btn" style="background: #475569;">📍 Click to Move Model: OFF</button>
+
+        <div id="model-controls" style="display: none; border-top: 1px solid rgba(255, 255, 255, 0.15); padding-top: 12px; margin-top: 12px;">
+            <div class="header" style="font-size: 13px; color: #38bdf8; margin-bottom: 8px;">🏗️ Model Transform</div>
+            
+            <div class="control-item" style="margin-bottom: 8px;">
+                <div class="control-label">
+                    <span>Resize (Scale)</span>
+                    <span id="model-scale-val" class="control-val">1.0</span>
+                </div>
+                <input type="range" id="model-scale" min="0.1" max="5.0" step="0.05" value="1.0">
+            </div>
+
+            <div class="control-item" style="margin-bottom: 8px;">
+                <div class="control-label">
+                    <span>Height (Up/Down)</span>
+                    <span id="model-y-val" class="control-val">0.0</span>
+                </div>
+                <input type="range" id="model-y" min="-10.0" max="25.0" step="0.2" value="0.0">
+            </div>
+
+            <div class="control-item" style="margin-bottom: 8px;">
+                <div class="control-label">
+                    <span>Offset X (Left/Right)</span>
+                    <span id="model-x-val" class="control-val">0.0</span>
+                </div>
+                <input type="range" id="model-x" min="-100.0" max="100.0" step="0.5" value="0.0">
+            </div>
+
+            <div class="control-item" style="margin-bottom: 8px;">
+                <div class="control-label">
+                    <span>Offset Z (Forward/Back)</span>
+                    <span id="model-z-val" class="control-val">0.0</span>
+                </div>
+                <input type="range" id="model-z" min="-100.0" max="100.0" step="0.5" value="0.0">
+            </div>
+
+            <div class="control-item" style="margin-bottom: 8px;">
+                <div class="control-label">
+                    <span>Rotation Y</span>
+                    <span id="model-rot-val" class="control-val">0°</span>
+                </div>
+                <input type="range" id="model-rot" min="0" max="360" step="5" value="0">
+            </div>
+        </div>
+
+        <div class="tip" style="margin-top: 12px;">Left-Click & Drag to Orbit | Right-Click to Pan | Scroll to Zoom | Drag & Drop Model Files</div>
+    </div>
+
+    <!-- Import maps polyfill -->
+    <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.150.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.150.0/examples/jsm/"
+        }
+      }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+        import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
+        import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+
+        // --- App Setup ---
+        let scene, camera, renderer, controls;
+        let islandMesh, waterMesh;
+        let treeGroup;
+        let dirLight;
+        let currentLoadedModel = null;
+        let isPlacementMode = false;
+        let modelBaseScale = 1.0;
+        let modelScaleMult = 1.0;
+        let modelOffsetX = 0.0;
+        let modelOffsetY = 0.0;
+        let modelOffsetZ = 0.0;
+        let modelRotationY = 0.0;
+        
+        let seed = Math.random() * 1000;
+        let roughnessMultiplier = 1.0;
+        let waterLevel = 1.8;
+        let targetTreeCount = 75;
+        let isSunRotating = true;
+
+        let islandRadius = 80;
+        let islandElevation = 24.0;
+        let noiseFrequency = 1.0;
+        const colorSand = new THREE.Color(0xe2c489);
+        const colorGrass = new THREE.Color(0x38b000);
+        const colorRock = new THREE.Color(0x6e4a32);
+        const colorPeak = new THREE.Color(0xd5dbdb);
+
+        const gradientColors = new Uint8Array([
+            160, 160, 160, 255, // Shadows
+            255, 255, 255, 255  // Light
+        ]);
+        const gradientMap = new THREE.DataTexture(gradientColors, 2, 1, THREE.RGBAFormat);
+        gradientMap.needsUpdate = true;
+        gradientMap.minFilter = THREE.NearestFilter;
+        gradientMap.magFilter = THREE.NearestFilter;
+        gradientMap.generateMipmaps = false;
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xbfdbfe); // Sky blue
+            scene.fog = new THREE.FogExp2(0xbfdbfe, 0.0018);
+
+            camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 1.0, 1000);
+            camera.position.set(120, 90, 140);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.05;
+            document.body.appendChild(renderer.domElement);
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxPolarAngle = Math.PI / 2 - 0.05; // Don't orbit below ground
+            controls.minDistance = 30;
+            controls.maxDistance = 350;
+            controls.target.set(0, 5, 0);
+
+            // --- Lighting ---
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.55);
+            scene.add(ambientLight);
+
+            dirLight = new THREE.DirectionalLight(0xfff8ee, 1.25);
+            dirLight.position.set(120, 150, 50);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 2048;
+            dirLight.shadow.mapSize.height = 2048;
+            dirLight.shadow.camera.near = 10;
+            dirLight.shadow.camera.far = 500;
+            const d = 120;
+            dirLight.shadow.camera.left = -d;
+            dirLight.shadow.camera.right = d;
+            dirLight.shadow.camera.top = d;
+            dirLight.shadow.camera.bottom = -d;
+            dirLight.shadow.bias = -0.0005;
+            scene.add(dirLight);
+
+            // --- Build Scene Elements ---
+            buildWater();
+            buildTerrain();
+            spawnTrees();
+
+            // --- Event Listeners ---
+            window.addEventListener('resize', onWindowResize);
+            setupUI();
+
+            animate(0);
+        }
+
+        // --- Procedural Generation Logic ---
+        
+        // Simple organic noise function using stacked waves
+        function getNoise(x, z, s) {
+            const f = noiseFrequency;
+            let val = Math.sin(x * 0.045 * f + s) * Math.cos(z * 0.045 * f - s) * 8.0;
+            val += Math.cos(x * 0.12 * f - s * 1.5) * Math.sin(z * 0.12 * f + s) * 2.5;
+            val += Math.sin(x * 0.35 * f + s * 2) * Math.cos(z * 0.35 * f + s * 3) * 0.7;
+            return val;
+        }
+
+        function getTerrainHeight(x, z) {
+            const dist = Math.sqrt(x*x + z*z);
+            
+            // Base circular gradient to shape it into an island
+            const radialFalloff = Math.max(0.0, 1.0 - (dist / islandRadius));
+            let height = radialFalloff * islandElevation;
+
+            // Apply noise for bumps/valleys
+            if (radialFalloff > 0) {
+                const noiseVal = getNoise(x, z, seed);
+                height += noiseVal * roughnessMultiplier * radialFalloff;
+            }
+
+            // Shore shelf flattening
+            if (height < 0.2) {
+                height = height * 0.5 - 1.0;
+            }
+
+            return height;
+        }
+
+        function buildTerrain() {
+            if (islandMesh) scene.remove(islandMesh);
+
+            const gridSegments = 140;
+            const geo = new THREE.PlaneGeometry(240, 240, gridSegments, gridSegments);
+            geo.rotateX(-Math.PI / 2); // Orient flat
+
+            const pos = geo.attributes.position;
+            const colors = [];
+
+            // 1. Calculate heights and normals
+            for (let i = 0; i < pos.count; i++) {
+                const x = pos.getX(i);
+                const z = pos.getZ(i);
+                const h = getTerrainHeight(x, z);
+                pos.setY(i, h);
+            }
+            geo.computeVertexNormals();
+
+            // 2. Procedural vertex coloring based on height and slope
+            const normals = geo.attributes.normal;
+            const tempCol = new THREE.Color();
+
+            for (let i = 0; i < pos.count; i++) {
+                const y = pos.getY(i);
+                const nx = normals.getX(i);
+                const ny = normals.getY(i);
+                const nz = normals.getZ(i);
+
+                // Slope/cliffface determination (ny represents normal verticality)
+                const verticality = ny;
+
+                if (y < waterLevel - 0.4) {
+                    // Deep seabed sand
+                    tempCol.copy(colorSand).lerp(new THREE.Color(0xbfa570), 0.3);
+                } else if (y < waterLevel + 1.2) {
+                    // Beach Shoreline
+                    tempCol.copy(colorSand);
+                } else if (verticality < 0.68) {
+                    // Steep cliff face
+                    tempCol.copy(colorRock).multiplyScalar(0.75 + Math.random() * 0.1);
+                } else {
+                    // Grassy plains / peaks
+                    if (y > islandElevation * 0.67) {
+                        // Snowy peaks
+                        tempCol.copy(colorPeak).lerp(colorRock, 0.25);
+                    } else {
+                        // Mix grass and sand at transitions
+                        if (y < waterLevel + 2.5) {
+                            const t = (y - (waterLevel + 1.2)) / 1.3;
+                            tempCol.copy(colorSand).lerp(colorGrass, t);
+                        } else {
+                            tempCol.copy(colorGrass);
+                        }
+                    }
+                }
+                colors.push(tempCol.r, tempCol.g, tempCol.b);
+            }
+
+            geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+            const mat = new THREE.MeshToonMaterial({
+                vertexColors: true,
+                gradientMap: gradientMap,
+                flatShading: true,
+                dithering: true
+            });
+
+            islandMesh = new THREE.Mesh(geo, mat);
+            islandMesh.castShadow = true;
+            islandMesh.receiveShadow = true;
+            scene.add(islandMesh);
+        }
+
+        function buildWater() {
+            if (waterMesh) scene.remove(waterMesh);
+
+            const waterGeo = new THREE.PlaneGeometry(600, 600);
+            waterGeo.rotateX(-Math.PI / 2);
+
+            const waterMat = new THREE.MeshStandardMaterial({
+                color: 0x0ea5e9,
+                transparent: true,
+                opacity: 0.82,
+                roughness: 0.12,
+                metalness: 0.15,
+                flatShading: true
+            });
+
+            waterMesh = new THREE.Mesh(waterGeo, waterMat);
+            waterMesh.position.y = waterLevel;
+            waterMesh.receiveShadow = true;
+            scene.add(waterMesh);
+        }
+
+        function spawnTrees() {
+            if (treeGroup) scene.remove(treeGroup);
+            treeGroup = new THREE.Group();
+
+            const trunkGeo = new THREE.CylinderGeometry(0.18, 0.35, 2.2, 5);
+            trunkGeo.translate(0, 1.1, 0);
+            const leafGeo1 = new THREE.ConeGeometry(1.2, 2.2, 5);
+            leafGeo1.translate(0, 2.8, 0);
+            const leafGeo2 = new THREE.ConeGeometry(0.85, 1.6, 5);
+            leafGeo2.translate(0, 4.0, 0);
+
+            const trunkMat = new THREE.MeshToonMaterial({ color: 0x4a3728, gradientMap: gradientMap, flatShading: true });
+            const leafMat = new THREE.MeshToonMaterial({ color: 0x15803d, gradientMap: gradientMap, flatShading: true });
+
+            let spawned = 0;
+            let attempts = 0;
+
+            while (spawned < targetTreeCount && attempts < 800) {
+                attempts++;
+                const x = (Math.random() - 0.5) * 150;
+                const z = (Math.random() - 0.5) * 150;
+                
+                // Get ground height
+                const h = getTerrainHeight(x, z);
+
+                // Spawn rules: only on flat grassy parts above shoreline, not on steep slopes
+                const normalSample = getNormalAt(x, z);
+                if (h > waterLevel + 1.8 && h < 15.0 && normalSample.y > 0.85) {
+                    const instGroup = new THREE.Group();
+                    
+                    const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+                    trunk.castShadow = true;
+                    trunk.receiveShadow = true;
+                    
+                    const leaves1 = new THREE.Mesh(leafGeo1, leafMat);
+                    leaves1.castShadow = true;
+                    leaves1.receiveShadow = true;
+
+                    const leaves2 = new THREE.Mesh(leafGeo2, leafMat);
+                    leaves2.castShadow = true;
+                    leaves2.receiveShadow = true;
+
+                    instGroup.add(trunk, leaves1, leaves2);
+                    instGroup.position.set(x, h - 0.15, z);
+
+                    const scale = 0.55 + Math.random() * 0.7;
+                    instGroup.scale.set(scale, scale * (0.9 + Math.random() * 0.2), scale);
+                    instGroup.rotateY(Math.random() * Math.PI * 2);
+
+                    treeGroup.add(instGroup);
+                    spawned++;
+                }
+            }
+
+            scene.add(treeGroup);
+        }
+
+        // Helper to retrieve normal at coordinates
+        function getNormalAt(x, z) {
+            const epsilon = 0.5;
+            const hL = getTerrainHeight(x - epsilon, z);
+            const hR = getTerrainHeight(x + epsilon, z);
+            const hD = getTerrainHeight(x, z - epsilon);
+            const hU = getTerrainHeight(x, z + epsilon);
+
+            const normal = new THREE.Vector3(hL - hR, 2.0 * epsilon, hD - hU);
+            return normal.normalize();
+        }
+
+        function updateModelTransform() {
+            if (!currentLoadedModel) return;
+            currentLoadedModel.position.x = modelOffsetX;
+            currentLoadedModel.position.z = modelOffsetZ;
+            const h = getTerrainHeight(modelOffsetX, modelOffsetZ);
+            currentLoadedModel.position.y = h + modelOffsetY;
+            const s = modelBaseScale * modelScaleMult;
+            currentLoadedModel.scale.set(s, s, s);
+            currentLoadedModel.rotation.y = modelRotationY;
+        }
+
+        function loadModelFile(file) {
+            const url = URL.createObjectURL(file);
+            
+            const dracoLoader = new DRACOLoader();
+            dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+
+            const ktx2Loader = new KTX2Loader()
+                .setTranscoderPath('https://cdn.jsdelivr.net/npm/three@0.150.0/examples/js/libs/basis/')
+                .detectSupport(renderer);
+
+            const loader = new GLTFLoader();
+            loader.setDRACOLoader(dracoLoader);
+            loader.setKTX2Loader(ktx2Loader);
+            loader.setMeshoptDecoder(MeshoptDecoder);
+            
+            loader.load(url, (gltf) => {
+                const model = gltf.scene;
+                
+                // Shadow configuration and flat shading support (if requested)
+                model.traverse((child) => {
+                    if (child.isMesh) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                        if (child.material) {
+                            const convertMaterial = (mat) => {
+                                if (!mat) return null;
+                                if (mat.isMeshToonMaterial) {
+                                    mat.gradientMap = gradientMap;
+                                    mat.needsUpdate = true;
+                                    return mat;
+                                }
+                                const toonMat = new THREE.MeshToonMaterial({
+                                    color: mat.color || new THREE.Color(0xffffff),
+                                    map: mat.map,
+                                    vertexColors: mat.vertexColors || false,
+                                    gradientMap: gradientMap,
+                                    normalMap: mat.normalMap,
+                                    normalScale: mat.normalScale,
+                                    aoMap: mat.aoMap,
+                                    aoMapIntensity: mat.aoMapIntensity,
+                                    lightMap: mat.lightMap,
+                                    lightMapIntensity: mat.lightMapIntensity,
+                                    emissive: mat.emissive || new THREE.Color(0x000000),
+                                    emissiveMap: mat.emissiveMap,
+                                    emissiveIntensity: mat.emissiveIntensity !== undefined ? mat.emissiveIntensity : 1.0,
+                                    displacementMap: mat.displacementMap,
+                                    displacementScale: mat.displacementScale,
+                                    displacementBias: mat.displacementBias,
+                                    alphaMap: mat.alphaMap,
+                                    transparent: mat.transparent,
+                                    opacity: mat.opacity !== undefined ? mat.opacity : 1.0,
+                                    side: mat.side || THREE.FrontSide,
+                                    depthWrite: mat.depthWrite !== undefined ? mat.depthWrite : true,
+                                    depthTest: mat.depthTest !== undefined ? mat.depthTest : true,
+                                    wireframe: mat.wireframe || false,
+                                    dithering: true
+                                });
+                                return toonMat;
+                            };
+
+                            if (Array.isArray(child.material)) {
+                                child.material = child.material.map(m => convertMaterial(m));
+                            } else {
+                                child.material = convertMaterial(child.material);
+                            }
+                        }
+                    }
+                });
+
+                // Remove current model
+                if (currentLoadedModel) scene.remove(currentLoadedModel);
+
+                // Center geometry and align bottom to local ground
+                model.updateMatrixWorld(true);
+                const box = new THREE.Box3().setFromObject(model);
+                const center = box.getCenter(new THREE.Vector3());
+                const size = box.getSize(new THREE.Vector3());
+                model.position.set(-center.x, -box.min.y, -center.z);
+
+                const wrapper = new THREE.Group();
+                wrapper.add(model);
+
+                // Position model at center of the island
+                modelOffsetX = 0.0;
+                modelOffsetZ = 0.0;
+                modelOffsetY = 0.0;
+                modelRotationY = 0.0;
+                modelScaleMult = 1.0;
+
+                const maxDim = Math.max(size.x, size.y, size.z);
+                if (maxDim > 0) {
+                    modelBaseScale = 12 / maxDim;
+                } else {
+                    modelBaseScale = 1.0;
+                }
+
+                // Reset HTML Sliders UI
+                document.getElementById('model-scale').value = 1.0;
+                document.getElementById('model-scale-val').innerText = '1.0';
+                document.getElementById('model-y').value = 0.0;
+                document.getElementById('model-y-val').innerText = '0.0';
+                document.getElementById('model-x').value = 0.0;
+                document.getElementById('model-x-val').innerText = '0.0';
+                document.getElementById('model-z').value = 0.0;
+                document.getElementById('model-z-val').innerText = '0.0';
+                document.getElementById('model-rot').value = 0;
+                document.getElementById('model-rot-val').innerText = '0°';
+
+                // Reveal transform controls in HUD
+                document.getElementById('model-controls').style.display = 'block';
+
+                currentLoadedModel = wrapper;
+                updateModelTransform();
+                scene.add(wrapper);
+                
+                URL.revokeObjectURL(url);
+            }, undefined, (error) => {
+                console.error("GLTF load error:", error);
+                alert("Error loading GLTF file. Make sure it is a valid .glb or .gltf file and check the console.");
+                URL.revokeObjectURL(url);
+            });
+        }
+
+        // --- HUD / Controls Interactivity ---
+        function setupUI() {
+            const roughnessSlider = document.getElementById('roughness');
+            const roughnessVal = document.getElementById('roughness-val');
+            roughnessSlider.addEventListener('input', (e) => {
+                roughnessMultiplier = parseFloat(e.target.value);
+                roughnessVal.innerText = roughnessMultiplier.toFixed(1);
+                buildTerrain();
+                spawnTrees();
+                updateModelTransform();
+            });
+
+            const waterSlider = document.getElementById('water');
+            const waterVal = document.getElementById('water-val');
+            waterSlider.addEventListener('input', (e) => {
+                waterLevel = parseFloat(e.target.value);
+                waterVal.innerText = waterLevel.toFixed(1);
+                if (waterMesh) waterMesh.position.y = waterLevel;
+                buildTerrain(); // Color boundaries update relative to water line
+                spawnTrees();
+                updateModelTransform();
+            });
+
+            const radiusSlider = document.getElementById('island-radius');
+            const radiusVal = document.getElementById('island-radius-val');
+            radiusSlider.addEventListener('input', (e) => {
+                islandRadius = parseFloat(e.target.value);
+                radiusVal.innerText = `${islandRadius}m`;
+                buildTerrain();
+                spawnTrees();
+                updateModelTransform();
+            });
+
+            const elevationSlider = document.getElementById('island-elevation');
+            const elevationVal = document.getElementById('island-elevation-val');
+            elevationSlider.addEventListener('input', (e) => {
+                islandElevation = parseFloat(e.target.value);
+                elevationVal.innerText = islandElevation.toFixed(1);
+                buildTerrain();
+                spawnTrees();
+                updateModelTransform();
+            });
+
+            const freqSlider = document.getElementById('noise-frequency');
+            const freqVal = document.getElementById('noise-frequency-val');
+            freqSlider.addEventListener('input', (e) => {
+                noiseFrequency = parseFloat(e.target.value);
+                freqVal.innerText = `${noiseFrequency.toFixed(1)}x`;
+                buildTerrain();
+                spawnTrees();
+                updateModelTransform();
+            });
+
+            const treeSlider = document.getElementById('trees');
+            const treesVal = document.getElementById('trees-val');
+            treeSlider.addEventListener('input', (e) => {
+                targetTreeCount = parseInt(e.target.value);
+                treesVal.innerText = targetTreeCount;
+                spawnTrees();
+            });
+
+            const sunCheckbox = document.getElementById('rotatesun');
+            sunCheckbox.addEventListener('change', (e) => {
+                isSunRotating = e.target.checked;
+            });
+
+            const regenBtn = document.getElementById('regen-btn');
+            regenBtn.addEventListener('click', () => {
+                seed = Math.random() * 1000;
+                buildTerrain();
+                spawnTrees();
+                updateModelTransform();
+            });
+
+            // 3D Model Loading Integration
+            const uploadBtn = document.getElementById('upload-btn');
+            const fileInput = document.getElementById('model-upload');
+
+            uploadBtn.addEventListener('click', () => {
+                fileInput.click();
+            });
+
+            fileInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) loadModelFile(file);
+            });
+
+            // Drag & Drop
+            window.addEventListener('dragover', (e) => {
+                e.preventDefault();
+            });
+            window.addEventListener('drop', (e) => {
+                e.preventDefault();
+                const file = e.dataTransfer.files[0];
+                if (file && (file.name.endsWith('.glb') || file.name.endsWith('.gltf'))) {
+                    loadModelFile(file);
+                }
+            });
+
+            // 3D Model Move/Repositioning integration
+            const moveModelBtn = document.getElementById('move-model-btn');
+            moveModelBtn.addEventListener('click', () => {
+                if (!currentLoadedModel) {
+                    alert("Please load a 3D model first!");
+                    return;
+                }
+                isPlacementMode = !isPlacementMode;
+                moveModelBtn.innerText = `📍 Click to Move Model: ${isPlacementMode ? 'ON' : 'OFF'}`;
+                moveModelBtn.style.background = isPlacementMode ? '#22c55e' : '#475569';
+            });
+
+            // Model Transform sliders binding
+            const scaleSlider = document.getElementById('model-scale');
+            const scaleVal = document.getElementById('model-scale-val');
+            scaleSlider.addEventListener('input', (e) => {
+                modelScaleMult = parseFloat(e.target.value);
+                scaleVal.innerText = modelScaleMult.toFixed(2);
+                updateModelTransform();
+            });
+
+            const ySlider = document.getElementById('model-y');
+            const yVal = document.getElementById('model-y-val');
+            ySlider.addEventListener('input', (e) => {
+                modelOffsetY = parseFloat(e.target.value);
+                yVal.innerText = modelOffsetY.toFixed(1);
+                updateModelTransform();
+            });
+
+            const xSlider = document.getElementById('model-x');
+            const xVal = document.getElementById('model-x-val');
+            xSlider.addEventListener('input', (e) => {
+                modelOffsetX = parseFloat(e.target.value);
+                xVal.innerText = modelOffsetX.toFixed(1);
+                updateModelTransform();
+            });
+
+            const zSlider = document.getElementById('model-z');
+            const zVal = document.getElementById('model-z-val');
+            zSlider.addEventListener('input', (e) => {
+                modelOffsetZ = parseFloat(e.target.value);
+                zVal.innerText = modelOffsetZ.toFixed(1);
+                updateModelTransform();
+            });
+
+            const rotSlider = document.getElementById('model-rot');
+            const rotVal = document.getElementById('model-rot-val');
+            rotSlider.addEventListener('input', (e) => {
+                const deg = parseInt(e.target.value);
+                modelRotationY = deg * Math.PI / 180;
+                rotVal.innerText = deg + '°';
+                updateModelTransform();
+            });
+
+            // Raycast click-placement listener
+            const raycaster = new THREE.Raycaster();
+            const mouse = new THREE.Vector2();
+
+            window.addEventListener('pointerdown', (e) => {
+                // Do not trigger placement if clicking UI
+                if (e.target.closest('#hud')) return;
+                if (!isPlacementMode || !currentLoadedModel || !islandMesh) return;
+
+                mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+                mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+                raycaster.setFromCamera(mouse, camera);
+                const intersects = raycaster.intersectObject(islandMesh);
+
+                if (intersects.length > 0) {
+                    const point = intersects[0].point;
+                    modelOffsetX = point.x;
+                    modelOffsetZ = point.z;
+
+                    // Sync HTML inputs
+                    xSlider.value = modelOffsetX;
+                    xVal.innerText = modelOffsetX.toFixed(1);
+                    zSlider.value = modelOffsetZ;
+                    zVal.innerText = modelOffsetZ.toFixed(1);
+
+                    updateModelTransform();
+
+                    // Deactivate placement mode automatically after clicking
+                    isPlacementMode = false;
+                    moveModelBtn.innerText = `📍 Click to Move Model: OFF`;
+                    moveModelBtn.style.background = '#475569';
+                }
+            });
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // --- Loop ---
+        function animate(timestamp) {
+            requestAnimationFrame(animate);
+
+            // 1. Slow orbit sun rotation
+            if (isSunRotating && dirLight) {
+                const angle = timestamp * 0.00015;
+                dirLight.position.x = Math.cos(angle) * 140;
+                dirLight.position.z = Math.sin(angle) * 140;
+            }
+
+            // 2. Subtle water movement / wobble
+            if (waterMesh) {
+                waterMesh.position.y = waterLevel + Math.sin(timestamp * 0.001) * 0.06;
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>

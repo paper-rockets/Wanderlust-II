@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { getWorldHeight } from './src/world/TerrainGenerator.js';
 
 const EDITOR_SERVER = 'http://localhost:9100';
 
@@ -143,12 +144,12 @@ export function initTerrainEditor(scene, camera, renderer, terrainMesh) {
     const uiContainer = document.createElement('div');
     uiContainer.id = 'terrain-editor-ui';
     Object.assign(uiContainer.style, {
-        position: 'absolute', top: '80px', left: '20px',
-        background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)',
+        position: 'fixed', top: '70px', left: '20px',
+        background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(12px)',
         padding: '15px', borderRadius: '10px', color: 'white',
         fontFamily: 'sans-serif', zIndex: '1000', display: 'none',
         flexDirection: 'column', gap: '8px', width: '260px',
-        maxHeight: '80vh', overflowY: 'auto'
+        maxHeight: '80vh', overflowY: 'auto', border: '1px solid rgba(255,255,255,0.2)'
     });
     document.body.appendChild(uiContainer);
 
@@ -754,6 +755,13 @@ export function initTerrainEditor(scene, camera, renderer, terrainMesh) {
             camera.position.add(move);
             orbitControls.target.add(move);
         }
+
+        const waterY = 2.4;
+        const targetGroundY = getWorldHeight(orbitControls.target.x, orbitControls.target.z);
+        orbitControls.target.y = Math.max(orbitControls.target.y, Math.max(targetGroundY, waterY) + 1.0);
+
+        const camGroundY = getWorldHeight(camera.position.x, camera.position.z);
+        camera.position.y = Math.max(camera.position.y, Math.max(camGroundY, waterY) + 2.0);
     }
     window._updateEditorCameraMovement = updateEditorCameraMovement;
 
