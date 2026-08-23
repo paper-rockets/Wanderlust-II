@@ -33,6 +33,7 @@ import { MeshToonNodeMaterial, MeshStandardNodeMaterial, MeshBasicNodeMaterial, 
 import { uniform, texture, Fn, positionLocal, abs, positionGeometry, sin, step, positionWorld, normalWorld, cameraPosition, float, vec2, vec3, vec4, dot, fract, mix, pow, clamp, normalize, smoothstep as tslSmoothstep, attribute } from 'three/tsl';
 import { scene, camera, renderer, clock } from './core/Engine.js';
 import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, godRaysPass, initPostProcessingUI } from './core/PostProcessing.js';
+import { AnimatedFlockSystem } from './entities/AnimatedFlockSystem.js';
 
     import { initTerrainEditor } from '../TerrainEditor.js';
     import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
@@ -561,20 +562,12 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         gui.controllersRecursive().forEach(c => c.updateDisplay());
     }}, 'clearDesertDay').name('🏜️ Clear Desert Day');
 
-    // Add Editor folder (Terrain Editor & Edit Crystals)
+    // Add Editor folder (Edit Crystals & Billboard Editor)
     const editorFolder = gui.addFolder('Editor');
-    editorFolder.add({ openTerrainEditor: () => {
-        if (window.toggleTerrainEditor) {
-            window.toggleTerrainEditor();
-        } else {
-            const btn = document.getElementById('editor-toggle');
-            if (btn) btn.click();
-        }
-    }}, 'openTerrainEditor').name('🔧 Terrain Editor');
     editorFolder.add({ openCrystalEditor: () => {
         const crystalEditor = document.getElementById('crystal-editor');
         if (crystalEditor) crystalEditor.style.display = crystalEditor.style.display === 'none' ? 'block' : 'none';
-    }}, 'openCrystalEditor').name('💎 Edit Crystals');
+    }}, 'openCrystalEditor').name('Edit Crystals');
     editorFolder.add({ openTreeBillboardEditor: () => {
         if (window.treeBillboardEditor) {
             window.treeBillboardEditor.togglePanel(true);
@@ -778,7 +771,12 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         }
         instMesh.instanceMatrix.needsUpdate = true;
     }
-    debugFolder.add(params, 'showBirds').name('Birds').onChange(v => { if(typeof instBirds !== 'undefined') instBirds.visible = v; if(typeof flockGrp !== 'undefined') flockGrp.visible = v; });
+    debugFolder.add(params, 'showBirds').name('Birds').onChange(v => {
+        if (typeof instBirds !== 'undefined') instBirds.visible = v;
+        if (typeof flockGrp !== 'undefined') flockGrp.visible = v;
+        if (typeof window.birdFlock !== 'undefined' && window.birdFlock) window.birdFlock.visible = v;
+        if (typeof window.flamingoFlock !== 'undefined' && window.flamingoFlock) window.flamingoFlock.visible = v;
+    });
     debugFolder.add(params, 'showFogPlanes').name('Fog Planes').onChange(v => { if(typeof window.fogGroup !== 'undefined') window.fogGroup.visible = v; });
     debugFolder.add(params, 'showCrystals').name('Crystals').onChange(v => { instCrystals.visible = v; });
 
@@ -2412,8 +2410,10 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
     }
 
     function updateBirds(playerX, playerY, playerZ, time, dt) {
-        updateBirdsGen(birdData, instBirds, BIRD_COUNT, playerX, playerY + 14, playerZ, time, dt, 5.0);
-        updateBirdsGen(highBirdData, instHighBirds, HIGH_BIRD_COUNT, 0, 400, 0, time, dt, 2.0); // Orbit center
+        const playerPos = { x: playerX, y: playerY, z: playerZ };
+        const vel = (typeof velocity !== 'undefined') ? velocity : 35;
+        if (typeof window.birdFlock !== 'undefined' && window.birdFlock) window.birdFlock.update(playerPos, time, dt, vel);
+        if (typeof window.flamingoFlock !== 'undefined' && window.flamingoFlock) window.flamingoFlock.update(playerPos, time, dt, vel);
     }
 
     const dummy = new THREE.Object3D();
@@ -2980,6 +2980,36 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
     
     // Initialize MeshoptDecoder for compressed geometries (like the Whale model)
     gltfLoader.setMeshoptDecoder(MeshoptDecoder);
+
+    // Animated Birds Flock (low_poly_bird_animated_optimized.glb)
+    const birdFlock = new AnimatedFlockSystem({
+        scene,
+        gltfLoader,
+        resolveAssetUrl,
+        count: LOW_GFX ? 12 : 25,
+        modelPath: 'flight_models/low_poly_bird_animated_optimized.glb',
+        scale: 0.08,
+        rotYOffset: 0,
+        altitudeOffset: 65,
+        flockRadius: 80
+    });
+    window.birdFlock = birdFlock;
+
+    // Flamingo Flock (flamingo.glb) - Warm zones only!
+    const flamingoFlock = new AnimatedFlockSystem({
+        scene,
+        gltfLoader,
+        resolveAssetUrl,
+        count: LOW_GFX ? 8 : 16,
+        modelPath: 'flight_models/flamingo.glb',
+        scale: 0.05,
+        rotYOffset: 0,
+        isWarmOnly: true,
+        getBiomeAt,
+        altitudeOffset: 50,
+        flockRadius: 90
+    });
+    window.flamingoFlock = flamingoFlock;
 
     window.updateCustomModelTransform = function(model) {
         if (!model) return;

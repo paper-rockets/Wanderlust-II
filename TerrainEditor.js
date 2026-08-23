@@ -1,4 +1,4 @@
-﻿import * as THREE from 'three';
+import * as THREE from 'three';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -279,6 +279,48 @@ export function initTerrainEditor(scene, camera, renderer, terrainMesh) {
         btnHidePlayer.innerText = playerHidden ? 'Show Player' : 'Hide Player';
     });
 
+    // --- Atmosphere Section ---
+    const atmoSection = document.createElement('div');
+    atmoSection.style.cssText = 'border-bottom:1px solid #444;padding-bottom:8px;';
+    atmoSection.innerHTML = '<div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px;">Atmosphere Presets</div>';
+    uiContainer.appendChild(atmoSection);
+
+    const atmoBtnRow = document.createElement('div');
+    atmoBtnRow.style.cssText = 'display:flex;gap:4px;';
+    atmoSection.appendChild(atmoBtnRow);
+
+    const btnPresetSunset = makeBtn('Sunset');
+    const btnPresetDay = makeBtn('Day');
+    const btnPresetNight = makeBtn('Night');
+    atmoBtnRow.appendChild(btnPresetSunset);
+    atmoBtnRow.appendChild(btnPresetDay);
+    atmoBtnRow.appendChild(btnPresetNight);
+
+    btnPresetSunset.addEventListener('click', () => {
+        const timeBtn = document.getElementById('time-toggle');
+        if (timeBtn) {
+            timeBtn.click();
+        }
+        showToast('Atmosphere Preset: Sunset');
+    });
+
+    btnPresetDay.addEventListener('click', () => {
+        const timeBtn = document.getElementById('time-toggle');
+        if (timeBtn) {
+            timeBtn.click();
+            timeBtn.click();
+        }
+        showToast('Atmosphere Preset: Day');
+    });
+
+    btnPresetNight.addEventListener('click', () => {
+        const timeBtn = document.getElementById('time-toggle');
+        if (timeBtn) {
+            timeBtn.click();
+        }
+        showToast('Atmosphere Preset: Night');
+    });
+
     // --- Objects List ---
     const objSection = document.createElement('div');
     objSection.style.cssText = 'border-bottom:1px solid #444;padding-bottom:8px;';
@@ -396,23 +438,6 @@ export function initTerrainEditor(scene, camera, renderer, terrainMesh) {
         }
     }
     window.toggleTerrainEditor = toggleTerrainEditor;
-
-    // --- Toggle Button in Settings ---
-    const editorSubmenu = document.getElementById('editor-submenu');
-    if (editorSubmenu) {
-        const btnToggleEditor = document.createElement('button');
-        btnToggleEditor.id = 'editor-toggle';
-        btnToggleEditor.innerText = 'Terrain Editor';
-
-        const qualityToggle = document.getElementById('quality-toggle');
-        if (qualityToggle && qualityToggle.parentNode === editorSubmenu && qualityToggle.nextSibling) {
-            editorSubmenu.insertBefore(btnToggleEditor, qualityToggle.nextSibling);
-        } else {
-            editorSubmenu.insertBefore(btnToggleEditor, editorSubmenu.firstChild);
-        }
-
-        btnToggleEditor.addEventListener('click', toggleTerrainEditor);
-    }
 
     const existingBtn = document.getElementById('editor-toggle');
     if (existingBtn) {

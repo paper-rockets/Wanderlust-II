@@ -1,105 +1,140 @@
 import * as THREE from 'three';
 
-function smoothstep(edge0, edge1, x) {
-    const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
-    return t * t * (3 - 2 * t);
-}
-
-// Rich Journey-inspired Desert Palette
+// Rich Sunlit Desert Palette
 export const desertColors = {
-    deepWater:    new THREE.Color(0x0d5c75), // Deep turquoise oasis pool
+    deepWater:    new THREE.Color(0x0a4b6e), // Deep turquoise oasis pool
     oasisWater:   new THREE.Color(0x14b8a6), // Vibrant crystal teal shore
-    oasisGrass:   new THREE.Color(0x22c55e), // Lush emerald palm foliage
-    oasisEdge:    new THREE.Color(0x84cc16), // Bright lime grass boundary
+    oasisGrass:   new THREE.Color(0x22c55e), // Lush emerald date palm foliage
+    oasisEdge:    new THREE.Color(0x84cc16), // Bright lime vegetation boundary
     oasisSand:    new THREE.Color(0xd97706), // Warm golden shore sand
-    valleyShadow: new THREE.Color(0x7a2e19), // Burnt terracotta / mahogany valley shadow
-    sandBase:     new THREE.Color(0xd96d27), // Deep warm amber sand
-    duneSlope:    new THREE.Color(0xf5a047), // Vibrant glowing gold dune slope
-    duneCrest:    new THREE.Color(0xfcd385), // Radiant sunlit crest
-    peakHighlight:new THREE.Color(0xfef0d2)  // Warm ivory-peach razor peak
+    valleyShadow: new THREE.Color(0x702613), // Deep burnt terracotta slip-face shadow
+    sandBase:     new THREE.Color(0xcc6823), // Warm glowing amber base sand
+    duneSlope:    new THREE.Color(0xf29f3d), // Vibrant golden sand slope
+    duneCrest:    new THREE.Color(0xfde298), // Radiant sunlit gold crest
+    peakHighlight:new THREE.Color(0xfff5dd)  // Razor ivory-gold knife-edge rim highlight
 };
 
+// Continuous asymmetric dune transfer function:
+// phi: continuous wave phase in radians
+// skew: shifts wave peak to create gentle windward stoss slope and steep leeward slip face
+// sharpness: powers the peak into a razor knife-edge crest line
+function asymmetricDune(phi, skew = 0.65, sharpness = 3.2) {
+    const s = Math.sin(phi - Math.cos(phi) * skew);
+    const norm = Math.max(0.0, Math.min(1.0, (s + 1.0) * 0.5));
+    return Math.pow(norm, sharpness);
+}
+
+// Pre-computed wind angle direction cosines
+const COS_WIND1 = 0.8988, SIN_WIND1 = 0.4384;   // Primary wind direction (~26 deg)
+const COS_WIND2 = 0.8192, SIN_WIND2 = -0.5736;  // Secondary cross-wind direction (~ -35 deg)
+const TWO_PI = Math.PI * 2.0;
+
 export default {
-    name: "🏜️ Desert Dunes",
-    shoreName: "🏝️ Desert Shore",
+    name: "Desert Dunes",
+    shoreName: "Desert Shore",
     getHeight(x, z, snoise) {
-        // 1. Macro landscape rolling elevation
-        const macroNoise = snoise(x * 0.00008, z * 0.00008);
-        const macroHeight = macroNoise * 35.0 + 35.0;
+        // 1. Multi-frequency domain warping (wind turbulence and curved barchan horns)
+        const warpX1 = snoise(x * 0.00035, z * 0.00035) * 160.0;
+        const warpZ1 = snoise(x * 0.00035 + 80.0, z * 0.00035 + 80.0) * 160.0;
         
-        // 2. Domain warping for wind-sculpted curved barchan dunes
-        const warpX = snoise(x * 0.0004, z * 0.0004) * 150.0;
-        const warpZ = snoise(x * 0.0004 + 120.0, z * 0.0004 + 120.0) * 150.0;
-        
-        // 3. Primary smooth sweeping dune crests
-        const duneRaw = snoise((x + warpX) * 0.0010, (z + warpZ) * 0.0010);
-        const ridge = Math.max(0.0, 1.0 - Math.abs(duneRaw));
-        const smoothRidge = ridge * ridge * (3.0 - 2.0 * ridge);
-        const duneRidge = Math.pow(smoothRidge, 1.4);
-        
-        // 4. Secondary cross-dunes
-        const duneRaw2 = snoise((x - warpZ) * 0.0020 + 50.0, (z + warpX) * 0.0020 + 50.0);
-        const ridge2 = Math.max(0.0, 1.0 - Math.abs(duneRaw2));
-        const smoothRidge2 = ridge2 * ridge2 * (3.0 - 2.0 * ridge2);
-        const duneRidge2 = Math.pow(smoothRidge2, 1.2) * 0.35;
-        
-        let h = macroHeight + duneRidge * 60.0 + duneRidge2 * 20.0;
-        
-        // 6. Natural Oasis basins
-        const oasisNoise = snoise(x * 0.0003, z * 0.0003);
-        if (oasisNoise > 0.60) {
-            const bowl = (oasisNoise - 0.60) / 0.40;
-            const smoothBowl = Math.pow(Math.sin(bowl * Math.PI * 0.5), 2.0);
-            const oasisDepth = smoothBowl * 70.0;
-            h -= oasisDepth;
+        const warpX2 = snoise(x * 0.0012 + 20.0, z * 0.0012 + 20.0) * 45.0;
+        const warpZ2 = snoise(x * 0.0012 + 150.0, z * 0.0012 + 150.0) * 45.0;
+
+        const wx = x + warpX1 + warpX2;
+        const wz = z + warpZ1 + warpZ2;
+
+        // 2. Macro Sand Sea / Rolling Draas (Wavelength ~650m, Amplitude ~35m)
+        const macroCoord = (wx * COS_WIND1 + wz * SIN_WIND1) * 0.0015;
+        const macroWave = asymmetricDune(macroCoord * TWO_PI, 0.48, 2.0);
+        const macroBase = snoise(x * 0.0002, z * 0.0002) * 20.0 + 30.0;
+        const macroHeight = macroBase + macroWave * 35.0;
+
+        // 3. Primary Transverse & Barchanoid Dune Ridges (Wavelength ~130m, Amplitude ~48m)
+        // Lateral coordinate creates parabolic crescent barchan horns
+        const lat1 = (-wx * SIN_WIND1 + wz * COS_WIND1);
+        const barchanCurv = snoise(lat1 * 0.0018, (wx * COS_WIND1 + wz * SIN_WIND1) * 0.0008) * 35.0;
+        const mainCoord = ((wx * COS_WIND1 + wz * SIN_WIND1) + barchanCurv) * 0.0076;
+        const mainDune = asymmetricDune(mainCoord * TWO_PI, 0.68, 3.2) * 48.0;
+
+        // 4. Secondary Intersecting Cross-Dunes & Spurs (Wavelength ~52m, Amplitude ~16m)
+        // Forms the intricate network of star spurs and slip-face alcoves
+        const crossCoord = (wx * COS_WIND2 + wz * SIN_WIND2) * 0.019;
+        const crossDune = asymmetricDune(crossCoord * TWO_PI, 0.55, 2.6) * 16.0;
+        const crossMod = snoise(x * 0.0008 + 120.0, z * 0.0008 - 80.0) * 0.5 + 0.5;
+
+        // 5. Aeolian Micro-Ripples (Wavelength ~3.2m, Amplitude ~0.45m)
+        const rippleCoord = (x * COS_WIND1 + z * SIN_WIND1) * 0.31 + snoise(x * 0.03, z * 0.03) * 0.4;
+        const microRipple = asymmetricDune(rippleCoord * TWO_PI, 0.45, 1.8) * 0.45;
+
+        // Combine elevations
+        let y = macroHeight + mainDune + (crossDune * crossMod) + microRipple;
+
+        // 6. Sheltered Interdune Oasis Basins
+        const oasis = snoise(x * 0.00035 + 250.0, z * 0.00035 - 250.0);
+        if (oasis > 0.62) {
+            const t = Math.min((oasis - 0.62) / 0.38, 1.0);
+            const bowl = t * t * (3.0 - 2.0 * t);
+            y -= bowl * 65.0;
         }
-        
-        return Math.max(6.0, h);
+
+        // 7. Continuous shoreline smoothing
+        if (y < 6.0) {
+            if (y > 0.0) {
+                const t = y / 6.0;
+                const st = t * t * (3.0 - 2.0 * t);
+                y = -3.0 + 9.0 * st;
+            } else {
+                y = -3.0 + y * 0.15;
+            }
+        }
+
+        return y;
     },
     getColor(h, x, z, snoise, tempColor, smoothstep) {
-        const oasisNoise = snoise(x * 0.0003, z * 0.0003);
-        
-        // Oasis Water Body
-        if (h <= 6.1 && oasisNoise > 0.60) {
-            tempColor.lerpColors(desertColors.deepWater, desertColors.oasisWater, smoothstep(5.0, 6.1, h));
+        const grainNoise = snoise(x * 0.015, z * 0.015);
+        const oasis = snoise(x * 0.00035 + 250.0, z * 0.00035 - 250.0);
+
+        // Water and oasis transitions
+        if (h < 0.5) {
+            tempColor.copy(desertColors.deepWater);
             return;
         }
-        
-        // Standard Water Edge
-        if (h <= 6.1) {
-            tempColor.lerpColors(desertColors.deepWater, desertColors.oasisWater, smoothstep(1.0, 6.1, h));
+        if (h < 2.2) {
+            tempColor.lerpColors(desertColors.deepWater, desertColors.sandBase, smoothstep(0.5, 2.2, h));
             return;
         }
-        
-        // Oasis Vegetation Terraces
-        if (oasisNoise > 0.60 && h < 16.0) {
-            if (h < 9.0) {
-                tempColor.lerpColors(desertColors.oasisWater, desertColors.oasisGrass, smoothstep(6.1, 9.0, h));
-            } else if (h < 13.0) {
-                tempColor.lerpColors(desertColors.oasisGrass, desertColors.oasisEdge, smoothstep(9.0, 13.0, h));
+        if (h < 4.0) {
+            tempColor.copy(desertColors.sandBase);
+            return;
+        }
+        if (oasis > 0.60 && h < 16.0) {
+            if (h < 8.0) {
+                tempColor.lerpColors(desertColors.oasisWater, desertColors.oasisGrass, smoothstep(4.0, 8.0, h));
+            } else if (h < 12.0) {
+                tempColor.lerpColors(desertColors.oasisGrass, desertColors.oasisEdge, smoothstep(8.0, 12.0, h));
             } else {
-                tempColor.lerpColors(desertColors.oasisEdge, desertColors.oasisSand, smoothstep(13.0, 16.0, h));
+                tempColor.lerpColors(desertColors.oasisEdge, desertColors.oasisSand, smoothstep(12.0, 16.0, h));
             }
             return;
         }
 
-        // Sweeping Sand Dune Gradient (Valley Shadow -> Base -> Slope -> Crest -> Peak)
-        // Add subtle procedural variation per dune
-        const colVar = snoise(x * 0.002, z * 0.002) * 0.08;
-        
-        if (h < 22.0) {
-            tempColor.lerpColors(desertColors.valleyShadow, desertColors.sandBase, smoothstep(6.1, 22.0, h));
-        } else if (h < 50.0) {
-            tempColor.lerpColors(desertColors.sandBase, desertColors.duneSlope, smoothstep(22.0, 50.0, h));
+        // Dune elevation color gradient:
+        // Valley Shadow -> Sand Base -> Golden Slope -> Radiant Crest -> Knife-Edge Peak
+        if (h < 26.0) {
+            tempColor.lerpColors(desertColors.valleyShadow, desertColors.sandBase, smoothstep(4.0, 26.0, h));
+        } else if (h < 55.0) {
+            tempColor.lerpColors(desertColors.sandBase, desertColors.duneSlope, smoothstep(26.0, 55.0, h));
+            if (grainNoise > 0.15) {
+                tempColor.r = Math.min(1.0, tempColor.r + 0.02);
+            }
         } else if (h < 85.0) {
-            tempColor.lerpColors(desertColors.duneSlope, desertColors.duneCrest, smoothstep(50.0, 85.0, h));
+            tempColor.lerpColors(desertColors.duneSlope, desertColors.duneCrest, smoothstep(55.0, 85.0, h));
+            if (grainNoise > 0.25) {
+                tempColor.r = Math.min(1.0, tempColor.r + 0.015);
+                tempColor.g = Math.min(1.0, tempColor.g + 0.01);
+            }
         } else {
             tempColor.lerpColors(desertColors.duneCrest, desertColors.peakHighlight, smoothstep(85.0, 130.0, h));
-        }
-        
-        if (colVar !== 0) {
-            tempColor.r = Math.max(0, Math.min(1, tempColor.r + colVar));
-            tempColor.g = Math.max(0, Math.min(1, tempColor.g + colVar * 0.6));
         }
     }
 };
