@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { uniform, texture } from 'three/tsl';
 
 import {
@@ -29,13 +32,23 @@ import { initAudio, toggleMusic, updateWindSound } from '../audio/MusicSynthesiz
 // Wait for WebGPU Backend to initialize
 await renderer.init();
 
-const BASE_URL = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.BASE_URL) ? import.meta.env.BASE_URL : './';
-function resolveAssetUrl(p) {
+function getAppBaseUrl() {
+    if (typeof window !== 'undefined' && window.location) {
+        const pathname = window.location.pathname;
+        if (pathname.includes('/low-power') || pathname.includes('/low_power')) {
+            return pathname.replace(/\/(low-power|low_power)(\.html|\/.*)?$/, '/');
+        }
+    }
+    const envBase = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.BASE_URL) ? import.meta.env.BASE_URL : './';
+    return envBase.endsWith('/') ? envBase : (envBase + '/');
+}
+
+export function resolveAssetUrl(p) {
     if (!p) return p;
     if (p.startsWith('http://') || p.startsWith('https://') || p.startsWith('data:') || p.startsWith('blob:')) return p;
     const cleanPath = p.replace(/^\.?\//, '');
-    const cleanBase = BASE_URL.endsWith('/') ? BASE_URL : (BASE_URL + '/');
-    return `${cleanBase}${cleanPath}`;
+    const base = getAppBaseUrl();
+    return `${base}${cleanPath}`;
 }
 
 // Low-power adaptive resolution controller (target 36ms ~ 28 FPS)
@@ -124,19 +137,28 @@ scene.add(playerGrp);
 
 const cameraBase = new THREE.Group();
 scene.add(cameraBase);
+cameraBase.add(camera);
 
-const playerPhysics = new PlayerPhysics({ playerGrp });
-const cameraManager = new CameraManager({ camera, cameraBase, playerGrp });
-cameraManager.cameraZoomDist = 20.0;
+const playerPhysics = new PlayerPhysics(playerGrp);
+const cameraManager = new CameraManager(camera, cameraBase, 20.0);
 
 const gltfLoader = new GLTFLoader();
-const flightModelManager = new FlightModelManager({
-    scene,
-    playerGrp,
-    gltfLoader,
-    resolveAssetUrl,
-    onModelLoaded: () => {}
-});
+
+const dracoLoader = new DRACOLoader();
+dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+gltfLoader.setDRACOLoader(dracoLoader);
+
+const ktx2Loader = new KTX2Loader()
+    .setTranscoderPath('https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/libs/basis/')
+    .detectSupport(renderer);
+gltfLoader.setKTX2Loader(ktx2Loader);
+
+gltfLoader.setMeshoptDecoder(MeshoptDecoder);
+
+const playerVisuals = new THREE.Group();
+playerGrp.add(playerVisuals);
+
+const flightModelManager = new FlightModelManager(playerVisuals, gltfLoader, resolveAssetUrl);
 
 // Load default flight model
 flightModelManager.setModelById('kiki');
@@ -205,10 +227,17 @@ for (let i = 0; i < TRAIL_COUNT; i++) {
 // Birds (15 flocking birds)
 let birdSystem = null;
 try {
-    birdSystem = new AnimatedFlockSystem({ scene });
-    if (birdSystem.setFlockCount) birdSystem.setFlockCount(15);
+    birdSystem = new AnimatedFlockSystem({
+        scene,
+        gltfLoader,
+        resolveAssetUrl,
+        count: 12,
+        modelPath: 'flight_models/low_poly_bird_animated_optimized.glb',
+        scale: 0.08,
+        getBiomeAt
+    });
 } catch (e) {
-    // optional flock fallback
+    console.warn('[Wanderlust LowPower] Bird system fallback:', e);
 }
 
 // 8. CONTROLS & TOUCH BRIDGE
@@ -468,7 +497,7 @@ async function animate() {
     }
 
     if (birdSystem && birdSystem.update) {
-        birdSystem.update(playerGrp.position.x, playerGrp.position.y, playerGrp.position.z, time, dt);
+        birdSystem.update(playerGrp.position, time, dt, playerPhysics ? playerPhysics.velocity : 18.0);
     }
 
     updateWindSound(true, isBoosting, isSoundMuted, playerPhysics.velocity, time);
