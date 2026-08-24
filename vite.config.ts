@@ -21,6 +21,7 @@ export default defineConfig(() => {
         input: {
           main: path.resolve(__dirname, 'index.html'),
           low_power: path.resolve(__dirname, 'low_power.html'),
+          low_power_dir: path.resolve(__dirname, 'low-power/index.html'),
         },
       },
     },
