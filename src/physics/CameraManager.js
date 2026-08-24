@@ -57,8 +57,13 @@ export class CameraManager {
     }
 
     updateLift(delta, playerGrp, waterLevel = 2.4) {
-        this.camera.updateMatrixWorld(true);
-        this.camera.getWorldPosition(_tempCamWorldPos);
+        // Calculate the camera's world position at zero-lift for the current frame
+        _tempCamWorldPos.copy(this.camera.position);
+        if (this.camera.parent) {
+            _tempCamWorldPos.applyQuaternion(this.camera.parent.quaternion);
+        }
+        _tempCamWorldPos.applyQuaternion(this.cameraBase.quaternion);
+        _tempCamWorldPos.add(playerGrp.position);
 
         const effWaterY = (waterLevel !== undefined && waterLevel !== null) ? waterLevel : 2.4;
 
@@ -90,10 +95,16 @@ export class CameraManager {
         }
 
         // 3. Smoothly lerp lift offset to eliminate 1-frame oscillation chatter
-        const baseCamY = playerGrp.position.y + this.camera.position.y;
-        const targetLift = Math.max(0, minRequiredCamY - baseCamY);
+        const targetLift = Math.max(0, minRequiredCamY - _tempCamWorldPos.y);
         const decayLift = 1.0 - Math.exp(-8.0 * delta);
         this.currentLiftY = THREE.MathUtils.lerp(this.currentLiftY, targetLift, decayLift);
+
+        // 4. Hard clamp to prevent the camera from clipping under the terrain or water surface
+        const hardMinRequiredCamY = Math.max(camTerrainH + 4.0, effWaterY + 4.0);
+        const hardMinLift = Math.max(0, hardMinRequiredCamY - _tempCamWorldPos.y);
+        if (this.currentLiftY < hardMinLift) {
+            this.currentLiftY = hardMinLift;
+        }
     }
     
     setZoom(dist) {

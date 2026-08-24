@@ -5,7 +5,6 @@ import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { LOW_GFX } from '../config/constants.js';
 import { tierSettings } from './DeviceTier.js';
 import { renderer, scene, camera } from './Engine.js';
-import { buildPortalWarpNode, uWarpIntensity } from '../vfx/PortalWarpPass.js';
 
 export let postProcessing;
 export let scenePass;
@@ -222,10 +221,6 @@ export function updatePostProcessingPipeline() {
 
     if (isSummerFilterOn) {
         outputNode = buildGhibliSummerNode(outputNode);
-    }
-
-    if (typeof uWarpIntensity !== 'undefined' && uWarpIntensity.value > 0) {
-        outputNode = buildPortalWarpNode(outputNode);
     }
 
     // Per-phase exposure, applied BEFORE the roll-off so day is pulled back under the knee

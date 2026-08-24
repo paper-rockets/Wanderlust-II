@@ -14,7 +14,7 @@
 
 import * as THREE from 'three/webgpu';
 import {
-  Fn, uniform, float, vec2, vec3, vec4,
+  Fn, If, uniform, float, vec2, vec3, vec4,
   sin, cos, atan, abs, dot, cross, normalize, length, mix, pow, max, min, clamp,
   fract, floor, smoothstep, distance, reflect, step, exp, dFdx, dFdy,
   positionLocal, positionWorld, cameraPosition, texture
@@ -699,29 +699,35 @@ export const createOpenSeaMaterial = () => {
     const jacobian = surf.y.toVar();
     const orbit = surf.zw.toVar();
 
-    const h0 = detailHeight(xz, scaledTime, fp, orbit);
-    const hx = detailHeight(xz.add(vec2(0.1, 0.0)), scaledTime, fp, orbit);
-    const hz = detailHeight(xz.add(vec2(0.0, 0.1)), scaledTime, fp, orbit);
+    const N = normalize(n0).toVar();
+    const detailVar = float(0.0).toVar();
 
-    const chopMask = fbmBL(xz.mul(0.045).add(vec2(scaledTime.mul(0.018), scaledTime.mul(-0.012))),
-                           float(22.2), fp).mul(0.5).add(0.5);
-    const nonUniformChop = mix(float(0.35), float(1.65), chopMask.mul(chopPatchinessUniform));
-    const crestChopMult = mix(float(0.55), float(1.45), smoothstep(-0.4, 1.1, crest));
+    If(qualityModeUniform.greaterThan(0.5), () => {
+      const h0 = detailHeight(xz, scaledTime, fp, orbit);
+      const hx = detailHeight(xz.add(vec2(0.1, 0.0)), scaledTime, fp, orbit);
+      const hz = detailHeight(xz.add(vec2(0.0, 0.1)), scaledTime, fp, orbit);
 
-    const effectiveDetail = float(1.5)
-      .mul(seaUniform.mul(0.6).add(0.4))
-      .mul(detailAmountUniform)
-      .mul(effectiveLodFactor)
-      .mul(effectiveQuality)
-      .mul(nonUniformChop)
-      .mul(crestChopMult)
-      .toVar();
+      const chopMask = fbmBL(xz.mul(0.045).add(vec2(scaledTime.mul(0.018), scaledTime.mul(-0.012))),
+                             float(22.2), fp).mul(0.5).add(0.5);
+      const nonUniformChop = mix(float(0.35), float(1.65), chopMask.mul(chopPatchinessUniform));
+      const crestChopMult = mix(float(0.55), float(1.45), smoothstep(-0.4, 1.1, crest));
 
-    // No blanket distance fade here any more: fbmBL already removed exactly the octaves that
-    // cannot be resolved, octave by octave, which is both sharper up close and cleaner far away.
-    const detailGain = effectiveDetail.mul(0.1).toVar();
-    const detail = vec3(h0.sub(hx), 0.0, h0.sub(hz)).mul(detailGain);
-    const N = normalize(n0.add(detail)).toVar();
+      const effectiveDetail = float(1.5)
+        .mul(seaUniform.mul(0.6).add(0.4))
+        .mul(detailAmountUniform)
+        .mul(effectiveLodFactor)
+        .mul(effectiveQuality)
+        .mul(nonUniformChop)
+        .mul(crestChopMult)
+        .toVar();
+
+      // No blanket distance fade here any more: fbmBL already removed exactly the octaves that
+      // cannot be resolved, octave by octave, which is both sharper up close and cleaner far away.
+      const detailGain = effectiveDetail.mul(0.1).toVar();
+      const detail = vec3(h0.sub(hx), 0.0, h0.sub(hz)).mul(detailGain);
+      N.assign(normalize(n0.add(detail)));
+      detailVar.assign(detailLostVariance(fpSpec).mul(0.01).mul(detailGain).mul(detailGain));
+    });
 
     const V = normalize(cameraPosition.sub(P)).toVar();
 
@@ -732,7 +738,6 @@ export const createOpenSeaMaterial = () => {
     // Toksvig's normal-map filtering argument applied to procedural detail.
     // Deliberately measured against the LONG axis: detail that survives band limiting can still
     // alias along a sliver, so for specular purposes treat it as unresolved.
-    const detailVar = detailLostVariance(fpSpec).mul(0.01).mul(detailGain).mul(detailGain);
     const microVar = detailVar.add(swellLostVar).mul(microRoughnessUniform).toVar();
     // Calibrated so the lobe runs from ~520 (mirror-smooth, right under the camera) down to
     // ~40 by a few hundred metres, which is where it has to land to stay calm. Retuned when the
@@ -808,8 +813,11 @@ export const createOpenSeaMaterial = () => {
     // Band-limited: once this noise is sub-pixel it collapses to a constant 0.5, which makes
     // the modulation below exactly 1.0. That is the difference between a sparkling ocean and TV
     // static -- the noise stops being sampled once it can no longer be seen.
-    const glitterNoise = fbmBL(xz.mul(2.1).add(vec2(scaledTime.mul(-0.4), scaledTime.mul(0.5))),
-                               float(0.476), fp).mul(0.5).add(0.5);
+    const glitterNoise = float(0.75).toVar();
+    If(qualityModeUniform.greaterThan(0.5), () => {
+      glitterNoise.assign(fbmBL(xz.mul(2.1).add(vec2(scaledTime.mul(-0.4), scaledTime.mul(0.5))),
+                                 float(0.476), fp).mul(0.5).add(0.5));
+    });
     // Lobe width and gain both follow the filtered roughness now, rather than a camera-distance
     // ramp, so a grazing near-field pixel is filtered just as hard as a distant one.
     const specPower = max(float(520.0).mul(gloss), float(14.0)).toVar();
@@ -827,14 +835,20 @@ export const createOpenSeaMaterial = () => {
     // earlier times and taking the maximum leaves foam behind the crest as it travels, which is
     // the dissipating trail. Round detached blobs were the symptom of gating isotropic noise on
     // crest HEIGHT instead.
-    const jacLag1 = waveJacobianAt(xz, scaledTime.sub(foamTrailUniform.mul(1.1)),
-                                   seaUniform, shallowFadeF);
-    const jacLag2 = waveJacobianAt(xz, scaledTime.sub(foamTrailUniform.mul(2.7)),
-                                   seaUniform, shallowFadeF);
     const breakAt = Fn(([j, w]) =>
       smoothstep(foamJacobianUniform, foamJacobianUniform.sub(0.35), j).mul(w));
-    const capRaw = max(breakAt(jacobian, float(1.0)),
-                       max(breakAt(jacLag1, float(0.55)), breakAt(jacLag2, float(0.22)))).toVar();
+    const capRaw = float(0.0).toVar();
+
+    If(qualityModeUniform.greaterThan(0.5), () => {
+      const jacLag1 = waveJacobianAt(xz, scaledTime.sub(foamTrailUniform.mul(1.1)),
+                                     seaUniform, shallowFadeF);
+      const jacLag2 = waveJacobianAt(xz, scaledTime.sub(foamTrailUniform.mul(2.7)),
+                                     seaUniform, shallowFadeF);
+      capRaw.assign(max(breakAt(jacobian, float(1.0)),
+                         max(breakAt(jacLag1, float(0.55)), breakAt(jacLag2, float(0.22)))));
+    }).Else(() => {
+      capRaw.assign(breakAt(jacobian, float(1.0)));
+    });
 
     // Foam texture stretched ALONG the swell axis and advected with it, so the streaks run the
     // way the water is actually moving instead of sitting there as isotropic clumps.
@@ -843,13 +857,18 @@ export const createOpenSeaMaterial = () => {
     const alongAxis = dot(xz, sdir).sub(scaledTime.mul(WAVES[0].c).mul(0.35));
     const acrossAxis = dot(xz, sperp);
     const streakUv = vec2(alongAxis.mul(0.07), acrossAxis.mul(0.55));
-    const foamStreak = fbmBL(streakUv, float(1.82), fp).mul(0.5).add(0.5);
-    const streakMask = mix(float(1.0), smoothstep(0.18, 0.8, foamStreak), foamStreakUniform).toVar();
+
+    const streakMask = float(1.0).toVar();
+    const foamNoise = float(0.75).toVar();
+
+    If(qualityModeUniform.greaterThan(0.5), () => {
+      const foamStreak = fbmBL(streakUv, float(1.82), fp).mul(0.5).add(0.5);
+      streakMask.assign(mix(float(1.0), smoothstep(0.18, 0.8, foamStreak), foamStreakUniform));
+      foamNoise.assign(fbmBL(xz.mul(1.1).add(vec2(scaledTime.mul(0.22), scaledTime.mul(0.14))),
+                              float(0.909), fp).mul(0.5).add(0.5));
+    });
 
     const capFoam = capRaw.mul(streakMask);
-
-    const foamNoise = fbmBL(xz.mul(1.1).add(vec2(scaledTime.mul(0.22), scaledTime.mul(0.14))),
-                            float(0.909), fp).mul(0.5).add(0.5);
 
     // ---- The surf line -----------------------------------------------------
     // Gated on DEPTH, so it follows the bathymetry contour rather than the polygon edge. The

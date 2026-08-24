@@ -1,20 +1,9 @@
-// Stylized Pine Biome Tree System
-// =========================================================================================
-// Procedural, instanced, LOD-managed placement of 3D Stylized Pine Clusters & Trees.
-// Features:
-// - Natural organic forest groves via multi-tree cluster instancing + individual accent pines
-// - Multi-point footprint validation: strict 10-20m cliff drop exclusion & flat terrain anchoring
-// - Biome exclusion rules: No pines in Crystal Land, Lush Jungle, Desert Dunes, Open Ocean
-// - Automatic seasonal distribution: 100% White Snowy Pines in Misty Mountains, 90% Spring / 10% Autumn elsewhere
-// - Active camera frustum & view cone culling: zero wasted draws for trees behind or outside view
-// - 3 LOD distance bands (near 0-220m, mid 220-650m, far 650-1500m) with TSL WebGPU shaders
-
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { MeshToonNodeMaterial } from 'three/webgpu';
 import {
     Fn, vec3, vec4, float, uniform, attribute, texture, uv, mix, clamp,
-    smoothstep, positionLocal, positionGeometry, modelWorldMatrix, fract, sin, cos, max, pow, abs
+    smoothstep, positionLocal, positionGeometry, modelWorldMatrix, fract, sin, cos, max, pow
 } from 'three/tsl';
 
 const PINE_FILES = [
@@ -28,16 +17,16 @@ const PINE_FILES = [
     { key: 'pine_07_small',    path: 'assets/models/trees_med/pine_tree_07.glb',        fallbackPath: 'assets/models/trees/pine_tree_07.glb',        targetHeight: 3.5,  isCluster: false, footprintRadius: 2.5,  boundingRadius: 4.5 }
 ];
 
+// 2 LOD bands (0-200m near, 200-450m mid) - Far band culled for Galaxy Tab S6 Lite
 const LOD_BANDS = [
-    { name: 'near', maxDist: 220,  doubleSided: true,  sway: true,  alphaTest: 0.35 },
-    { name: 'mid',  maxDist: 650,  doubleSided: false, sway: true,  alphaTest: 0.50 },
-    { name: 'far',  maxDist: 1500, doubleSided: false, sway: false, alphaTest: 0.65 }
+    { name: 'near', maxDist: 200, doubleSided: false, sway: true,  alphaTest: 0.40 },
+    { name: 'mid',  maxDist: 450, doubleSided: false, sway: false, alphaTest: 0.50 }
 ];
 
-const DEFAULT_CELL_SIZE = 18.0;  // world units per cell for high forest density
-const REBUILD_DISTANCE = 20.0;   // rebuild field when camera moves this far
-const REBUILD_ROT_DIFF = 0.20;   // rebuild when camera rotates by ~11.5 degrees
-const REBUILD_FRAMES = 12;       // sliced cell walk frames
+const DEFAULT_CELL_SIZE = 32.0;  // 32m cell size reduces cell traversal by ~70%
+const REBUILD_DISTANCE = 30.0;
+const REBUILD_ROT_DIFF = 0.25;
+const REBUILD_FRAMES = 8;
 
 function cellHash(cx, cz, slot) {
     let h = Math.imul(cx, 374761393) + Math.imul(cz, 668265263) + Math.imul(slot, 2654435761);
@@ -45,7 +34,7 @@ function cellHash(cx, cz, slot) {
     return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 
-export class StylizedPineSystem {
+export class StylizedPineSystemLowPower {
     constructor(opts) {
         this.scene = opts.scene;
         this.camera = opts.camera || null;
@@ -57,7 +46,7 @@ export class StylizedPineSystem {
         this.getBiomeAt = opts.getBiomeAt;
         this.getIslandData = opts.getIslandData;
         this.getPathStrength = opts.getPathStrength || (() => 0);
-        this.densityScale = opts.densityScale !== undefined ? opts.densityScale : 1.0;
+        this.densityScale = opts.densityScale !== undefined ? opts.densityScale : 0.4;
 
         this.ready = false;
         this.enabled = true;
@@ -69,7 +58,7 @@ export class StylizedPineSystem {
         this._lastCamYaw = 0;
         this._walk = null;
         this._collected = [];
-        this.lastCounts = { near: 0, mid: 0, far: 0 };
+        this.lastCounts = { near: 0, mid: 0 };
         this.leafTexture = null;
 
         // Frustum Culling
@@ -77,64 +66,33 @@ export class StylizedPineSystem {
         this._projScreenMatrix = new THREE.Matrix4();
         this._sphere = new THREE.Sphere();
 
-        // Uniforms for shaders matching Sandbox
+        // Shading Uniforms
         this.uLeafBottom     = uniform(new THREE.Color('#1c3b23'));
         this.uLeafTop        = uniform(new THREE.Color('#5c8338'));
         this.uLeafVarColor   = uniform(new THREE.Color('#1e4430'));
         this.uLeafBrightness = uniform(1.05);
         this.uLeafGradPower  = uniform(1.1);
-        this.uLeafVarStrength= uniform(0.6);
-        this.uLeafVarScale   = uniform(0.08);
+        this.uLeafVarStrength= uniform(0.5);
 
         this.uBarkBase       = uniform(new THREE.Color('#2e1b10'));
         this.uBarkTop        = uniform(new THREE.Color('#5c3a21'));
         this.uBarkBrightness = uniform(1.35);
 
-        this.uWindStrength   = uniform(1.0);
+        this.uWindStrength   = uniform(0.8);
         this.uTreeScale      = uniform(1.0);
 
-        // Pool sizes per band (cap at 1000 per variant for maximum lush forest density in WebGPU)
+        // Low-power pool sizes
         this.poolSizes = {
-            near: 1000,
-            mid:  1000,
-            far:  1000
+            near: 150,
+            mid:  250
         };
 
-        // Placement settings
         this.minElevation = 1.0;
         this.maxElevation = 140.0;
-        this.maxSlope = 0.55;
-        this.density = 1.5;
+        this.density = 0.55;
         this.scaleMul = 1.0;
         this.cellSize = DEFAULT_CELL_SIZE;
-        this.currentPreset = 'auto'; // 'auto' (90% Spring, 10% Autumn, Misty Winter), 'spring', 'autumn', 'winter'
-    }
-
-    setPreset(name) {
-        this.currentPreset = name;
-        if (name === 'autumn') {
-            this.uLeafBottom.value.set('#ffaf36');
-            this.uLeafTop.value.set('#ff1910');
-            this.uLeafVarColor.value.set('#8f2409');
-            this.uLeafBrightness.value = 1.1;
-            this.uBarkBase.value.set('#2e1b10');
-            this.uBarkTop.value.set('#5c3a21');
-        } else if (name === 'winter') {
-            this.uLeafBottom.value.set('#203a3d');
-            this.uLeafTop.value.set('#eaf5fa');
-            this.uLeafVarColor.value.set('#8bb6c9');
-            this.uLeafBrightness.value = 1.15;
-            this.uBarkBase.value.set('#222426');
-            this.uBarkTop.value.set('#484c50');
-        } else if (name === 'spring') {
-            this.uLeafBottom.value.set('#1c3b23');
-            this.uLeafTop.value.set('#5c8338');
-            this.uLeafVarColor.value.set('#1e4430');
-            this.uLeafBrightness.value = 1.05;
-            this.uBarkBase.value.set('#2e1b10');
-            this.uBarkTop.value.set('#5c3a21');
-        }
-        this.respawn();
+        this.currentPreset = 'auto';
     }
 
     async load() {
@@ -150,14 +108,11 @@ export class StylizedPineSystem {
                     `./public/${cleanPath}`,
                     f.fallbackPath ? this.resolveAssetUrl(f.fallbackPath) : null,
                     cleanFallback ? `./${cleanFallback}` : null,
-                    cleanFallback ? cleanFallback : null,
-                    cleanFallback ? `public/${cleanFallback}` : null,
-                    cleanFallback ? `./public/${cleanFallback}` : null
+                    cleanFallback ? cleanFallback : null
                 ].filter(Boolean);
 
                 const tryLoad = (idx) => {
                     if (idx >= candidateUrls.length) {
-                        console.error('Failed to load pine model from all candidates:', f.key);
                         return res(null);
                     }
                     this.gltfLoader.load(
@@ -171,7 +126,7 @@ export class StylizedPineSystem {
             })
         ));
 
-        // Extract shared leaf texture from loaded gltf (skip trunk/bark materials)
+        // Extract shared leaf texture
         gltfs.forEach(gltf => {
             if (gltf && !this.leafTexture) {
                 gltf.scene.traverse(c => {
@@ -181,7 +136,7 @@ export class StylizedPineSystem {
                             if (!m || !m.map || this.leafTexture) return;
                             const matName = (m.name || '').toLowerCase();
                             const meshName = (c.name || '').toLowerCase();
-                            const isBark = matName.includes('trunk') || matName.includes('bark') || matName.includes('011') ||
+                            const isBark = matName.includes('trunk') || matName.includes('bark') ||
                                            meshName.includes('trunk') || meshName.includes('bark');
                             if (!isBark) {
                                 this.leafTexture = m.map;
@@ -200,21 +155,18 @@ export class StylizedPineSystem {
             const row = [];
             LOD_BANDS.forEach((band) => {
                 const mat = this._buildMaterial(band);
-                const pool = this.poolSizes[band.name] || 1000;
-                // Allocate full buffer capacity (1000 instances per variant per band)
-                const count = Math.min(1000, pool);
+                const count = this.poolSizes[band.name] || 150;
 
                 const instGeo = geo.clone();
-                // Add instanced attribute for per-tree seasonal coloring (0 = Spring, 1 = Autumn, 2 = Winter)
                 const seasonArr = new Float32Array(count);
                 instGeo.setAttribute('aSeason', new THREE.InstancedBufferAttribute(seasonArr, 1));
 
                 const mesh = new THREE.InstancedMesh(instGeo, mat, count);
                 mesh.name = `${PINE_FILES[vi].key}_${band.name}`;
-                mesh.castShadow = band.name === 'near';
-                mesh.receiveShadow = true;
+                mesh.castShadow = false;
+                mesh.receiveShadow = false;
                 mesh.count = 0;
-                mesh.boundingSphere = new THREE.Sphere(new THREE.Vector3(), band.maxDist + 60);
+                mesh.boundingSphere = new THREE.Sphere(new THREE.Vector3(), band.maxDist + 40);
                 mesh.frustumCulled = false;
                 this.scene.add(mesh);
                 row.push(mesh);
@@ -240,13 +192,12 @@ export class StylizedPineSystem {
                 const matName = (m && m.name) ? m.name.toLowerCase() : '';
                 const meshName = (c.name || '').toLowerCase();
                 const isBark = meshName.includes('trunk') || meshName.includes('bark') ||
-                               matName.includes('trunk') || matName.includes('bark') || matName.includes('011') ? 1.0 : 0.0;
+                               matName.includes('trunk') || matName.includes('bark') ? 1.0 : 0.0;
 
                 const nVerts = g.attributes.position.count;
                 const barkArr = new Float32Array(nVerts).fill(isBark);
                 g.setAttribute('aIsBark', new THREE.BufferAttribute(barkArr, 1));
 
-                // Clean extraneous attributes for instancing performance
                 if (g.attributes.tangent) g.deleteAttribute('tangent');
                 if (g.attributes.color) g.deleteAttribute('color');
 
@@ -263,7 +214,7 @@ export class StylizedPineSystem {
         const bb = merged.boundingBox;
         const h = bb.max.y - bb.min.y;
         const s = h > 0 ? targetHeight / h : 1.0;
-        merged.translate(0, -bb.min.y, 0); // sit firmly on ground (Y=0)
+        merged.translate(0, -bb.min.y, 0);
         merged.scale(s, s, s);
 
         merged.computeBoundingBox();
@@ -274,15 +225,15 @@ export class StylizedPineSystem {
     _buildMaterial(band) {
         const mat = new MeshToonNodeMaterial({
             gradientMap: this.gradientMap || undefined,
-            side: band.doubleSided ? THREE.DoubleSide : THREE.FrontSide,
+            side: THREE.FrontSide,
             transparent: false,
             alphaTest: band.alphaTest,
             depthWrite: true,
-            dithering: true
+            dithering: false
         });
 
         const aIsBark = attribute('aIsBark', 'float');
-        const aSeason = attribute('aSeason', 'float'); // 0.0 = Spring, 1.0 = Autumn, 2.0 = Winter
+        const aSeason = attribute('aSeason', 'float');
 
         if (this.leafTexture) {
             const texMap = texture(this.leafTexture, uv());
@@ -294,77 +245,37 @@ export class StylizedPineSystem {
         mat.colorNode = Fn(() => {
             const localY = clamp(positionLocal.y.div(8.5), 0.0, 1.0);
 
-            // Per-instance hash for natural color variation
-            const origin = modelWorldMatrix.mul(vec4(0.0, 0.0, 0.0, 1.0));
-            const instHash = fract(sin(origin.x.mul(12.9898).add(origin.z.mul(78.233))).mul(43758.5453));
-
-            // Spring Palette (Hooked to uniform controls matching Sandbox)
             const spBottom = this.uLeafBottom;
             const spTop    = this.uLeafTop;
-            const spVar    = this.uLeafVarColor;
+            const auBottom = vec3(1.00, 0.69, 0.21);
+            const auTop    = vec3(1.00, 0.10, 0.06);
+            const wiBottom = vec3(0.13, 0.23, 0.24);
+            const wiTop    = vec3(0.92, 0.96, 0.98);
 
-            // Autumn Palette (Warm Golden Amber to Crimson)
-            const auBottom = vec3(1.00, 0.69, 0.21); // #ffaf36
-            const auTop    = vec3(1.00, 0.10, 0.06); // #ff1910
-            const auVar    = vec3(0.56, 0.14, 0.04); // #8f2409
-
-            // Winter Palette (Misty Mountains Snowy White Pines)
-            const wiBottom = vec3(0.13, 0.23, 0.24); // #203a3d
-            const wiTop    = vec3(0.92, 0.96, 0.98); // #eaf5fa (Snow)
-            const wiVar    = vec3(0.55, 0.71, 0.79); // #8bb6c9 (Frost)
-
-            // Select season colors dynamically per instance
             const isAutumn = smoothstep(float(0.4), float(0.6), aSeason);
             const isWinter = smoothstep(float(1.4), float(1.6), aSeason);
 
             const nonWinterBottom = mix(spBottom, auBottom, isAutumn);
             const nonWinterTop    = mix(spTop, auTop, isAutumn);
-            const nonWinterVar    = mix(spVar, auVar, isAutumn);
 
             const leafColBottom = mix(nonWinterBottom, wiBottom, isWinter);
             const leafColTop    = mix(nonWinterTop, wiTop, isWinter);
-            const leafColVar    = mix(nonWinterVar, wiVar, isWinter);
 
-            // Foliage Gradient
             const gradT = pow(localY, this.uLeafGradPower);
             const leafBase = mix(leafColBottom, leafColTop, gradT);
 
-            // Subtle foliage tonal variation
-            const varNoise = instHash.sub(0.5).mul(this.uLeafVarStrength);
-            const variedLeaf = mix(leafBase, leafColVar, varNoise.mul(0.5)).mul(this.uLeafBrightness);
-
-            // Bark Color (Warm timber for Spring/Autumn, cool slate for Winter)
-            const warmBarkBase = this.uBarkBase;
-            const warmBarkTop  = this.uBarkTop;
-            const coolBarkBase = vec3(0.13, 0.14, 0.15); // #222426
-            const coolBarkTop  = vec3(0.28, 0.30, 0.31); // #484c50
-
-            const curBarkBase = mix(warmBarkBase, coolBarkBase, isWinter);
-            const curBarkTop  = mix(warmBarkTop, coolBarkTop, isWinter);
-            const barkCol = mix(curBarkBase, curBarkTop, smoothstep(float(0.0), float(0.6), localY)).mul(this.uBarkBrightness);
-
-            return mix(variedLeaf, barkCol, aIsBark);
+            const barkCol = mix(this.uBarkBase, this.uBarkTop, smoothstep(float(0.0), float(0.6), localY)).mul(this.uBarkBrightness);
+            return mix(leafBase, barkCol, aIsBark);
         })();
 
         if (band.sway) {
             mat.positionNode = Fn(() => {
                 const p = positionLocal.toVar();
                 const origin = modelWorldMatrix.mul(vec4(0.0, 0.0, 0.0, 1.0));
-
-                // Multi-frequency wind oscillation
-                const w1 = sin(this.uTime.mul(1.4).add(origin.x.mul(0.025)).add(origin.z.mul(0.02))).mul(0.06);
-                const w2 = cos(this.uTime.mul(2.5).add(origin.x.mul(0.05)).add(origin.z.mul(0.035))).mul(0.03);
-                const flutter = sin(this.uTime.mul(3.8).add(positionGeometry.y.mul(2.0))).mul(0.015);
-
+                const w1 = sin(this.uTime.mul(1.4).add(origin.x.mul(0.025)).add(origin.z.mul(0.02))).mul(0.05);
                 const heightFactor = max(0.0, positionGeometry.y).div(6.0);
-                const mask = heightFactor.mul(heightFactor);
-
-                const totalSway = w1.add(w2).add(flutter).mul(mask).mul(this.uWindStrength);
-
+                const totalSway = w1.mul(heightFactor).mul(this.uWindStrength);
                 p.x.addAssign(totalSway);
-                p.z.addAssign(totalSway.mul(0.7));
-                p.y.subAssign(abs(totalSway).mul(0.08));
-
                 return p;
             })();
         }
@@ -375,73 +286,21 @@ export class StylizedPineSystem {
     _isValidSite(cx, cz, footprintRadius = 13.0, isCluster = true) {
         const biome = this.getBiomeAt(cx, cz);
         if (!biome || !biome.name) return null;
-
         const bName = biome.name.toLowerCase();
 
-        // 1. Strict Excluded Biomes Check
-        if (bName.includes('crystal') ||
-            bName.includes('jungle') ||
-            bName.includes('desert') ||
-            bName.includes('ocean')) {
+        if (bName.includes('crystal') || bName.includes('jungle') || bName.includes('desert') || bName.includes('ocean')) {
             return null;
         }
 
-        // 2. Allowed Biomes Check
-        const isAllowed = biome.treesOk !== false ||
-                          bName.includes('archipelago') ||
-                          bName.includes('ghibli') ||
-                          bName.includes('misty') ||
-                          bName.includes('mountain') ||
-                          bName.includes('magical') ||
-                          bName.includes('plains') ||
-                          bName.includes('highland') ||
-                          bName.includes('north');
-        if (!isAllowed) return null;
-
-        // 3. Center height & elevation bounds
         const centerH = this.getWorldHeight(cx, cz);
         if (centerH < this.minElevation || centerH > this.maxElevation) return null;
 
-        // 4. Center island & path checks
         const island = this.getIslandData(cx, cz);
         if (!island || island.mask < 0.04) return null;
         if (this.getPathStrength(cx, cz) >= 0.35) return null;
 
-        // 5. Multi-Point Perimeter Sampling (Flatter terrain check: max slope / cliff delta within footprint)
-        const cliffMaxDelta = isCluster ? 8.0 : 6.0;
-        const angles = [0, 45, 90, 135, 180, 225, 270, 315];
-        for (let i = 0; i < angles.length; i++) {
-            const rad = angles[i] * 0.0174532925;
-            const sx = cx + Math.cos(rad) * footprintRadius;
-            const sz = cz + Math.sin(rad) * footprintRadius;
-
-            const sh = this.getWorldHeight(sx, sz);
-            const deltaH = Math.abs(sh - centerH);
-            if (deltaH > cliffMaxDelta) return null;
-
-            const sIsland = this.getIslandData(sx, sz);
-            if (!sIsland || sIsland.mask < 0.03) return null;
-            if (this.getPathStrength(sx, sz) >= 0.40) return null;
-        }
-
-        // 6. Extended Cliff Drop Exclusion (ensure not on the immediate verge of a cliff)
-        if (isCluster) {
-            const outerRadius = 16.0;
-            const outerAngles = [0, 90, 180, 270];
-            for (let i = 0; i < outerAngles.length; i++) {
-                const rad = outerAngles[i] * 0.0174532925;
-                const ox = cx + Math.cos(rad) * outerRadius;
-                const oz = cz + Math.sin(rad) * outerRadius;
-                const oh = this.getWorldHeight(ox, oz);
-                if (Math.abs(oh - centerH) > 14.0) return null;
-            }
-        }
-
         const isMisty = bName.includes('misty') || bName.includes('mountain') || bName.includes('north');
-        return {
-            h: centerH,
-            isMisty: isMisty
-        };
+        return { h: centerH, isMisty };
     }
 
     _visitCell(cx, cz, focusX, focusZ, maxDistSq, out, frustum) {
@@ -451,130 +310,28 @@ export class StylizedPineSystem {
         if (distSq > maxDistSq) return;
 
         const d = this.density;
-
-        // 1. Primary Forest Grove Cluster (spawns ~9 dense pine trees per cluster)
         const fill = cellHash(cx, cz, 0);
-        if (fill < 0.85 * d) {
-            const jx = (cellHash(cx, cz, 1) - 0.5) * 0.6;
-            const jz = (cellHash(cx, cz, 2) - 0.5) * 0.6;
+
+        if (fill < 0.75 * d) {
+            const jx = (cellHash(cx, cz, 1) - 0.5) * 0.5;
+            const jz = (cellHash(cx, cz, 2) - 0.5) * 0.5;
             const x = (cx + 0.5 + jx) * this.cellSize;
             const z = (cz + 0.5 + jz) * this.cellSize;
 
             const site = this._isValidSite(x, z, PINE_FILES[0].footprintRadius, true);
             if (site !== null) {
                 this._sphere.center.set(x, site.h, z);
-                this._sphere.radius = PINE_FILES[0].boundingRadius + 18.0;
+                this._sphere.radius = PINE_FILES[0].boundingRadius + 15.0;
 
                 if (!frustum || frustum.intersectsSphere(this._sphere)) {
-                    let season = 0.0;
-                    if (this.currentPreset === 'auto') {
-                        if (site.isMisty) {
-                            season = 2.0;
-                        } else {
-                            const sHash = cellHash(cx, cz, 7);
-                            season = (sHash < 0.10) ? 1.0 : 0.0;
-                        }
-                    } else if (this.currentPreset === 'autumn') {
-                        season = 1.0;
-                    } else if (this.currentPreset === 'winter') {
-                        season = 2.0;
-                    }
-
+                    let season = site.isMisty ? 2.0 : ((cellHash(cx, cz, 7) < 0.10) ? 1.0 : 0.0);
                     const r = cellHash(cx, cz, 3);
                     out.push({
                         x, y: site.h, z,
-                        variant: 0, // cluster_grove
+                        variant: 0,
                         rot: r * Math.PI * 2.0,
                         scale: (0.90 + cellHash(cx, cz, 4) * 0.25) * this.scaleMul,
                         season,
-                        dist: Math.sqrt(distSq)
-                    });
-                }
-            }
-        }
-
-        // 2. Individual Tree Accent Scatter 1
-        const accentFill1 = cellHash(cx, cz, 10);
-        if (accentFill1 < 0.85 * d) {
-            const jx2 = cellHash(cx, cz, 11);
-            const jz2 = cellHash(cx, cz, 12);
-            const x2 = (cx + jx2) * this.cellSize;
-            const z2 = (cz + jz2) * this.cellSize;
-
-            const vIdx = 1 + Math.floor(cellHash(cx, cz, 13) * (PINE_FILES.length - 1));
-            const cfg = PINE_FILES[Math.min(PINE_FILES.length - 1, vIdx)];
-
-            const site2 = this._isValidSite(x2, z2, cfg.footprintRadius, false);
-            if (site2 !== null) {
-                this._sphere.center.set(x2, site2.h, z2);
-                this._sphere.radius = cfg.boundingRadius + 14.0;
-
-                if (!frustum || frustum.intersectsSphere(this._sphere)) {
-                    let season2 = 0.0;
-                    if (this.currentPreset === 'auto') {
-                        if (site2.isMisty) {
-                            season2 = 2.0;
-                        } else {
-                            const sHash2 = cellHash(cx, cz, 14);
-                            season2 = (sHash2 < 0.10) ? 1.0 : 0.0;
-                        }
-                    } else if (this.currentPreset === 'autumn') {
-                        season2 = 1.0;
-                    } else if (this.currentPreset === 'winter') {
-                        season2 = 2.0;
-                    }
-
-                    const r2 = cellHash(cx, cz, 15);
-                    out.push({
-                        x: x2, y: site2.h, z: z2,
-                        variant: vIdx,
-                        rot: r2 * Math.PI * 2.0,
-                        scale: (0.85 + cellHash(cx, cz, 16) * 0.35) * this.scaleMul,
-                        season: season2,
-                        dist: Math.sqrt(distSq)
-                    });
-                }
-            }
-        }
-
-        // 3. Individual Tree Accent Scatter 2 (additional filler to make landscape truly lush)
-        const accentFill2 = cellHash(cx, cz, 20);
-        if (accentFill2 < 0.70 * d) {
-            const jx3 = cellHash(cx, cz, 21);
-            const jz3 = cellHash(cx, cz, 22);
-            const x3 = (cx + jx3) * this.cellSize;
-            const z3 = (cz + jz3) * this.cellSize;
-
-            const vIdx2 = 1 + Math.floor(cellHash(cx, cz, 23) * (PINE_FILES.length - 1));
-            const cfg2 = PINE_FILES[Math.min(PINE_FILES.length - 1, vIdx2)];
-
-            const site3 = this._isValidSite(x3, z3, cfg2.footprintRadius, false);
-            if (site3 !== null) {
-                this._sphere.center.set(x3, site3.h, z3);
-                this._sphere.radius = cfg2.boundingRadius + 14.0;
-
-                if (!frustum || frustum.intersectsSphere(this._sphere)) {
-                    let season3 = 0.0;
-                    if (this.currentPreset === 'auto') {
-                        if (site3.isMisty) {
-                            season3 = 2.0;
-                        } else {
-                            const sHash3 = cellHash(cx, cz, 24);
-                            season3 = (sHash3 < 0.10) ? 1.0 : 0.0;
-                        }
-                    } else if (this.currentPreset === 'autumn') {
-                        season3 = 1.0;
-                    } else if (this.currentPreset === 'winter') {
-                        season3 = 2.0;
-                    }
-
-                    const r3 = cellHash(cx, cz, 25);
-                    out.push({
-                        x: x3, y: site3.h, z: z3,
-                        variant: vIdx2,
-                        rot: r3 * Math.PI * 2.0,
-                        scale: (0.80 + cellHash(cx, cz, 26) * 0.30) * this.scaleMul,
-                        season: season3,
                         dist: Math.sqrt(distSq)
                     });
                 }
@@ -610,7 +367,6 @@ export class StylizedPineSystem {
 
             mesh.setMatrixAt(idx, dummy.matrix);
 
-            // Update per-instance season attribute
             if (mesh.geometry && mesh.geometry.attributes && mesh.geometry.attributes.aSeason) {
                 mesh.geometry.attributes.aSeason.setX(idx, c.season);
             }
@@ -618,7 +374,7 @@ export class StylizedPineSystem {
             perMeshCount[c.variant][band] = idx + 1;
         }
 
-        const counts = { near: 0, mid: 0, far: 0 };
+        const counts = { near: 0, mid: 0 };
         this._byVariantBand.forEach((row, vi) => {
             row.forEach((mesh, bi) => {
                 mesh.count = perMeshCount[vi][bi];
@@ -627,7 +383,7 @@ export class StylizedPineSystem {
                     mesh.geometry.attributes.aSeason.needsUpdate = true;
                 }
                 mesh.boundingSphere.center.set(focusX, 0, focusZ);
-                mesh.boundingSphere.radius = LOD_BANDS[bi].maxDist + 60;
+                mesh.boundingSphere.radius = LOD_BANDS[bi].maxDist + 40;
                 mesh.frustumCulled = true;
                 counts[LOD_BANDS[bi].name] += mesh.count;
             });
@@ -697,29 +453,8 @@ export class StylizedPineSystem {
         };
     }
 
-    respawn() {
-        this._lastFocusX = Infinity;
-        this._lastFocusZ = Infinity;
-        this._walk = null;
-        this._collected = [];
-        this.meshes.forEach(m => {
-            m.count = 0;
-            m.instanceMatrix.needsUpdate = true;
-            if (m.geometry && m.geometry.attributes && m.geometry.attributes.aSeason) {
-                m.geometry.attributes.aSeason.needsUpdate = true;
-            }
-        });
-    }
-
     setVisible(visible) {
         this.enabled = visible;
         this.meshes.forEach(m => { m.visible = visible; });
-        if (visible) this.respawn();
-    }
-
-    setCellSize(newCellSize) {
-        if (Math.abs(this.cellSize - newCellSize) < 0.5) return;
-        this.cellSize = Math.max(10.0, newCellSize);
-        this.respawn();
     }
 }

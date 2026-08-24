@@ -46,46 +46,62 @@ export class AnimatedFlockSystem {
     }
 
     loadModel() {
-        const url = this.resolveAssetUrl(this.modelPath);
-        this.gltfLoader.load(
-            url,
-            (gltf) => {
-                const baseScene = gltf.scene;
-                const animations = gltf.animations || [];
+        const cleanPath = this.modelPath.replace(/^\.?\//, '');
+        const candidateUrls = [
+            this.resolveAssetUrl(this.modelPath),
+            `./${cleanPath}`,
+            cleanPath,
+            `public/${cleanPath}`,
+            `./public/${cleanPath}`
+        ];
 
-                for (let i = 0; i < this.count; i++) {
-                    const birdMesh = SkeletonUtils.clone(baseScene);
-                    birdMesh.scale.setScalar(this.scale);
-
-                    let mixer = null;
-                    if (animations.length > 0) {
-                        mixer = new THREE.AnimationMixer(birdMesh);
-                        const action = mixer.clipAction(animations[0]);
-                        action.time = Math.random() * (animations[0].duration || 1);
-                        mixer.timeScale = 0.85 + Math.random() * 0.3;
-                        action.play();
-                    }
-
-                    birdMesh.traverse((child) => {
-                        if (child.isMesh) {
-                            child.castShadow = true;
-                            child.receiveShadow = true;
-                        }
-                    });
-
-                    this.group.add(birdMesh);
-                    this.birds.push({
-                        mesh: birdMesh,
-                        mixer: mixer
-                    });
-                }
-                this.isReady = true;
-            },
-            undefined,
-            (err) => {
-                console.warn(`[AnimatedFlockSystem] Failed to load ${this.modelPath}:`, err);
+        const tryLoad = (idx) => {
+            if (idx >= candidateUrls.length) {
+                console.warn(`[AnimatedFlockSystem] Failed to load ${this.modelPath} from all fallback paths`);
+                return;
             }
-        );
+            const url = candidateUrls[idx];
+            this.gltfLoader.load(
+                url,
+                (gltf) => {
+                    const baseScene = gltf.scene;
+                    const animations = gltf.animations || [];
+
+                    for (let i = 0; i < this.count; i++) {
+                        const birdMesh = SkeletonUtils.clone(baseScene);
+                        birdMesh.scale.setScalar(this.scale);
+
+                        let mixer = null;
+                        if (animations.length > 0) {
+                            mixer = new THREE.AnimationMixer(birdMesh);
+                            const action = mixer.clipAction(animations[0]);
+                            action.time = Math.random() * (animations[0].duration || 1);
+                            mixer.timeScale = 0.85 + Math.random() * 0.3;
+                            action.play();
+                        }
+
+                        birdMesh.traverse((child) => {
+                            if (child.isMesh) {
+                                child.castShadow = true;
+                                child.receiveShadow = true;
+                            }
+                        });
+
+                        this.group.add(birdMesh);
+                        this.birds.push({
+                            mesh: birdMesh,
+                            mixer: mixer
+                        });
+                    }
+                    this.isReady = true;
+                },
+                undefined,
+                () => {
+                    tryLoad(idx + 1);
+                }
+            );
+        };
+        tryLoad(0);
     }
 
     setScale(scale) {

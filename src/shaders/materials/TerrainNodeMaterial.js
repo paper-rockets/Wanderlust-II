@@ -38,7 +38,19 @@ const fbm2D = Fn(([p]) => {
     return n1.mul(0.55).add(n2.mul(0.30)).add(n3.mul(0.15));
 });
 
-export function createTerrainColorNode(waterLevelUniform, uTime, uSunDir, uSandNoiseMap, uShimmerMult, uWorldOriginZ) {
+export function createTerrainColorNode(
+    waterLevelUniform,
+    uTime,
+    uSunDir,
+    uSandNoiseMap,
+    uShimmerMult,
+    uWorldOriginZ,
+    uGrassMottleIntensity,
+    uGrassMottleScale,
+    uGrassMossColor,
+    uGrassDarkColor,
+    uGrassAccentColor
+) {
     return Fn(() => {
         const p = positionWorld;
         const norm = normalize(normalWorld);
@@ -108,18 +120,73 @@ export function createTerrainColorNode(waterLevelUniform, uTime, uSunDir, uSandN
         const snowSpecColor = snowSpec.add(snowRimSpec).mul(vec3(0.85, 0.95, 1.0)).mul(1.2).mul(shimmerMult);
         const snowEffects = snowRimGlow.add(snowSpecColor).mul(isSnow);
 
-        return baseColor.add(sandEffects).add(snowEffects);
+        // 3. High-Frequency Painterly Grass Mottling & Randomization Texture (Protected: NEVER applies to sand dunes or snow)
+        const isGrass = step(float(0.12), baseColor.g)
+            .mul(step(baseColor.r, baseColor.g.mul(1.25)))
+            .mul(step(baseColor.b, baseColor.g.mul(1.15)))
+            .mul(float(1.0).sub(isSand))
+            .mul(float(1.0).sub(desertMask))
+            .mul(float(1.0).sub(snowBiomeMask));
+
+        const mScale = uGrassMottleScale ? uGrassMottleScale : float(1.0);
+        const mIntensity = uGrassMottleIntensity ? uGrassMottleIntensity : float(1.0);
+        const mossCol = uGrassMossColor ? uGrassMossColor : vec3(0.48, 0.90, 0.05);
+        const darkCol = uGrassDarkColor ? uGrassDarkColor : vec3(0.07, 0.33, 0.14);
+        const accentCol = uGrassAccentColor ? uGrassAccentColor : vec3(0.64, 0.91, 0.22);
+
+        // Multi-frequency noise sampling for painterly watercolor clumps and dappling
+        const pMottle = p.xz.mul(mScale).mul(0.045);
+        const gn1 = vnoise2D(pMottle);
+        const gn2 = vnoise2D(pMottle.mul(2.65).add(vec2(gn1.mul(0.8), gn1.mul(0.5))));
+        const gn3 = vnoise2D(pMottle.mul(6.8).add(vec2(34.2, 71.9)));
+        const grassNoiseVal = gn1.mul(0.52).add(gn2.mul(0.33)).add(gn3.mul(0.15));
+
+        // High-frequency watercolor mottling
+        const mossMask = tslSmoothstep(float(0.46), float(0.76), grassNoiseVal);
+        const darkMask = tslSmoothstep(float(0.44), float(0.16), grassNoiseVal);
+        const accentMask = tslSmoothstep(float(0.66), float(0.90), grassNoiseVal);
+
+        let mottledGrass = mix(baseColor.rgb, darkCol, darkMask.mul(0.65));
+        mottledGrass = mix(mottledGrass, mossCol, mossMask.mul(0.80));
+        mottledGrass = mix(mottledGrass, accentCol, accentMask.mul(0.55));
+
+        const surfaceColor = mix(baseColor.rgb, mottledGrass, isGrass.mul(mIntensity));
+
+        return surfaceColor.add(sandEffects).add(snowEffects);
     });
 }
 
-export const createTerrainMaterial = (uTime, uSunDir, uSandNoiseMap, uShimmerMult, uWorldOriginZ) => {
+export const createTerrainMaterial = (
+    uTime,
+    uSunDir,
+    uSandNoiseMap,
+    uShimmerMult,
+    uWorldOriginZ,
+    uGrassMottleIntensity,
+    uGrassMottleScale,
+    uGrassMossColor,
+    uGrassDarkColor,
+    uGrassAccentColor
+) => {
     const terrainMat = new MeshStandardNodeMaterial({
         roughness: 0.82,
         metalness: 0.05
     });
 
     const waterLevelUniform = uniform(2.4);
-    terrainMat.colorNode = createTerrainColorNode(waterLevelUniform, uTime, uSunDir, uSandNoiseMap, uShimmerMult, uWorldOriginZ)();
+    terrainMat.colorNode = createTerrainColorNode(
+        waterLevelUniform,
+        uTime,
+        uSunDir,
+        uSandNoiseMap,
+        uShimmerMult,
+        uWorldOriginZ,
+        uGrassMottleIntensity,
+        uGrassMottleScale,
+        uGrassMossColor,
+        uGrassDarkColor,
+        uGrassAccentColor
+    )();
 
     return terrainMat;
 };

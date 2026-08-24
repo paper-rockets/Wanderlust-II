@@ -115,7 +115,7 @@ export function createProceduralSky() {
     const uStarDensity = uniform(0.055);
     const uStarBrightness = uniform(1.35);
     const uStarTwinkle = uniform(0.45);
-    const uMilkyWay = uniform(2.2);
+    const uMilkyWay = uniform(0.1);
     const uMilkyDust = uniform(0.85);
     const uMilkyArmColor = uniform(new THREE.Color(0.55, 0.68, 1.15));
     const uMilkyCoreColor = uniform(new THREE.Color(1.35, 1.10, 0.85));

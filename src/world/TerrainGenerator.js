@@ -119,3 +119,12 @@ export function getIslandData(worldX, worldZ) {
         mainBiome: biome
     };
 }
+
+export function getPathStrength(x, z) {
+    const scale = 0.002;
+    const n1 = snoise(x * scale, z * scale);
+    const n2 = snoise(x * scale * 2 + 1000, z * scale * 2 + 1000) * 0.3;
+    let path = Math.abs(n1 + n2);
+    let mask = smoothstep(0.15, 0.0, path);
+    return mask;
+}

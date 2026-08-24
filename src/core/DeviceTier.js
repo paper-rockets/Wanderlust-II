@@ -32,10 +32,10 @@ const PIXEL_BUDGET = {
 // target in the TSL pipeline. Sample count and the sun-visibility gate carry the saving for
 // now; see the audit's WO-2 follow-up.
 export const TIER_SETTINGS = {
-    [TIER.MOBILE]:       { godRaySamples: 8,  skyOctaves: 2, treeDensity: 0.35, shadows: false },
-    [TIER.TABLET]:       { godRaySamples: 16, skyOctaves: 3, treeDensity: 0.55, shadows: true  },
-    [TIER.DESKTOP]:      { godRaySamples: 24, skyOctaves: 4, treeDensity: 1.0,  shadows: true  },
-    [TIER.DESKTOP_HIGH]: { godRaySamples: 32, skyOctaves: 4, treeDensity: 1.6,  shadows: true  }
+    [TIER.MOBILE]:       { godRaySamples: 8,  skyOctaves: 2, treeDensity: 1.0,  shadows: false },
+    [TIER.TABLET]:       { godRaySamples: 16, skyOctaves: 3, treeDensity: 1.5,  shadows: true  },
+    [TIER.DESKTOP]:      { godRaySamples: 24, skyOctaves: 4, treeDensity: 2.0,  shadows: true  },
+    [TIER.DESKTOP_HIGH]: { godRaySamples: 32, skyOctaves: 4, treeDensity: 2.5,  shadows: true  }
 };
 
 function classify() {

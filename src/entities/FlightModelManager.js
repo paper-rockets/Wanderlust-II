@@ -3,6 +3,7 @@
 
 import * as THREE from 'three';
 import { FLIGHT_MODELS } from '../config/FlightModelsConfig.js';
+export { FLIGHT_MODELS };
 
 export class FlightModelManager {
     constructor(parentGroup, gltfLoader, resolveAssetUrlFn) {
@@ -139,100 +140,115 @@ export class FlightModelManager {
         }
 
         this.isLoading = true;
-        const fullUrl = this.resolveAssetUrl(cfg.file);
+        const cleanFile = cfg.file.replace(/^\.?\//, '');
+        const candidateUrls = [
+            this.resolveAssetUrl(cfg.file),
+            `./${cleanFile}`,
+            cleanFile,
+            `public/${cleanFile}`,
+            `./public/${cleanFile}`
+        ];
 
         return new Promise((resolve, reject) => {
-            this.gltfLoader.load(
-                fullUrl,
-                (gltf) => {
+            const tryLoad = (idx) => {
+                if (idx >= candidateUrls.length) {
                     this.isLoading = false;
-                    const root = gltf.scene;
-                    
-                    // Calculate exact bounding box to center geometry
-                    const rawBox = new THREE.Box3().setFromObject(root);
-                    const rawSize = new THREE.Vector3();
-                    rawBox.getSize(rawSize);
-                    const rawCenter = new THREE.Vector3();
-                    rawBox.getCenter(rawCenter);
+                    console.warn(`[FlightModelManager] Failed to load ${cfg.file} from all fallback URLs`);
+                    return reject(new Error(`Failed to load ${cfg.file}`));
+                }
+                const url = candidateUrls[idx];
+                this.gltfLoader.load(
+                    url,
+                    (gltf) => {
+                        this.isLoading = false;
+                        const root = gltf.scene;
+                        
+                        // Calculate exact bounding box to center geometry
+                        const rawBox = new THREE.Box3().setFromObject(root);
+                        const rawSize = new THREE.Vector3();
+                        rawBox.getSize(rawSize);
+                        const rawCenter = new THREE.Vector3();
+                        rawBox.getCenter(rawCenter);
 
-                    const maxDim = Math.max(rawSize.x, rawSize.y, rawSize.z);
-                    const baseScale = maxDim > 0 ? (2.0 / maxDim) : 1.0;
+                        const maxDim = Math.max(rawSize.x, rawSize.y, rawSize.z);
+                        const baseScale = maxDim > 0 ? (2.0 / maxDim) : 1.0;
 
-                    const wrapper = new THREE.Group();
-                    const inner = new THREE.Group();
+                        const wrapper = new THREE.Group();
+                        const inner = new THREE.Group();
 
-                    // Center mesh inside inner group
-                    root.position.x = -rawCenter.x;
-                    root.position.y = -rawCenter.y;
-                    root.position.z = -rawCenter.z;
+                        // Center mesh inside inner group
+                        root.position.x = -rawCenter.x;
+                        root.position.y = -rawCenter.y;
+                        root.position.z = -rawCenter.z;
 
-                    // Apply shadow casting, double-sided materials, and disable frustum culling
-                    root.traverse((child) => {
-                        if (child.isMesh) {
-                            child.castShadow = true;
-                            child.receiveShadow = true;
-                            child.frustumCulled = false;
-                            if (child.material) {
-                                if (Array.isArray(child.material)) {
-                                    child.material.forEach(m => {
-                                        m.side = THREE.DoubleSide;
-                                        m.needsUpdate = true;
-                                    });
-                                } else {
-                                    child.material.side = THREE.DoubleSide;
-                                    child.material.needsUpdate = true;
+                        // Apply shadow casting, double-sided materials, and disable frustum culling
+                        root.traverse((child) => {
+                            if (child.isMesh) {
+                                child.castShadow = true;
+                                child.receiveShadow = true;
+                                child.frustumCulled = false;
+                                if (child.material) {
+                                    if (Array.isArray(child.material)) {
+                                        child.material.forEach(m => {
+                                            m.side = THREE.DoubleSide;
+                                            m.needsUpdate = true;
+                                        });
+                                    } else {
+                                        child.material.side = THREE.DoubleSide;
+                                        child.material.needsUpdate = true;
+                                    }
                                 }
                             }
-                        }
-                    });
+                        });
 
-                    inner.add(root);
-                    inner.rotation.x = (cfg.rotX || 0) * Math.PI / 180;
-                    inner.rotation.y = (cfg.rotY || 0) * Math.PI / 180;
-                    inner.rotation.z = (cfg.rotZ || 0) * Math.PI / 180;
+                        inner.add(root);
+                        inner.rotation.x = (cfg.rotX || 0) * Math.PI / 180;
+                        inner.rotation.y = (cfg.rotY || 0) * Math.PI / 180;
+                        inner.rotation.z = (cfg.rotZ || 0) * Math.PI / 180;
 
-                    wrapper.add(inner);
-                    const finalScale = baseScale * (cfg.scale || 1.0);
-                    wrapper.scale.set(finalScale, finalScale, finalScale);
-                    wrapper.position.y = cfg.offsetY || 0;
+                        wrapper.add(inner);
+                        const finalScale = baseScale * (cfg.scale || 1.0);
+                        wrapper.scale.set(finalScale, finalScale, finalScale);
+                        wrapper.position.y = cfg.offsetY || 0;
 
-                    // Animation Mixer Setup
-                    let mixer = null;
-                    if (gltf.animations && gltf.animations.length > 0) {
-                        mixer = new THREE.AnimationMixer(root);
-                        mixer.timeScale = this.animSpeed;
-                        let clip = null;
-                        if (cfg.anim) {
-                            clip = gltf.animations.find(a => a.name === cfg.anim);
+                        // Animation Mixer Setup
+                        let mixer = null;
+                        if (gltf.animations && gltf.animations.length > 0) {
+                            mixer = new THREE.AnimationMixer(root);
+                            mixer.timeScale = this.animSpeed;
+                            let clip = null;
+                            if (cfg.anim) {
+                                clip = gltf.animations.find(a => a.name === cfg.anim);
+                            }
+                            if (!clip) clip = gltf.animations[0];
+                            if (clip) {
+                                const action = mixer.clipAction(clip);
+                                action.play();
+                            }
                         }
-                        if (!clip) clip = gltf.animations[0];
-                        if (clip) {
-                            const action = mixer.clipAction(clip);
-                            action.play();
-                        }
+
+                        const cachedEntry = {
+                            root,
+                            wrapper,
+                            inner,
+                            mixer,
+                            animations: gltf.animations || [],
+                            baseScale,
+                            cfg
+                        };
+
+                        this.cache.set(cfg.id, cachedEntry);
+                        this._activateModel(cachedEntry, cfg, silent);
+                        resolve(cachedEntry);
+                    },
+                    undefined,
+                    (err) => {
+                        console.warn(`[FlightModelManager] Failed to load model from URL: ${url}. Error:`, err);
+                        tryLoad(idx + 1);
                     }
-
-                    const cachedEntry = {
-                        root,
-                        wrapper,
-                        inner,
-                        mixer,
-                        animations: gltf.animations || [],
-                        baseScale,
-                        cfg
-                    };
-
-                    this.cache.set(cfg.id, cachedEntry);
-                    this._activateModel(cachedEntry, cfg, silent);
-                    resolve(cachedEntry);
-                },
-                undefined,
-                (err) => {
-                    this.isLoading = false;
-                    console.warn(`[FlightModelManager] Failed to load ${cfg.file}:`, err);
-                    reject(err);
-                }
-            );
+                );
+            };
+            tryLoad(0);
         });
     }
 

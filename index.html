@@ -109,7 +109,8 @@
       margin-right: auto;
       pointer-events: auto;
     }
-    #top-bar #top-save-setting-btn {
+    #top-bar #top-save-setting-btn,
+    #top-bar #top-save-all-btn {
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -131,14 +132,16 @@
       line-height: 1;
       white-space: nowrap;
     }
-    #top-bar #top-save-setting-btn:hover {
+    #top-bar #top-save-setting-btn:hover,
+    #top-bar #top-save-all-btn:hover {
       background: rgba(30, 41, 59, 0.95);
       border-color: rgba(56, 189, 248, 0.5);
       color: #38bdf8;
       transform: translateY(-1px);
       box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
     }
-    #top-bar #top-save-setting-btn:active {
+    #top-bar #top-save-setting-btn:active,
+    #top-bar #top-save-all-btn:active {
       transform: translateY(0px) scale(0.96);
       background: rgba(15, 20, 28, 0.98);
     }
@@ -158,63 +161,43 @@
       z-index: 95 !important;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
     }
-    #top-model-switcher {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
+    #top-model-select {
       background: rgba(15, 20, 28, 0.94);
       border: 1px solid rgba(255, 255, 255, 0.15);
       border-radius: 8px;
-      padding: 3px 6px;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
-      pointer-events: auto;
-      user-select: none;
-      transition: border-color 0.2s ease, background 0.2s ease;
-    }
-    #top-model-switcher:hover {
-      background: rgba(18, 22, 32, 0.85);
-      border-color: rgba(255, 255, 255, 0.28);
-    }
-    .top-model-arrow {
-      background: transparent !important;
-      color: rgba(255, 255, 255, 0.7) !important;
-      border: none !important;
-      padding: 4px 6px !important;
-      cursor: pointer !important;
-      display: inline-flex !important;
-      align-items: center !important;
-      justify-content: center !important;
-      line-height: 1 !important;
-      transition: color 0.15s ease, transform 0.15s ease, background 0.15s ease !important;
-      border-radius: 4px !important;
-    }
-    .top-model-arrow:hover {
-      color: #ffffff !important;
-      transform: scale(1.15) !important;
-      background: rgba(255, 255, 255, 0.1) !important;
-    }
-    .top-model-arrow:active {
-      transform: scale(0.85) !important;
-    }
-    .top-model-name {
+      padding: 4px 10px;
       color: rgba(255, 255, 255, 0.95);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       font-size: 12px;
       font-weight: 600;
-      letter-spacing: 0.5px;
-      padding: 2px 6px;
-      min-width: 54px;
-      text-align: center;
+      letter-spacing: 0.4px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
       cursor: pointer;
+      pointer-events: auto;
+      user-select: none;
+      outline: none;
+      transition: all 0.2s ease;
       text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-      transition: color 0.15s ease;
     }
-    .top-model-name:hover {
+    #top-model-select:hover {
+      background: rgba(30, 41, 59, 0.95);
+      border-color: rgba(56, 189, 248, 0.5);
       color: #38bdf8;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+    }
+    #top-model-select:focus {
+      border-color: rgba(56, 189, 248, 0.7);
+      box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+    }
+    #top-model-select option {
+      background: #0f141c;
+      color: #ffffff;
+      font-size: 12px;
     }
     @media (max-width: 600px) {
-      .top-model-name { min-width: 44px !important; font-size: 11px !important; }
-      #top-bar #top-save-setting-btn { font-size: 11px !important; padding: 3px 6px !important; }
+      #top-model-select { font-size: 11px !important; padding: 3px 6px !important; }
+      #top-bar #top-save-setting-btn,
+      #top-bar #top-save-all-btn { font-size: 11px !important; padding: 3px 6px !important; }
     }
     
     /* Avoid clipping in forced mobile viewport simulation */
@@ -226,14 +209,16 @@
       gap: 6px;
     }
     body.force-mobile #top-bar #top-save-setting-btn,
-    .force-mobile #top-bar #top-save-setting-btn {
+    .force-mobile #top-bar #top-save-setting-btn,
+    body.force-mobile #top-bar #top-save-all-btn,
+    .force-mobile #top-bar #top-save-all-btn {
       font-size: 10px !important;
       padding: 3px 5px !important;
     }
-    body.force-mobile .top-model-name,
-    .force-mobile .top-model-name {
+    body.force-mobile #top-model-select,
+    .force-mobile #top-model-select {
       font-size: 10px !important;
-      min-width: 36px !important;
+      padding: 3px 4px !important;
     }
     body.force-mobile #top-bar > button,
     .force-mobile #top-bar > button {
@@ -312,18 +297,32 @@ window.addEventListener("unhandledrejection", function(event) {
 
   <div id="top-bar">
     <div id="fps-counter">FPS 60</div>
-    <div class="top-save-container">
+    <div class="top-save-container" style="display: flex; gap: 8px;">
+      <a href="low_power.html" id="top-low-power-btn" style="text-decoration: none; display: inline-flex; align-items: center; justify-content: center; background: rgba(15, 20, 28, 0.94); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 8px; padding: 4px 10px; color: #38bdf8; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 12px; font-weight: 600; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);">Tab S6 Lite Mode</a>
+      <button id="top-studio-btn" title="Open World & Grass Studio [F2]" aria-label="Studio" style="background: rgba(30, 58, 138, 0.7); border: 1px solid rgba(96, 165, 250, 0.4);">Studio (F2)</button>
+      <button id="top-save-all-btn" title="Save All Settings (Restored on Reload)" aria-label="Save All">Save All</button>
       <button id="top-save-setting-btn" title="Per-Biome & Global Saves" aria-label="Save Setting">Save Setting</button>
     </div>
-    <div id="top-model-switcher" title="Flight Model - Click arrows or name to switch">
-      <button id="top-model-prev-btn" class="top-model-arrow" title="Previous Model [Shift+C]" aria-label="Previous Model">
-        <svg width="8" height="10" viewBox="0 0 8 10" fill="currentColor"><polygon points="8,0 0,5 8,10"/></svg>
-      </button>
-      <span id="top-model-display" class="top-model-name" title="Click to cycle model [C]">Kiki</span>
-      <button id="top-model-next-btn" class="top-model-arrow" title="Next Model [C]" aria-label="Next Model">
-        <svg width="8" height="10" viewBox="0 0 8 10" fill="currentColor"><polygon points="0,0 8,5 0,10"/></svg>
-      </button>
-    </div>
+    <select id="top-model-select" class="top-model-select" title="Flight Model Selector" aria-label="Flight Model Selector">
+      <option value="kiki">Kiki</option>
+      <option value="mitsubishi_b2m2">B2M2</option>
+      <option value="sopwith_pup">Sopwith</option>
+      <option value="psx_saviola_s21">Savoia</option>
+      <option value="sikorski_s16">Sikorsky</option>
+      <option value="princess">Whale</option>
+      <option value="american_robin">Robin</option>
+      <option value="wood_pewee">Pewee</option>
+      <option value="american_bittern">Bittern</option>
+      <option value="quetzal">Quetzal</option>
+      <option value="parrot_animated">Parrot (Anim)</option>
+      <option value="parrot">Parrot (Classic)</option>
+      <option value="charizard">Charizard</option>
+      <option value="butterfly">Butterfly</option>
+      <option value="felixtowe">Felixstowe</option>
+      <option value="porco_rosso">Porco Rosso</option>
+      <option value="ww1_plane">WW1 Plane</option>
+      <option value="birds_flock">Birds Flock</option>
+    </select>
     <button id="top-music-btn" title="Toggle Music" aria-label="Toggle Music" style="opacity: 0.65; transition: all 0.2s ease;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></button>
     <button id="top-engine-btn" title="Toggle Engine Sound" aria-label="Toggle Engine Sound" style="display: none; opacity: 1; color: #4ade80; transition: all 0.2s ease;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 9V3c2.5 0 3.5 2 3.5 3.5S14.5 9 12 9z"/><path d="M12 15v6c-2.5 0-3.5-2-3.5-3.5S10.5 15 12 15z"/><path d="M9 12H3c0-2.5 2-3.5 3.5-3.5S9 9.5 9 12z"/><path d="M15 12h6c0 2.5-2 3.5-3.5 3.5S15 14.5 15 12z"/></svg></button>
     <button id="pause-toggle" title="Pause / Resume Flight" aria-label="Pause / Resume"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="4" width="4" height="16" rx="1"/><rect x="15" y="4" width="4" height="16" rx="1"/></svg></button>

@@ -4,7 +4,7 @@ import {
     Fn, vec2, vec3, vec4, float, sin, cos, dot, mix, clamp, pow, 
     reflect, normalize, positionWorld, positionLocal, positionGeometry, 
     normalWorld, cameraPosition, modelWorldMatrix, 
-    attribute, max, min, smoothstep, fract
+    attribute, max, min, smoothstep, fract, texture
 } from 'three/tsl';
 import { windSwayNode } from './WindSwayNode.js';
 
@@ -86,6 +86,10 @@ export const createBillboardMaterial = (tex, uTime, uTreeScale) => {
         side: THREE.DoubleSide,
         transparent: true
     });
+
+    const texNode = texture(tex);
+    billboardMat.alphaNode = texNode.a;
+    billboardMat.opacityNode = texNode.a;
 
     billboardMat.positionNode = windSwayNode(uTime, uTreeScale);
 
