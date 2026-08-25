@@ -99,7 +99,7 @@ export function createProceduralSky() {
     const uGradientSkyEnabled = uniform(1.0);
     const uSunCoronaIntensity = uniform(0.7);
     const uCloudColor = uniform(new THREE.Color(0xfffaec));
-    const uCloudShadowColor = uniform(new THREE.Color(0xa89888));
+    const uCloudShadowColor = uniform(new THREE.Color(0x8ca4c8));
     const uCloudCoverage = uniform(0.45);
     const uCloudEdge = uniform(0.06);
     const uCloudSpeed = uniform(0.018);
@@ -120,7 +120,8 @@ export function createProceduralSky() {
     const uMilkyArmColor = uniform(new THREE.Color(0.55, 0.68, 1.15));
     const uMilkyCoreColor = uniform(new THREE.Color(1.35, 1.10, 0.85));
     const uNightSkyLift = uniform(1.0);
-    const uNightColor = uniform(new THREE.Color(0.035, 0.045, 0.11));
+    const uNightColor = uniform(new THREE.Color(0.008, 0.012, 0.025));
+    const uMoonCoronaIntensity = uniform(0.65);
 
     const material = new MeshBasicNodeMaterial({
         side: THREE.BackSide,
@@ -154,8 +155,8 @@ export function createProceduralSky() {
 
         // Sun disc and forward atmospheric corona glow
         const sunDisc = smoothstep(0.9985, 0.9997, sunDot).mul(uSunColor).mul(3.0);
-        const sunCorona = pow(clamp(sunDot, 0.0, 1.0), 16.0).mul(uSunColor).mul(uSunCoronaIntensity);
-        const sunHaze = pow(clamp(sunDot, 0.0, 1.0), 4.0).mul(uSkyColorHorizon).mul(0.35);
+        const sunCorona = pow(clamp(sunDot, 0.0, 1.0), 32.0).mul(uSunColor).mul(uSunCoronaIntensity);
+        const sunHaze = pow(clamp(sunDot, 0.0, 1.0), 8.0).mul(uSkyColorHorizon).mul(0.18);
 
         // Horizon subtle warm rim
         const horizonBand = pow(clamp(float(1.0).sub(abs(dir.y)), 0.0, 1.0), 3.0);
@@ -259,9 +260,9 @@ export function createProceduralSky() {
         const skyDomeDist = float(1.0).div(max(dir.y.add(0.15), float(0.08)));
         const cloudUV = dir.xz.mul(skyDomeDist).mul(0.45);
 
-        // Wind drift & movement
+        // Wind drift & movement + initial offset
         const windOffset = vec2(uTime.mul(uCloudSpeed).mul(0.15), uTime.mul(uCloudSpeed).mul(0.08));
-        const uvSample = cloudUV.add(windOffset);
+        const uvSample = cloudUV.add(windOffset).add(vec2(14.8, 32.4));
 
         // Billowy Anime / Ghibli FBM Cloud Density with Domain Warping
         const q = vec2(fbm(uvSample), fbm(uvSample.add(vec2(5.2, 1.3))));
@@ -273,9 +274,14 @@ export function createProceduralSky() {
         const highThreshold = lowThreshold.add(max(uCloudEdge, float(0.02)));
         const cloudAlpha = smoothstep(lowThreshold, highThreshold, cloudNoise);
 
+        // Solar Clearance Corridor: smoothly part/clear clouds directly in front of the sun
+        // so sunlight and volumetric god rays are never blocked at start or during flight.
+        const sunProximity = clamp(sunDot, 0.0, 1.0);
+        const sunClearMask = float(1.0).sub(smoothstep(float(0.82), float(0.995), sunProximity).mul(0.94));
+
         // Horizon fade so clouds blend cleanly above the horizon
         const horizonFade = smoothstep(0.02, 0.22, dir.y);
-        const finalAlpha = cloudAlpha.mul(horizonFade).mul(uCloudOpacity);
+        const finalAlpha = cloudAlpha.mul(horizonFade).mul(sunClearMask).mul(uCloudOpacity);
 
         // Cloud Lighting & Rim / Silver Lining
         const sunDiffuse = clamp(sunDot.mul(0.5).add(0.5), 0.0, 1.0);
@@ -314,7 +320,7 @@ export function createProceduralSky() {
             uCloudColor, uCloudShadowColor, uCloudCoverage, uCloudEdge, uCloudSpeed,
             uCloudTurbulence, uCloudOpacity, uStormDarken, uNightFactor, uDuskFactor, uEnableProceduralClouds,
             uStarDensity, uStarBrightness, uStarTwinkle, uMilkyWay, uNightSkyLift, uNightColor,
-            uMilkyDust, uMilkyArmColor, uMilkyCoreColor
+            uMilkyDust, uMilkyArmColor, uMilkyCoreColor, uMoonCoronaIntensity
         }
     };
 }

@@ -81,11 +81,28 @@ export function getCurrentTrackIndex() {
 }
 
 export function initAudio(options = {}) {
-    if (audioCtx) return audioCtx;
+    const biplane = options.biplaneAudio || (typeof window !== 'undefined' ? window.biplaneAudio : null);
+    const fmm = options.flightModelManager || (typeof window !== 'undefined' ? window.flightModelManager : null);
+
+    if (audioCtx) {
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+        if (biplane && !biplane.audioCtx) {
+            biplane.setAudioContext(audioCtx);
+            const curCfg = fmm ? fmm.getCurrentConfig() : null;
+            if (curCfg && curCfg.isPlane && options.isEngineSoundOn !== false && !options.isSoundMuted) {
+                biplane.setActive(true);
+            }
+        }
+        return audioCtx;
+    }
+
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     if (!AudioContext) return null;
 
     audioCtx = new AudioContext();
+    if (typeof window !== 'undefined') window.audioCtx = audioCtx;
 
     const bufferSize = audioCtx.sampleRate * 2;
     const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
@@ -111,11 +128,11 @@ export function initAudio(options = {}) {
 
     noiseSource.start();
 
-    if (options.biplaneAudio) {
-        options.biplaneAudio.setAudioContext(audioCtx);
-        const curCfg = options.flightModelManager ? options.flightModelManager.getCurrentConfig() : null;
-        if (curCfg && curCfg.isPlane && options.isEngineSoundOn && !options.isSoundMuted) {
-            options.biplaneAudio.setActive(true);
+    if (biplane) {
+        biplane.setAudioContext(audioCtx);
+        const curCfg = fmm ? fmm.getCurrentConfig() : null;
+        if (curCfg && curCfg.isPlane && options.isEngineSoundOn !== false && !options.isSoundMuted) {
+            biplane.setActive(true);
         }
     }
 

@@ -35,31 +35,31 @@ export default {
             const sx = Math.pow(Math.sin(b * Math.PI * 0.5), 2) * 70;
             g -= sx;
         }
-        return Math.max(6, g);
+        return Math.max(1.0, g);
     },
     getColor(h, x, z, snoise, tempColor, smoothstep) {
         const o = snoise(x * 3e-4, z * 3e-4);
-        if (h <= 6.1 && o > 0.6) {
-            tempColor.lerpColors(desertColors.deepWater, desertColors.oasisWater, smoothstep(5, 6.1, h));
+        if (h <= 2.4 && o > 0.6) {
+            tempColor.lerpColors(desertColors.deepWater, desertColors.oasisSand, smoothstep(0.5, 2.4, h));
             return;
         }
-        if (h <= 6.1) {
-            tempColor.lerpColors(desertColors.deepWater, desertColors.oasisWater, smoothstep(1, 6.1, h));
+        if (h <= 2.4) {
+            tempColor.lerpColors(desertColors.deepWater, desertColors.sandBase, smoothstep(0.5, 2.4, h));
             return;
         }
         if (o > 0.6 && h < 16) {
-            if (h < 9) {
-                tempColor.lerpColors(desertColors.oasisWater, desertColors.oasisGrass, smoothstep(6.1, 9, h));
-            } else if (h < 13) {
-                tempColor.lerpColors(desertColors.oasisGrass, desertColors.oasisEdge, smoothstep(9, 13, h));
+            if (h < 6.0) {
+                tempColor.lerpColors(desertColors.oasisSand, desertColors.oasisEdge, smoothstep(2.4, 6.0, h));
+            } else if (h < 11.0) {
+                tempColor.lerpColors(desertColors.oasisEdge, desertColors.oasisGrass, smoothstep(6.0, 11.0, h));
             } else {
-                tempColor.lerpColors(desertColors.oasisEdge, desertColors.oasisSand, smoothstep(13, 16, h));
+                tempColor.lerpColors(desertColors.oasisGrass, desertColors.sandBase, smoothstep(11.0, 16.0, h));
             }
             return;
         }
         const a = snoise(x * 0.002, z * 0.002) * 0.08;
         if (h < 22) {
-            tempColor.lerpColors(desertColors.valleyShadow, desertColors.sandBase, smoothstep(6.1, 22, h));
+            tempColor.lerpColors(desertColors.sandBase, desertColors.duneSlope, smoothstep(2.4, 22, h));
         } else if (h < 50) {
             tempColor.lerpColors(desertColors.sandBase, desertColors.duneSlope, smoothstep(22, 50, h));
         } else if (h < 85) {

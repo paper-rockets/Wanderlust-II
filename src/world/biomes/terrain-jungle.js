@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 const colorDeepWater = new THREE.Color(0x1a4a8c);
+const colorWetSand = new THREE.Color(0xd9c49a);
 const colorSand = new THREE.Color(0xf2e1b8);
 const colorJungleGrass = new THREE.Color(0x389c45); // Tropical emerald
 const colorJungleHigh = new THREE.Color(0x286330);  // Deep canopy green
@@ -28,17 +29,24 @@ export default {
 
         const h = ridge * 65.0 - 2.0 + n2 * 14.0 + n3 * 3.0;
         const finalH = h + 8.0;
-        return finalH < 7.5 ? 7.5 + (finalH - 7.5) * 0.15 : finalH;
+        if (finalH < 5.0) {
+            const t = Math.max(0.0, Math.min(1.0, (finalH + 2.5) / 7.5));
+            const st = t * t * (3.0 - 2.0 * t);
+            return -2.5 + st * 7.5;
+        }
+        return finalH;
     },
     getColor(h, x, z, snoise, tempColor, smoothstep) {
-        if (h < 0.5) {
+        if (h < -1.5) {
             tempColor.copy(colorDeepWater);
-        } else if (h < 2.2) {
-            tempColor.lerpColors(colorDeepWater, colorSand, smoothstep(0.5, 2.2, h));
-        } else if (h < 4.0) {
+        } else if (h < 0.5) {
+            tempColor.lerpColors(colorDeepWater, colorWetSand, smoothstep(-1.5, 0.5, h));
+        } else if (h < 2.4) {
+            tempColor.lerpColors(colorWetSand, colorSand, smoothstep(0.5, 2.4, h));
+        } else if (h < 4.5) {
             tempColor.copy(colorSand);
         } else if (h < 9.0) {
-            tempColor.lerpColors(colorSand, colorJungleGrass, smoothstep(4.0, 9.0, h));
+            tempColor.lerpColors(colorSand, colorJungleGrass, smoothstep(4.5, 9.0, h));
         } else if (h < 25) {
             tempColor.lerpColors(colorJungleGrass, colorJungleHigh, smoothstep(9.0, 25, h));
         } else if (h < 38) {

@@ -1,8 +1,8 @@
-﻿import * as THREE from 'three';
+import * as THREE from 'three';
 import { MeshStandardNodeMaterial } from 'three/webgpu';
 import { uniform, float, vec3, vec4, mix, clamp, dot, normalize, pow, abs, Fn, positionLocal, positionWorld, normalWorld, cameraPosition } from 'three/tsl';
 
-export const CRYSTAL_COUNT = 8;
+export const CRYSTAL_COUNT = 16;
 
 export class CrystalSystem {
     constructor({ scene }) {

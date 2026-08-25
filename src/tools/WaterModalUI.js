@@ -42,7 +42,7 @@ import {
   setWindDirection
 } from '../WaterAnime/OpenSeaOcean.js';
 
-// Shore defaults — mirrors the uniform defaults declared in OpenSeaOcean.js.
+// Shore defaults - mirrors the uniform defaults declared in OpenSeaOcean.js.
 // Colors are the sRGB hex equivalents of Color(0.85, 0.80, 0.62) / Color(0.32, 0.72, 0.70).
 const SHORE_DEFAULTS = {
     sand: '#ede7ce',
@@ -55,7 +55,7 @@ const SHORE_DEFAULTS = {
     shoreRefraction: 0.35
 };
 
-// Surface-realism defaults — mirrors the uniform defaults declared in OpenSeaOcean.js.
+// Surface-realism defaults - mirrors the uniform defaults declared in OpenSeaOcean.js.
 const SURFACE_DEFAULTS = {
     chopStrength: 4.5,
     crestSharpness: 0.8,
@@ -421,11 +421,11 @@ export class WaterModalUI {
                     <div class="oc-header">
                         <div>
                             <h1 class="oc-title">KIMI SEA</h1>
-                            <p class="oc-subtitle">3-wave spectral swell · FBM optics</p>
+                            <p class="oc-subtitle">3-wave spectral swell - FBM optics</p>
                         </div>
                         <div class="oc-btn-group">
-                            <button class="oc-btn-icon" id="oc-min-btn" title="Collapse/Expand">–</button>
-                            <button class="oc-btn-icon" id="oc-close-btn" title="Close">✖</button>
+                            <button class="oc-btn-icon" id="oc-min-btn" title="Collapse/Expand">-</button>
+                            <button class="oc-btn-icon" id="oc-close-btn" title="Close">X</button>
                         </div>
                     </div>
 
@@ -453,7 +453,7 @@ export class WaterModalUI {
                         <div class="oc-control">
                             <div class="oc-control-head">
                                 <label for="oc-windDir">Wind Direction</label>
-                                <span class="oc-value" id="oc-windDirVal">45°</span>
+                                <span class="oc-value" id="oc-windDirVal">45 deg</span>
                             </div>
                             <input class="oc-slider" type="range" id="oc-windDir" min="0" max="360" value="45"/>
                         </div>
@@ -570,7 +570,7 @@ export class WaterModalUI {
                             <div class="oc-control">
                                 <div class="oc-control-head">
                                     <label>Direction</label>
-                                    <span class="oc-value" id="oc-w1-dir-val">14°</span>
+                                    <span class="oc-value" id="oc-w1-dir-val">14 deg</span>
                                 </div>
                                 <input class="oc-slider" type="range" id="oc-w1-dir" min="0" max="360" value="14"/>
                             </div>
@@ -595,7 +595,7 @@ export class WaterModalUI {
                             <div class="oc-control">
                                 <div class="oc-control-head">
                                     <label>Direction</label>
-                                    <span class="oc-value" id="oc-w2-dir-val">49°</span>
+                                    <span class="oc-value" id="oc-w2-dir-val">49 deg</span>
                                 </div>
                                 <input class="oc-slider" type="range" id="oc-w2-dir" min="0" max="360" value="49"/>
                             </div>
@@ -620,7 +620,7 @@ export class WaterModalUI {
                             <div class="oc-control">
                                 <div class="oc-control-head">
                                     <label>Direction</label>
-                                    <span class="oc-value" id="oc-w3-dir-val">135°</span>
+                                    <span class="oc-value" id="oc-w3-dir-val">135 deg</span>
                                 </div>
                                 <input class="oc-slider" type="range" id="oc-w3-dir" min="0" max="360" value="135"/>
                             </div>
@@ -947,7 +947,7 @@ export class WaterModalUI {
         minBtn.addEventListener('click', () => {
             this.isCollapsed = !this.isCollapsed;
             panel.classList.toggle('collapsed', this.isCollapsed);
-            minBtn.textContent = this.isCollapsed ? '+' : '–';
+            minBtn.textContent = this.isCollapsed ? '+' : '-';
         });
 
         // Close
@@ -989,7 +989,7 @@ export class WaterModalUI {
         bindSlider('oc-windDir', 'oc-windDirVal', (v) => {
             this.windAngle = v;
             setWindDirection(this.windAngle, this.windSpread);
-        }, v => `${Math.round(v)}°`);
+        }, v => `${Math.round(v)} deg`);
 
         bindSlider('oc-windSpread', 'oc-windSpreadVal', (v) => {
             this.windSpread = v;
@@ -1066,7 +1066,7 @@ export class WaterModalUI {
                 WAVE_PARAMS[i].dir[0] = Math.cos(rad);
                 WAVE_PARAMS[i].dir[1] = Math.sin(rad);
                 updateWaveUniforms(i);
-            }, v => `${Math.round(v)}°`);
+            }, v => `${Math.round(v)} deg`);
         }
 
         // Tab 3: Shore
@@ -1417,7 +1417,7 @@ export class WaterModalUI {
             if (dirEl && dirVal) {
                 const angle = Math.round(((Math.atan2(p.dir[1], p.dir[0]) * 180) / Math.PI + 360) % 360);
                 dirEl.value = angle;
-                dirVal.textContent = `${angle}°`;
+                dirVal.textContent = `${angle} deg`;
             }
         }
     }
@@ -1598,12 +1598,12 @@ export class WaterModalUI {
 
         const seaStateVal = Math.round(((seaUniform.value - 0.2) / 1.5) * 100);
         setSlider('oc-seaState', 'oc-seaVal', seaStateVal, v => v);
-        setSlider('oc-windDir', 'oc-windDirVal', this.windAngle, v => `${Math.round(v)}°`);
+        setSlider('oc-windDir', 'oc-windDirVal', this.windAngle, v => `${Math.round(v)} deg`);
         setSlider('oc-windSpread', 'oc-windSpreadVal', this.windSpread, v => `${Math.round(v)}%`);
         setSlider('oc-waveHeight', 'oc-waveHeightVal', waveHeightUniform.value * 100, v => `${Math.round(v)}%`);
         setSlider('oc-oceanScale', 'oc-oceanScaleVal', oceanScaleUniform.value * 100, v => `${Math.round(v)}%`);
         setSlider('oc-swellLength', 'oc-swellLengthVal', swellWavelengthUniform.value * 100, v => `${Math.round(v)}%`);
-        setSlider('oc-waveSpeed', 'oc-waveSpeedVal', speedUniform.value * 100, v => `${v.toFixed(1)}x`);
+        setSlider('oc-waveSpeed', 'oc-waveSpeedVal', speedUniform.value * 100, v => `${(v / 100.0).toFixed(1)}x`);
         setSlider('oc-choppiness', 'oc-choppinessVal', (detailAmountUniform.value / 2.0) * 100, v => `${Math.round(v)}%`);
         setSlider('oc-chopPatch', 'oc-chopPatchVal', chopPatchinessUniform.value * 100, v => `${Math.round(v)}%`);
         setSlider('oc-foam', 'oc-foamVal', (foamAmountUniform.value / 2.0) * 100, v => `${Math.round(v)}%`);

@@ -22,7 +22,7 @@
  */
 
 import * as THREE from 'three';
-import { getWorldHeight } from '../world/TerrainGenerator.js';
+import { getWorldHeight, getContinentMask } from '../world/TerrainGenerator.js';
 import {
   DEPTH_FIELD_SENTINEL,
   depthFieldOriginUniform,
@@ -34,23 +34,36 @@ export class TerrainDepthField {
 
   /**
    * @param {number} [res=512]        Texture resolution (square).
-   * @param {number} [worldSize=4000] World footprint in metres — must track the terrain mesh.
-   * @param {number} [rowsPerTick=32] Rows baked per tick(). 32 => 16 ticks for a full 512 bake.
+   * @param {number} [worldSize=8000] World footprint in metres — must track the terrain mesh.
+   * @param {number} [rowsPerTick=64] Rows baked per tick(). 64 => 8 ticks for a full 512 bake.
    */
-  constructor(res = 512, worldSize = 4000, rowsPerTick = 32) {
+  constructor(res = 512, worldSize = 8000, rowsPerTick = 64) {
     this.res = res;
     this.worldSize = worldSize;
     this.rowsPerTick = Math.max(1, rowsPerTick | 0);
 
     const texelCount = res * res;
+    const sentinelHalf = THREE.DataUtils.toHalfFloat(DEPTH_FIELD_SENTINEL);
+    const openWaterHalf = THREE.DataUtils.toHalfFloat(1.0);
 
     // Live (front) buffer — what the GPU sees. Back buffer — where the bake writes.
-    this._front = new Float32Array(texelCount).fill(DEPTH_FIELD_SENTINEL);
-    this._back = new Float32Array(texelCount).fill(DEPTH_FIELD_SENTINEL);
+    // 2 channels (RG Half-float Uint16Array): R = terrain height, G = open water factor (1.0 open sea, 0.0 landlocked)
+    this._frontHalf = new Uint16Array(texelCount * 2);
+    this._backHalf = new Uint16Array(texelCount * 2);
+    for (let i = 0; i < texelCount; i++) {
+      this._frontHalf[i * 2] = sentinelHalf;
+      this._frontHalf[i * 2 + 1] = openWaterHalf;
+      this._backHalf[i * 2] = sentinelHalf;
+      this._backHalf[i * 2 + 1] = openWaterHalf;
+    }
+
+    // High-precision Float32Array for CPU-side sampleHeight calculations.
+    this._frontFloat = new Float32Array(texelCount).fill(DEPTH_FIELD_SENTINEL);
+    this._backFloat = new Float32Array(texelCount).fill(DEPTH_FIELD_SENTINEL);
 
     // Allocated eagerly (before createOpenSeaMaterial) so the TSL graph always
     // captures a valid texture. Only its *contents* ever change after this.
-    this._texture = new THREE.DataTexture(this._front, res, res, THREE.RedFormat, THREE.FloatType);
+    this._texture = new THREE.DataTexture(this._frontHalf, res, res, THREE.RGFormat, THREE.HalfFloatType);
     this._texture.minFilter = THREE.LinearFilter;
     this._texture.magFilter = THREE.LinearFilter;
     this._texture.wrapS = THREE.ClampToEdgeWrapping;
@@ -130,7 +143,8 @@ export class TerrainDepthField {
     if (!this._baking) return;
 
     const res = this.res;
-    const data = this._back;
+    const dataFloat = this._backFloat;
+    const dataHalf = this._backHalf;
     const step = this.worldSize / res;
     const ox = this._bakeOriginX;
     const oz = this._bakeOriginZ;
@@ -142,7 +156,17 @@ export class TerrainDepthField {
       const worldZ = oz + (row + 0.5) * step;
       const base = row * res;
       for (let col = 0; col < res; col++) {
-        data[base + col] = getWorldHeight(ox + (col + 0.5) * step, worldZ);
+        const wx = ox + (col + 0.5) * step;
+        const h = getWorldHeight(wx, worldZ);
+        const mask = getContinentMask(wx, worldZ);
+        // Landlocked detection: rawMask < 0.35 is open ocean / outer shelf (1.0), rawMask >= 0.55 is landlocked mainland (0.0)
+        const openWater = 1.0 - Math.max(0.0, Math.min(1.0, (mask.rawMask - 0.35) / (0.55 - 0.35)));
+
+        const idx = base + col;
+        const idx2 = idx * 2;
+        dataFloat[idx] = h;
+        dataHalf[idx2] = THREE.DataUtils.toHalfFloat(h);
+        dataHalf[idx2 + 1] = THREE.DataUtils.toHalfFloat(openWater);
       }
     }
 
@@ -157,7 +181,8 @@ export class TerrainDepthField {
    * @private
    */
   _publish() {
-    this._front.set(this._back);
+    this._frontHalf.set(this._backHalf);
+    this._frontFloat.set(this._backFloat);
     this._texture.needsUpdate = true;
 
     this._liveOriginX = this._bakeOriginX;
@@ -193,7 +218,7 @@ export class TerrainDepthField {
     const x1 = Math.min(x0 + 1, res - 1), z1 = Math.min(z0 + 1, res - 1);
     const tx = fx - x0, tz = fz - z0;
 
-    const d = this._front;
+    const d = this._frontFloat;
     const h00 = d[z0 * res + x0], h10 = d[z0 * res + x1];
     const h01 = d[z1 * res + x0], h11 = d[z1 * res + x1];
 
@@ -212,8 +237,10 @@ export class TerrainDepthField {
       this._texture.dispose();
       this._texture = null;
     }
-    this._front = null;
-    this._back = null;
+    this._frontHalf = null;
+    this._backHalf = null;
+    this._frontFloat = null;
+    this._backFloat = null;
     depthFieldValidUniform.value = 0.0;
   }
 }

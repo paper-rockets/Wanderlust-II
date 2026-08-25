@@ -2,6 +2,8 @@
 // Clean plain-text implementation with zero icons/emojis, full schema compatibility,
 // live clipboard copy, file downloads, and real-time preset importing.
 
+import { moonParams } from '../environment/CelestialObjects.js';
+
 export class TimeOfDayExporter {
     constructor(contextGetter) {
         this.getContext = typeof contextGetter === 'function' ? contextGetter : () => contextGetter;
@@ -140,7 +142,7 @@ export class TimeOfDayExporter {
             directionalLight: dirHex,
             dirIntensity: typeof env.dirI === 'number' ? env.dirI : (phase === 0 ? 1.6 : phase === 1 ? 3.2 : 2.2),
             waterGlint: glintHex,
-            globalBrightness: typeof p.exposure === 'number' ? p.exposure : 1.9,
+            globalBrightness: typeof p.exposureTrim === 'number' ? p.exposureTrim : 1.0,
             exposureTrim: typeof p.exposureTrim === 'number' ? p.exposureTrim : 1.0
         };
 
@@ -290,9 +292,18 @@ export class TimeOfDayExporter {
                 nightSkyColor: bgHex,
                 nightFogColor: fogHex,
                 moonAltitude: typeof env.moonY === 'number' ? env.moonY : 9000,
-                moonDistance: 20000,
+                moonDistance: moonParams ? moonParams.distance : 20000,
+                moonAzimuth: moonParams ? moonParams.azimuth : 63,
+                moonSize: moonParams ? moonParams.size : 1.0,
+                moonBrightness: moonParams ? moonParams.brightness : 1.0,
+                moonRotationX: moonParams ? moonParams.rotationX : 0,
+                moonRotationY: moonParams ? moonParams.rotationY : 90,
+                moonRotationZ: moonParams ? moonParams.rotationZ : 0,
+                moonRotationSpeed: moonParams ? moonParams.rotationSpeed : 0.002,
+                moonGlowIntensity: moonParams ? moonParams.glowIntensity : 0.85,
+                moonGlowRadius: moonParams ? moonParams.glowRadius : 2.6,
+                moonGlowColor: moonParams ? moonParams.glowColor : '#b0d4ff',
                 moonMeshBaseRadius: 450,
-                moonHaloRadius: 650,
                 nightExposure: typeof p.nightExposure === 'number' ? p.nightExposure : 1.0,
                 starDensity: skyU.uStarDensity ? skyU.uStarDensity.value : 0.08,
                 starBrightness: skyU.uStarBrightness ? skyU.uStarBrightness.value : 1.0,
@@ -438,7 +449,10 @@ export class TimeOfDayExporter {
             if (atmo.ambIntensity !== undefined) env.ambI = Number(atmo.ambIntensity);
             if (atmo.dirIntensity !== undefined) env.dirI = Number(atmo.dirIntensity);
             if (atmo.waterGlint !== undefined) env.glintCol = this.parseHex(atmo.waterGlint, env.glintCol);
-            if (atmo.globalBrightness !== undefined) p.exposure = Number(atmo.globalBrightness);
+            if (atmo.globalBrightness !== undefined) {
+                p.exposureTrim = Number(atmo.globalBrightness);
+                p.exposure = Number(atmo.globalBrightness);
+            }
             if (atmo.exposureTrim !== undefined) p.exposureTrim = Number(atmo.exposureTrim);
             if (atmo.dayExposure !== undefined && phase === 0) p.dayExposure = Number(atmo.dayExposure);
             if (atmo.nightExposure !== undefined && phase === 2) p.nightExposure = Number(atmo.nightExposure);
@@ -496,6 +510,22 @@ export class TimeOfDayExporter {
             if (mn.nightSkyColor !== undefined) env.bg = this.parseHex(mn.nightSkyColor, env.bg);
             if (mn.nightFogColor !== undefined) env.fog = this.parseHex(mn.nightFogColor, env.fog);
             if (mn.moonAltitude !== undefined) env.moonY = Number(mn.moonAltitude);
+            if (moonParams) {
+                if (mn.moonSize !== undefined) moonParams.size = Number(mn.moonSize);
+                if (mn.moonBrightness !== undefined) moonParams.brightness = Number(mn.moonBrightness);
+                if (mn.moonAzimuth !== undefined) moonParams.azimuth = Number(mn.moonAzimuth);
+                if (mn.moonDistance !== undefined) moonParams.distance = Number(mn.moonDistance);
+                if (mn.moonRotationX !== undefined) moonParams.rotationX = Number(mn.moonRotationX);
+                if (mn.moonRotationY !== undefined) moonParams.rotationY = Number(mn.moonRotationY);
+                if (mn.moonRotationZ !== undefined) moonParams.rotationZ = Number(mn.moonRotationZ);
+                if (mn.moonRotationSpeed !== undefined) moonParams.rotationSpeed = Number(mn.moonRotationSpeed);
+                if (mn.moonGlowIntensity !== undefined) {
+                    moonParams.glowIntensity = Number(mn.moonGlowIntensity);
+                    if (skyU.uMoonCoronaIntensity) skyU.uMoonCoronaIntensity.value = moonParams.glowIntensity;
+                }
+                if (mn.moonGlowRadius !== undefined) moonParams.glowRadius = Number(mn.moonGlowRadius);
+                if (mn.moonGlowColor !== undefined) moonParams.glowColor = mn.moonGlowColor;
+            }
             if (mn.nightExposure !== undefined) p.nightExposure = Number(mn.nightExposure);
             if (mn.starDensity !== undefined && skyU.uStarDensity) skyU.uStarDensity.value = Number(mn.starDensity);
             if (mn.starBrightness !== undefined && skyU.uStarBrightness) skyU.uStarBrightness.value = Number(mn.starBrightness);

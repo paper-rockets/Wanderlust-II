@@ -1,17 +1,22 @@
 import * as THREE from 'three';
-import { ZONES } from '../world/BiomeManager.js';
+import { ZONES, getWorldSeed, setWorldSeed, getBiomeTeleportCoords } from '../world/BiomeManager.js';
 import { BIOME_SKY_CONFIGS } from '../environment/BiomeSkyConfigs.js';
 import { describeTier } from '../core/DeviceTier.js';
 import { applyRenderBudget } from '../core/Engine.js';
 import { tracks, selectMusicTrack, getCurrentTrackIndex, setAutoAdvance, setMusicMuted as setAudioMuted } from '../audio/MusicSynthesizer.js';
 import { DEFAULT_PRESETS } from '../config/PresetsConfig.js';
-import { globalTerrainParams, biomeHeights, biomeScales, biomeWaterHeights, getWorldWaterHeight, getBiomeAt, getIslandData } from '../world/TerrainGenerator.js';
-import { showVisualToast, toggleFullscreen } from './MinimapHUD.js';
+import { cleanBiomeName } from '../config/FogConfig.js';
+import { globalTerrainParams, biomeHeights, biomeScales, biomeWaterHeights, getWorldWaterHeight, getWorldHeight, getBiomeAt, getIslandData } from '../world/TerrainGenerator.js';
+import { showVisualToast, toggleFullscreen } from '../ui/MinimapHUD.js';
 import { FLIGHT_MODELS } from '../config/FlightModelsConfig.js';
 import { bloomPass, godRaysPass, uRolloffKnee } from '../core/PostProcessing.js';
 import { desertColors } from '../world/biomes/terrain-desert.js';
 import { northPoleColors } from '../world/biomes/terrain-northpole.js';
 import { updateAllPresetDropdowns } from '../config/PresetManager.js';
+import { setupGodMode, toggleGodMode } from '../physics/GodMode.js';
+import { liveSync } from '../core/LiveSync.js';
+import { milkyWayParams, applyMilkyWayTilt } from '../environment/MilkyWaySystem.js';
+import { auroraParams, moonParams, moonMesh } from '../environment/CelestialObjects.js';
 
 export function initDebugGUI(ctx) {
     const {
@@ -47,19 +52,47 @@ export function initDebugGUI(ctx) {
         flightModelManager,
         toggleModelVisibility,
         globalWaterParam,
-        skyUniforms
+        skyUniforms,
+        scene,
+        camera,
+        renderer,
+        cameraBase,
+        toonShaderManager,
+        treeMeshes,
+        distanceOverlay
     } = ctx;
+
+    const terrainMeshManager = ctx.terrainMeshManager;
+    const playerGrp = ctx.playerGrp || (typeof window !== 'undefined' ? window.playerGrp : null);
 
     let {
         isShadowsOn,
         isTreeShadowsOn,
         shadowDistMode,
         isBloomOn,
-        terrainRes,
-        lastTerrainGridX,
-        lastDepthFieldGridX,
-        lastDepthFieldGridZ
+        terrainRes
     } = ctx;
+
+    let lastTerrainGridX = ctx.lastTerrainGridX !== undefined ? ctx.lastTerrainGridX : -9999;
+    let lastTerrainGridZ = ctx.lastTerrainGridZ !== undefined ? ctx.lastTerrainGridZ : -9999;
+    let lastDepthFieldGridX = ctx.lastDepthFieldGridX !== undefined ? ctx.lastDepthFieldGridX : -999999;
+    let lastDepthFieldGridZ = ctx.lastDepthFieldGridZ !== undefined ? ctx.lastDepthFieldGridZ : -999999;
+    let globalWaterHeightOffset = 0;
+
+    const invalidateTerrain = () => {
+        lastTerrainGridX = -999999;
+        lastTerrainGridZ = -999999;
+        lastDepthFieldGridX = -999999;
+        lastDepthFieldGridZ = -999999;
+        if (terrainMeshManager && typeof terrainMeshManager.invalidate === 'function') {
+            terrainMeshManager.invalidate();
+        } else if (terrainMeshManager) {
+            terrainMeshManager.lastTerrainGridX = -999999;
+            terrainMeshManager.lastTerrainGridZ = -999999;
+            terrainMeshManager.lastDepthFieldGridX = -999999;
+            terrainMeshManager.lastDepthFieldGridZ = -999999;
+        }
+    };
     let terrainGeo = ctx.terrainGeo;
     let isInitializingGui = true;
     let waterHeightController = null;
@@ -75,7 +108,104 @@ export function initDebugGUI(ctx) {
     let isWindOn = false;
     let isRainOn = false;
 
+    const isStudio = typeof document !== 'undefined' && (
+        document.body.classList.contains('studio-mode') || 
+        document.documentElement.classList.contains('studio-mode') || 
+        (typeof window !== 'undefined' && window.location && window.location.pathname.includes('studio'))
+    );
+
+    // Low Power & Mobile Optimization Folder
+    const lowPowerFolder = gui.addFolder('Low Power & Mobile Optimization');
+    const lowPowerParams = {
+        qualityTier: (params.quality === 'Low' || LOW_GFX) ? 'Low / Tab S6 Lite' : 'Regular',
+        renderScale: params.renderScale || 1.0,
+        adaptiveResolution: params.autoResolution !== undefined ? params.autoResolution : false,
+        treeTier: 'Ultra (70K)',
+        shadows: params.shadows !== undefined ? params.shadows : isShadowsOn,
+        shadowDist: params.shadowDist || shadowDistMode,
+        bloom: params.bloom !== undefined ? params.bloom : isBloomOn,
+        godRays: params.godRays !== undefined ? params.godRays : true,
+        openTestbed: () => {
+            window.location.href = 'low_power.html';
+        },
+        openMobileSimulator: () => {
+            window.location.href = 'mobile_preview.html';
+        }
+    };
+
+    const changeTreeTier = (v) => {
+        lowPowerParams.treeTier = v;
+        if (typeof pineParams !== 'undefined') pineParams.tier = v;
+        if (window.stylizedTrees && typeof window.stylizedTrees.setCompressionTier === 'function') {
+            window.stylizedTrees.setCompressionTier(v);
+        }
+        if (gui && typeof gui.controllersRecursive === 'function') {
+            gui.controllersRecursive().forEach(c => {
+                if (c.property === 'treeTier' || c.property === 'tier') {
+                    if (c.updateDisplay) c.updateDisplay();
+                }
+            });
+        }
+    };
+
+    lowPowerFolder.add(lowPowerParams, 'qualityTier', ['Regular', 'Low / Tab S6 Lite']).name('Quality Tier').onChange(v => {
+        const nextGfx = (v === 'Low / Tab S6 Lite' || v === 'Low') ? 'low' : 'regular';
+        const currentGfx = localStorage.getItem('gfxQuality') || (LOW_GFX ? 'low' : 'regular');
+        localStorage.setItem('gfxQuality', nextGfx);
+        if (!isInitializingGui && nextGfx !== currentGfx) {
+            location.reload();
+        }
+    });
+
+    lowPowerFolder.add(params, 'renderScale', 0.25, 1.0, 0.05).name('Target Render Scale').onChange(v => {
+        if (params.autoResolution) {
+            params.autoResolution = false;
+            adaptiveRes.setEnabled(false);
+            gui.controllersRecursive().forEach(c => {
+                if (c.property === 'autoResolution') c.updateDisplay && c.updateDisplay();
+            });
+        }
+        applyRenderBudget(v);
+    });
+
+    lowPowerFolder.add(params, 'autoResolution').name('Enable Adaptive Resolution').onChange(v => {
+        adaptiveRes.setEnabled(v);
+        if (v) {
+            adaptiveRes.reset();
+            applyRenderBudget(1.0);
+        } else {
+            applyRenderBudget(params.renderScale);
+        }
+    });
+ 
+    lowPowerFolder.add(params, 'shadows').name('Shadows Enabled').onChange(v => {
+        isShadowsOn = v;
+        dirLight.castShadow = isShadowsOn;
+    });
+
+    lowPowerFolder.add(params, 'shadowDist', ['Close', 'Med', 'Far']).name('Shadow Distance Mode').onChange(v => {
+        shadowDistMode = v;
+        if (shadowDistMode === 'Close') { dirLight.shadow.mapSize.width = 1024; dirLight.shadow.mapSize.height = 1024; }
+        else if (shadowDistMode === 'Med') { dirLight.shadow.mapSize.width = 2048; dirLight.shadow.mapSize.height = 2048; }
+        else { dirLight.shadow.mapSize.width = 4096; dirLight.shadow.mapSize.height = 4096; }
+        if (dirLight.shadow.map) { dirLight.shadow.map.dispose(); dirLight.shadow.map = null; }
+    });
+
+    lowPowerFolder.add(params, 'bloom').name('Bloom').onChange(v => {
+        isBloomOn = v;
+        bloomPass.enabled = isBloomOn;
+    });
+
+    lowPowerFolder.add(params, 'godRays').name('God Rays').onChange(v => {
+        godRaysPass.enabled = v;
+    });
+
+    lowPowerFolder.add(lowPowerParams, 'openTestbed').name('Open Low Power Testbed (low_power.html)');
+    lowPowerFolder.add(lowPowerParams, 'openMobileSimulator').name('Open S25 & Tab S6 Simulator (mobile_preview.html)');
+    lowPowerFolder.add({ toggle3D: () => { if (window.toggle3DViewport) window.toggle3DViewport(!window.is3DViewportHidden); } }, 'toggle3D').name('Toggle 3D Viewport (0% GPU)');
+
     const perfFolder = gui.addFolder('Performance');
+    perfFolder.add({ toggle3D: () => { if (window.toggle3DViewport) window.toggle3DViewport(!window.is3DViewportHidden); } }, 'toggle3D').name('Toggle 3D Viewport (0% GPU)');
     perfFolder.add(params, 'quality', ['Regular', 'Low']).name('Quality').onChange(v => {
         const nextGfx = (v === 'Low') ? 'low' : 'regular';
         const currentGfx = localStorage.getItem('gfxQuality') || (LOW_GFX ? 'low' : 'regular');
@@ -84,7 +214,7 @@ export function initDebugGUI(ctx) {
             location.reload();
         }
     });
-    perfFolder.add(params, 'autoResolution').name('Auto Resolution').onChange(v => {
+    perfFolder.add(params, 'autoResolution').name('Enable Adaptive Resolution').onChange(v => {
         adaptiveRes.setEnabled(v);
         if (v) { adaptiveRes.reset(); applyRenderBudget(1.0); }
         else { applyRenderBudget(params.renderScale); }
@@ -99,15 +229,37 @@ export function initDebugGUI(ctx) {
     perfFolder.add({ dither: uDitherAmount.value }, 'dither', 0.0, 3.0, 0.1).name('Dither (anti-band)')
         .onChange(v => uDitherAmount.value = v);
     perfFolder.add(params, 'terrainRes', ['256', '128', '64']).name('Terrain Res').onChange(v => {
-        terrainRes = parseInt(v);
-        const newGeo = new THREE.PlaneGeometry(8000, 8000, terrainRes, terrainRes);
-        newGeo.rotateX(-Math.PI / 2);
-        terrain.geometry.dispose();
-        terrain.geometry = newGeo;
-        terrainGeo = newGeo;
-        lastTerrainGridX = -9999;
-        lastDepthFieldGridX = -999999;
-        lastDepthFieldGridZ = -999999;
+        const res = parseInt(v, 10);
+        params.terrainRes = String(res);
+        const px = playerGrp ? playerGrp.position.x : 0;
+        const pz = playerGrp ? playerGrp.position.z : 0;
+        if (terrainMeshManager && typeof terrainMeshManager.setResolution === 'function') {
+            terrainMeshManager.setResolution(res, px, pz, animeWaterSystem);
+            terrainGeo = terrainMeshManager.terrainGeo;
+        } else {
+            terrainRes = res;
+            const newGeo = new THREE.PlaneGeometry(8000, 8000, terrainRes, terrainRes);
+            newGeo.rotateX(-Math.PI / 2);
+            const count = newGeo.attributes.position.count;
+            newGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(count * 3), 3));
+            if (terrain) {
+                if (terrain.geometry) terrain.geometry.dispose();
+                terrain.geometry = newGeo;
+            }
+            if (terrainMeshManager) {
+                terrainMeshManager.terrainGeo = newGeo;
+                terrainMeshManager.terrainRes = terrainRes;
+            }
+            terrainGeo = newGeo;
+            lastTerrainGridX = -9999;
+            invalidateTerrain();
+            if (terrainMeshManager && typeof terrainMeshManager.update === 'function') {
+                terrainMeshManager.update(px, pz, animeWaterSystem);
+            }
+        }
+        if (stylizedTrees && typeof stylizedTrees.respawn === 'function') {
+            stylizedTrees.respawn();
+        }
     });
     perfFolder.add(params, 'shadows').name('Shadows').onChange(v => {
         isShadowsOn = v;
@@ -162,6 +314,13 @@ export function initDebugGUI(ctx) {
         const ctrl = navFolder.add(navParams, zn.name).name(`${zn.name}`);
         ctrl.domElement.style.minWidth = '0';
     });
+    navFolder.add({ rerollSeed: () => {
+        const newSeed = Math.floor(Math.random() * 1000000);
+        setWorldSeed(newSeed);
+        invalidateTerrain();
+        if (window.stylizedTrees) window.stylizedTrees.respawn();
+        showVisualToast(`New World Seed: #${newSeed}`);
+    }}, 'rerollSeed').name('New World (Re-Roll Seed)');
     navFolder.add(navParams, 'maxAltitude', 500, 15000, 100).name('Max Altitude').onChange(v => {
         if (playerPhysics) playerPhysics.maxAltitude = v;
     });
@@ -170,16 +329,10 @@ export function initDebugGUI(ctx) {
     const terrainTuningFolder = gui.addFolder('Terrain Heights & Scales');
 
     terrainTuningFolder.add(globalTerrainParams, 'globalHeightMultiplier', 0.1, 5.0, 0.05).name('Global Height Scale').onChange(() => {
-        lastTerrainGridX = -999999;
-        lastTerrainGridZ = -999999;
-        lastDepthFieldGridX = -999999;
-        lastDepthFieldGridZ = -999999;
+        invalidateTerrain();
     });
     terrainTuningFolder.add(globalTerrainParams, 'globalNoiseScale', 0.1, 5.0, 0.05).name('Global Noise Scale').onChange(() => {
-        lastTerrainGridX = -999999;
-        lastTerrainGridZ = -999999;
-        lastDepthFieldGridX = -999999;
-        lastDepthFieldGridZ = -999999;
+        invalidateTerrain();
     });
     waterHeightController = terrainTuningFolder.add(globalWaterParam, 'waterHeight', -20.0, 50.0, 0.1).name('Water Height').onChange(v => {
         const playerX = (typeof playerGrp !== 'undefined' && playerGrp && playerGrp.position) ? playerGrp.position.x : 0;
@@ -190,10 +343,7 @@ export function initDebugGUI(ctx) {
         if (animeWaterSystem) {
             animeWaterSystem.setHeight(v);
         }
-        lastTerrainGridX = -999999;
-        lastTerrainGridZ = -999999;
-        lastDepthFieldGridX = -999999;
-        lastDepthFieldGridZ = -999999;
+        invalidateTerrain();
     });
 
     const heightSubFolder = terrainTuningFolder.addFolder('Height Multipliers');
@@ -204,37 +354,30 @@ export function initDebugGUI(ctx) {
     biomesList.forEach(bName => {
         if (biomeHeights[bName] !== undefined) {
             heightSubFolder.add(biomeHeights, bName, 0.1, 3.0, 0.05).name(bName).onChange(() => {
-                lastTerrainGridX = -999999;
-                lastTerrainGridZ = -999999;
-                lastDepthFieldGridX = -999999;
-                lastDepthFieldGridZ = -999999;
+                invalidateTerrain();
             });
         }
         if (biomeScales[bName] !== undefined) {
             scaleSubFolder.add(biomeScales, bName, 0.2, 3.0, 0.05).name(bName).onChange(() => {
-                lastTerrainGridX = -999999;
-                lastTerrainGridZ = -999999;
-                lastDepthFieldGridX = -999999;
-                lastDepthFieldGridZ = -999999;
+                invalidateTerrain();
             });
         }
         if (biomeWaterHeights[bName] !== undefined) {
             waterSubFolder.add(biomeWaterHeights, bName, -20.0, 50.0, 0.1).name(bName).onChange(() => {
-                lastTerrainGridX = -999999;
-                lastTerrainGridZ = -999999;
-                lastDepthFieldGridX = -999999;
-                lastDepthFieldGridZ = -999999;
+                invalidateTerrain();
             });
         }
     });
 
-    // Add Editor folder (Edit Crystals, Tree Editor, Custom Models)
+    // Add Editor folder (Tree Placement Editor, Crystals, Archipelago)
     const editorFolder = gui.addFolder('Editor');
-    editorFolder.add({ togglePlacementEditor: () => {
-        if (typeof window.toggleTerrainEditor === 'function') {
+    editorFolder.add({ toggleTreeEditor: () => {
+        if (window.treePlacementEditor && typeof window.treePlacementEditor.toggle === 'function') {
+            window.treePlacementEditor.toggle();
+        } else if (typeof window.toggleTerrainEditor === 'function') {
             window.toggleTerrainEditor();
         }
-    }}, 'togglePlacementEditor').name('Model & Tree Placement Editor');
+    }}, 'toggleTreeEditor').name('Tree Placement Editor');
 
     editorFolder.add({ teleportToForest: () => {
         if (typeof teleportToBiome === 'function') {
@@ -253,7 +396,6 @@ export function initDebugGUI(ctx) {
         if (window.archipelagoEditor) window.archipelagoEditor.toggle();
     }}, 'openArchipelagoEditor').name('Archipelago Studio Editor');
 
-
     editorFolder.add({ loadCustomModel: () => {
         const input = document.createElement('input');
         input.type = 'file';
@@ -269,12 +411,19 @@ export function initDebugGUI(ctx) {
 
     customModelFolder = editorFolder.addFolder('Custom Model');
     customModelFolder.close();
+    if (typeof window !== 'undefined') window.customModelFolder = customModelFolder;
 
     params.selectedModelIdx = 0;
     modelDropdownController = customModelFolder.add(params, 'selectedModelIdx', { 'No models': 0 }).name('Active Model').onChange(v => {
-        selectedModelIndex = v;
+        if (typeof window.setSelectedModelIndex === 'function') {
+            window.setSelectedModelIndex(v);
+        } else if (typeof window.selectedModelIndex !== 'undefined') {
+            window.selectedModelIndex = v;
+        }
         if (window.syncSlidersToSelectedModel) window.syncSlidersToSelectedModel();
     });
+    if (typeof window !== 'undefined') window.modelDropdownController = modelDropdownController;
+    if (typeof window !== 'undefined') window.customModelControllers = customModelControllers;
 
     params.customModelScale = 1.0;
     params.customModelY = 0.0;
@@ -282,36 +431,42 @@ export function initDebugGUI(ctx) {
     params.customModelZ = 0.0;
     params.customModelRot = 0;
 
+    const getSelectedModel = () => {
+        const models = window.loadedCustomModels || [];
+        const idx = typeof window.getSelectedModelIndex === 'function' ? window.getSelectedModelIndex() : (window.selectedModelIndex !== undefined ? window.selectedModelIndex : -1);
+        return models[idx];
+    };
+
     customModelControllers.scale = customModelFolder.add(params, 'customModelScale', 0.1, 5.0, 0.05).name('Scale multiplier').onChange(v => {
-        const model = loadedCustomModels[selectedModelIndex];
+        const model = getSelectedModel();
         if (model) {
             model.userData.scaleMult = v;
             if (window.updateCustomModelTransform) window.updateCustomModelTransform(model);
         }
     });
     customModelControllers.y = customModelFolder.add(params, 'customModelY', -15.0, 30.0, 0.1).name('Height offset').onChange(v => {
-        const model = loadedCustomModels[selectedModelIndex];
+        const model = getSelectedModel();
         if (model) {
             model.userData.offsetY = v;
             if (window.updateCustomModelTransform) window.updateCustomModelTransform(model);
         }
     });
     customModelControllers.x = customModelFolder.add(params, 'customModelX', -2000.0, 2000.0, 0.5).name('Position X').onChange(v => {
-        const model = loadedCustomModels[selectedModelIndex];
+        const model = getSelectedModel();
         if (model) {
             model.userData.offsetX = v;
             if (window.updateCustomModelTransform) window.updateCustomModelTransform(model);
         }
     });
     customModelControllers.z = customModelFolder.add(params, 'customModelZ', -2000.0, 2000.0, 0.5).name('Position Z').onChange(v => {
-        const model = loadedCustomModels[selectedModelIndex];
+        const model = getSelectedModel();
         if (model) {
             model.userData.offsetZ = v;
             if (window.updateCustomModelTransform) window.updateCustomModelTransform(model);
         }
     });
     customModelControllers.rot = customModelFolder.add(params, 'customModelRot', 0, 360, 5).name('Rotation Y').onChange(v => {
-        const model = loadedCustomModels[selectedModelIndex];
+        const model = getSelectedModel();
         if (model) {
             model.userData.rotationY = v * Math.PI / 180;
             if (window.updateCustomModelTransform) window.updateCustomModelTransform(model);
@@ -333,7 +488,7 @@ export function initDebugGUI(ctx) {
         flightModelOptions[m.name] = m.id;
     });
     const flightParams = {
-        modelId: 'kiki',
+        modelId: 'psx_saviola_s21',
         animSpeed: 1.0,
         nextModel: () => { if (typeof flightModelManager !== 'undefined' && flightModelManager) flightModelManager.nextModel(); },
         prevModel: () => { if (typeof flightModelManager !== 'undefined' && flightModelManager) flightModelManager.prevModel(); }
@@ -351,11 +506,18 @@ export function initDebugGUI(ctx) {
     flightFolder.add(flightParams, 'nextModel').name('Next Model');
     flightFolder.add(flightParams, 'prevModel').name('Previous Model');
     flightFolder.add(params, 'modelVisible').name('Model Visible').onChange(v => {
-        isModelVisible = v;
-        updateModelVisibility();
+        if (typeof toggleModelVisibility === 'function') {
+            toggleModelVisibility(v);
+        } else if (flightModelManager && flightModelManager.modelRoot) {
+            flightModelManager.modelRoot.visible = v;
+        }
     });
     flightFolder.add(flightParams, 'animSpeed', 0.1, 3.0, 0.1).name('Anim Speed').onChange(v => {
         if (typeof flightModelManager !== 'undefined' && flightModelManager) flightModelManager.setAnimSpeed(v);
+    });
+    flightFolder.add(params, 'showDistanceOverlay').name('Distance Rings (100-1000m)').listen().onChange(v => {
+        const overlay = distanceOverlay || (typeof window !== 'undefined' ? window.distanceOverlay : null);
+        if (overlay) overlay.setVisible(v);
     });
 
     // Audio & Sound Folder
@@ -375,21 +537,25 @@ export function initDebugGUI(ctx) {
             }
         },
         wind: isWindOn,
-        toggleMasterSound: () => { if (typeof setSoundMuted === 'function') setSoundMuted(!isSoundMuted); },
-        toggleEngineSound: () => { if (typeof setEngineSoundEnabled === 'function') setEngineSoundEnabled(!isEngineSoundOn); }
+        toggleMasterSound: () => { if (typeof setSoundMuted === 'function') setSoundMuted(typeof window.isSoundMuted !== 'undefined' ? !window.isSoundMuted : true); },
+        toggleEngineSound: () => { if (typeof setEngineSoundEnabled === 'function') setEngineSoundEnabled(typeof window.isEngineSoundOn !== 'undefined' ? !window.isEngineSoundOn : true); }
     };
     soundMuteController = audioFolder.add(audioParams, 'soundEnabled')
         .name('Sound Enabled')
         .onChange(v => {
-            if (typeof setSoundMuted === 'function' && isSoundMuted !== !v) {
+            if (typeof setSoundMuted === 'function') {
                 setSoundMuted(!v);
+            } else if (typeof window.isSoundMuted !== 'undefined') {
+                window.isSoundMuted = !v;
             }
         });
     engineSoundController = audioFolder.add(audioParams, 'engineSound')
         .name('Biplane Engine Sound')
         .onChange(v => {
-            if (typeof setEngineSoundEnabled === 'function' && isEngineSoundOn !== !!v) {
+            if (typeof setEngineSoundEnabled === 'function') {
                 setEngineSoundEnabled(v);
+            } else if (typeof window.isEngineSoundOn !== 'undefined') {
+                window.isEngineSoundOn = v;
             }
         });
     audioFolder.add(audioParams, 'engineVolume', 0.0, 0.2, 0.005)
@@ -420,7 +586,7 @@ export function initDebugGUI(ctx) {
     audioFolder.add(audioParams, 'toggleEngineSound').name('Toggle Engine Sound');
 
     // =========================================================================
-    // Dedicated Stylized Pine Trees Settings Folder
+    // Dedicated Stylized Pine Trees Settings Folder (Sandbox Integrated)
     // =========================================================================
     const stylizedTreeFolder = gui.addFolder('Stylized Trees');
     const _pines = () => window.stylizedTrees;
@@ -428,75 +594,206 @@ export function initDebugGUI(ctx) {
 
     const pineParams = {
         visible: true,
+        renderMode: 'Full Draco GLBs',
+        shadeMode: 'Standard Stylized (Default)',
+        tier: 'Ultra (70K)',
+        preset: 'spring',
         scale: 1.0,
-        density: 1.5,
+        density: 1.1,
         minSpacing: 18.0,
-        minElevation: 1.0,
+        minElevation: 5.5,
         maxElevation: 140.0,
-        windSway: 1.0,
-        preset: 'auto',
-        leafBottom: 0x1c3b23,
-        leafTop: 0x5c8338,
-        leafVarColor: 0x1e4430,
-        barkBase: 0x2e1b10,
+        // Leaf Canopy Shaders
+        leafBottom: 0x14351d,
+        leafTop: 0x4c8632,
+        leafVarColor: 0x1a4c28,
+        leafBrightness: 1.05,
+        leafGradPower: 1.05,
+        leafVarStrength: 0.40,
+        // Wind Sway & Flutter
+        windStrength: 0.12,
+        windSpeed: 1.1,
+        flutterAmp: 0.02,
+        flutterSpeed: 2.0,
+        pendulumDip: 0.03,
+        // 4 Species Toon Variations
+        var1Top: 0x4e8032,
+        var1Bottom: 0x0e2616,
+        var2Top: 0x6e9432,
+        var2Bottom: 0x1c2810,
+        var3Top: 0x448a70,
+        var3Bottom: 0x0c2420,
+        var4Top: 0x82a438,
+        var4Bottom: 0x222810,
+        // Trunk Bark Shaders
+        barkScale: 5.6,
+        barkBrightness: 1.45,
+        barkAOStrength: 0.45,
+        barkBase: 0x24160c,
         barkTop: 0x5c3a21,
-        barkBrightness: 1.35,
-        counts: '—'
+        // Far Billboard & Impostor Trees
+        impostorsEnabled: true,
+        impostorDistance: 300.0,
+        impostorDensity: 1.0,
+        impostorWidth: 1.65,
+        overheadCanopy: true,
+        overheadThreshold: 65.0,
+        counts: '-'
     };
 
-    stylizedTreeFolder.add(pineParams, 'visible').name('Tree Visible').onChange(v => {
+    stylizedTreeFolder.add(pineParams, 'visible').name('Trees Enabled').onChange(v => {
         if (_pines()) _pines().setVisible(v);
     });
-    stylizedTreeFolder.add(pineParams, 'scale', 0.2, 3.5, 0.05).name('Tree Scale').onChange(v => {
-        if (_pines()) { _pines().scaleMul = v; _respawnPines(); }
+    stylizedTreeFolder.add(pineParams, 'shadeMode', ['Standard Stylized (Default)', 'Game Toon Shader (Cel)']).name('Shading Mode').onChange(v => {
+        if (_pines()) {
+            const modeKey = (v.includes('Cel') || v.includes('Toon')) ? 'toon' : 'standard';
+            _pines().setShadeMode(modeKey);
+        }
     });
-    stylizedTreeFolder.add(pineParams, 'density', 0.1, 5.0, 0.05).name('Tree Density').onChange(v => {
-        if (_pines()) { _pines().density = v; _respawnPines(); }
+    stylizedTreeFolder.add(pineParams, 'renderMode', ['Full Draco GLBs', 'Hybrid (Hero + Procedural)', 'Fully Procedural']).name('Tree Mode').onChange(v => {
+        if (_pines()) {
+            const modeKey = (v === 'Full Draco GLBs') ? 'draco' : (v === 'Hybrid (Hero + Procedural)' ? 'hybrid' : 'procedural');
+            _pines().setTreeRenderMode(modeKey);
+        }
     });
-    stylizedTreeFolder.add(pineParams, 'minSpacing', 6.0, 60.0, 1.0).name('Min Spacing').onChange(v => {
-        if (_pines()) _pines().setCellSize(v);
-    });
-    stylizedTreeFolder.add(pineParams, 'minElevation', 0.0, 50.0, 0.5).name('Min Elevation').onChange(v => {
-        if (_pines()) { _pines().minElevation = v; _respawnPines(); }
-    });
-    stylizedTreeFolder.add(pineParams, 'maxElevation', 20.0, 200.0, 1.0).name('Elevation Max').onChange(v => {
-        if (_pines()) { _pines().maxElevation = v; _respawnPines(); }
-    });
-    stylizedTreeFolder.add(pineParams, 'windSway', 0.0, 3.0, 0.05).name('Wind Sway').onChange(v => {
-        if (_pines()) _pines().uWindStrength.value = v;
-    });
-    stylizedTreeFolder.add(pineParams, 'preset', ['auto', 'spring', 'autumn', 'winter']).name('Season Preset').onChange(v => {
+    stylizedTreeFolder.add(pineParams, 'preset', ['spring', 'autumn', 'winter', 'auto']).name('Season Preset').onChange(v => {
         if (_pines()) _pines().setPreset(v);
     });
-    stylizedTreeFolder.add({ respawn: _respawnPines }, 'respawn').name('Respawn Trees');
 
-    const treeColorsFolder = stylizedTreeFolder.addFolder('Colors');
-    treeColorsFolder.addColor(pineParams, 'leafBottom').name('Leaf Bottom (Shadow)').onChange(c => {
-        if (_pines()) _pines().uLeafBottom.value.set(c);
+    stylizedTreeFolder.add({ openTreeEditor: () => {
+        if (window.treePlacementEditor && typeof window.treePlacementEditor.toggle === 'function') {
+            window.treePlacementEditor.toggle();
+        }
+    }}, 'openTreeEditor').name('Open Tree Placement Editor');
+
+    // 1. Leaf Canopy Shaders Folder
+    const canopyFolder = stylizedTreeFolder.addFolder('Leaf Canopy Shaders');
+    canopyFolder.add(pineParams, 'leafBrightness', 0.2, 3.0, 0.05).name('Brightness').onChange(v => {
+        if (_pines()) _pines().uLeafBrightness.value = v;
     });
-    treeColorsFolder.addColor(pineParams, 'leafTop').name('Leaf Top (Lit)').onChange(c => {
-        if (_pines()) _pines().uLeafTop.value.set(c);
+    canopyFolder.add(pineParams, 'leafGradPower', 0.2, 4.0, 0.1).name('Gradient Power').onChange(v => {
+        if (_pines()) _pines().uLeafGradPower.value = v;
     });
-    treeColorsFolder.addColor(pineParams, 'leafVarColor').name('Variation Tone').onChange(c => {
-        if (_pines()) _pines().uLeafVarColor.value.set(c);
+
+    // 2. 4 Species Toon Variations Folder (100% GPU Uniforms, 0 Extra Draw Calls)
+    const hueFolder = stylizedTreeFolder.addFolder('Species Variations (4 Toon Palettes)');
+    const v1 = hueFolder.addFolder('Variation 1 (Alpine Spruce)');
+    v1.addColor(pineParams, 'var1Top').name('Sunlit Outer').onChange(c => {
+        if (_pines()) _pines().uVar1Top.value.set(c);
     });
-    treeColorsFolder.addColor(pineParams, 'barkBase').name('Trunk Base').onChange(c => {
-        if (_pines()) _pines().uBarkBase.value.set(c);
+    v1.addColor(pineParams, 'var1Bottom').name('Shadow Inner').onChange(c => {
+        if (_pines()) _pines().uVar1Bottom.value.set(c);
     });
-    treeColorsFolder.addColor(pineParams, 'barkTop').name('Trunk Top').onChange(c => {
-        if (_pines()) _pines().uBarkTop.value.set(c);
+
+    const v2 = hueFolder.addFolder('Variation 2 (Highland Olive)');
+    v2.addColor(pineParams, 'var2Top').name('Sunlit Outer').onChange(c => {
+        if (_pines()) _pines().uVar2Top.value.set(c);
     });
-    treeColorsFolder.add(pineParams, 'barkBrightness', 0.2, 3.0, 0.05).name('Trunk Brightness').onChange(v => {
+    v2.addColor(pineParams, 'var2Bottom').name('Shadow Inner').onChange(c => {
+        if (_pines()) _pines().uVar2Bottom.value.set(c);
+    });
+
+    const v3 = hueFolder.addFolder('Variation 3 (Mountain Teal)');
+    v3.addColor(pineParams, 'var3Top').name('Sunlit Outer').onChange(c => {
+        if (_pines()) _pines().uVar3Top.value.set(c);
+    });
+    v3.addColor(pineParams, 'var3Bottom').name('Shadow Inner').onChange(c => {
+        if (_pines()) _pines().uVar3Bottom.value.set(c);
+    });
+
+    const v4 = hueFolder.addFolder('Variation 4 (Sunlit Gold)');
+    v4.addColor(pineParams, 'var4Top').name('Sunlit Outer').onChange(c => {
+        if (_pines()) _pines().uVar4Top.value.set(c);
+    });
+    v4.addColor(pineParams, 'var4Bottom').name('Shadow Inner').onChange(c => {
+        if (_pines()) _pines().uVar4Bottom.value.set(c);
+    });
+
+    // 3. Wind Sway & Flutter Folder
+    const windFolder = stylizedTreeFolder.addFolder('Wind Sway & Flutter');
+    windFolder.add(pineParams, 'windStrength', 0.0, 1.0, 0.01).name('Wind Strength').onChange(v => {
+        if (_pines()) _pines().uWindStrength.value = v;
+    });
+    windFolder.add(pineParams, 'windSpeed', 0.1, 4.0, 0.05).name('Wind Speed').onChange(v => {
+        if (_pines()) _pines().uWindSpeed.value = v;
+    });
+    windFolder.add(pineParams, 'flutterAmp', 0.0, 0.1, 0.005).name('Flutter Amplitude').onChange(v => {
+        if (_pines()) _pines().uLeafFlutterAmp.value = v;
+    });
+    windFolder.add(pineParams, 'flutterSpeed', 0.5, 8.0, 0.1).name('Flutter Speed').onChange(v => {
+        if (_pines()) _pines().uLeafFlutterSpeed.value = v;
+    });
+    windFolder.add(pineParams, 'pendulumDip', 0.0, 0.2, 0.01).name('Pendulum Dip').onChange(v => {
+        if (_pines()) _pines().uLeafDip.value = v;
+    });
+
+    // 3. Trunk Bark Shaders Folder
+    const barkFolder = stylizedTreeFolder.addFolder('Trunk Bark Shaders');
+    barkFolder.add(pineParams, 'barkScale', 1.0, 15.0, 0.1).name('Texture Scale').onChange(v => {
+        if (_pines()) _pines().uBarkScale.value = v;
+    });
+    barkFolder.add(pineParams, 'barkBrightness', 0.2, 3.0, 0.05).name('Brightness').onChange(v => {
         if (_pines()) _pines().uBarkBrightness.value = v;
     });
+    barkFolder.add(pineParams, 'barkAOStrength', 0.0, 1.0, 0.05).name('AO Strength').onChange(v => {
+        if (_pines()) _pines().uBarkAOStrength.value = v;
+    });
+    barkFolder.addColor(pineParams, 'barkBase').name('Trunk Base (Shadow)').onChange(c => {
+        if (_pines()) _pines().uBarkBase.value.set(c);
+    });
+    barkFolder.addColor(pineParams, 'barkTop').name('Trunk Top (Lit)').onChange(c => {
+        if (_pines()) _pines().uBarkTop.value.set(c);
+    });
 
-    const treeCountCtrl = stylizedTreeFolder.add(pineParams, 'counts').name('Instances (N/M/F)').disable();
+    // 4. Procedural Placement Folder
+    const placementFolder = stylizedTreeFolder.addFolder('Dual-Noise Placement');
+    placementFolder.add(pineParams, 'scale', 0.2, 3.5, 0.05).name('Tree Scale').onChange(v => {
+        if (_pines()) { _pines().scaleMul = v; _respawnPines(); }
+    });
+    placementFolder.add(pineParams, 'density', 0.1, 5.0, 0.05).name('Density Multiplier').onChange(v => {
+        if (_pines()) { _pines().density = v; _respawnPines(); }
+    });
+    placementFolder.add(pineParams, 'minSpacing', 6.0, 50.0, 1.0).name('Poisson Spacing (m)').onChange(v => {
+        if (_pines()) _pines().setCellSize(v);
+    });
+    placementFolder.add(pineParams, 'minElevation', 0.0, 50.0, 0.5).name('Min Elevation (m)').onChange(v => {
+        if (_pines()) { _pines().minElevation = v; _respawnPines(); }
+    });
+    placementFolder.add(pineParams, 'maxElevation', 20.0, 200.0, 1.0).name('Max Elevation (m)').onChange(v => {
+        if (_pines()) { _pines().maxElevation = v; _respawnPines(); }
+    });
+    placementFolder.add({ respawn: _respawnPines }, 'respawn').name('Respawn Forest');
+
+    // 5. Far Billboard & Impostor Trees Folder (> 250m)
+    const impostorFolder = stylizedTreeFolder.addFolder('Far Billboard & Impostor Trees');
+    impostorFolder.add(pineParams, 'impostorsEnabled').name('Enable Far Billboards').onChange(v => {
+        if (_pines()) { _pines().impostorsEnabled = v; _respawnPines(); }
+    });
+    impostorFolder.add(pineParams, 'impostorDistance', 80.0, 700.0, 10.0).name('Billboard Distance (m)').onChange(v => {
+        if (_pines()) { _pines().setImpostorDistance(v); }
+    });
+    impostorFolder.add(pineParams, 'impostorDensity', 0.1, 5.0, 0.05).name('Billboard Density').onChange(v => {
+        if (_pines()) { _pines().setImpostorDensity(v); }
+    });
+    impostorFolder.add(pineParams, 'impostorWidth', 0.8, 3.0, 0.05).name('Billboard Width Scale').onChange(v => {
+        if (_pines()) { _pines().setImpostorWidth(v); }
+    });
+    impostorFolder.add(pineParams, 'overheadCanopy').name('Overhead Flight Canopy').onChange(v => {
+        if (_pines()) { _pines().setOverheadCanopyEnabled(v); }
+    });
+    impostorFolder.add(pineParams, 'overheadThreshold', 20.0, 200.0, 5.0).name('Overhead Trigger Alt (m)').onChange(v => {
+        if (_pines()) { _pines().overheadAltThreshold = v; _respawnPines(); }
+    });
+
+    const liveTreeCountCtrl = stylizedTreeFolder.add(pineParams, 'counts').name('Active Trees (2 Draw Calls)').disable();
+
     setInterval(() => {
-        const t = _pines();
-        if (!t || !treeCountCtrl) return;
-        const c = t.lastCounts;
-        pineParams.counts = `${c.near} / ${c.mid} / ${c.far}`;
-        treeCountCtrl.updateDisplay();
+        if (_pines() && _pines().lastCounts) {
+            const c = _pines().lastCounts;
+            const total = c.total !== undefined ? c.total : (c.main !== undefined ? c.main : ((c.near || 0) + (c.mid || 0) + (c.far || 0)));
+            pineParams.counts = `${total} trees`;
+            if (liveTreeCountCtrl) liveTreeCountCtrl.updateDisplay();
+        }
     }, 700);
 
     function setGodMode(enabled) {
@@ -506,32 +803,35 @@ export function initDebugGUI(ctx) {
         params.godMode = isGodMode;
 
         if (isGodMode) {
-            if (typeof params !== 'undefined') {
-                params.groundFog = false;
-                params.godRays = false;
-                if (typeof isWindTrailsOn !== 'undefined') params.trails = false;
-                params.wind = false;
-                params.rain = false;
-                params.sceneFog = false;
-                params.showClouds = false;
-            }
-            // Automatically hide ALL cloud layers in God Mode
-            if (typeof instClouds !== 'undefined') instClouds.visible = false;
-            if (typeof instHighClouds !== 'undefined') instHighClouds.visible = false;
-            if (typeof instWispyClouds !== 'undefined') instWispyClouds.visible = false;
-            if (typeof instMegaClouds !== 'undefined') instMegaClouds.visible = false;
-            if (typeof toonCloudMat !== 'undefined' && toonCloudMat.uniforms && toonCloudMat.uniforms.uEnableClouds) toonCloudMat.uniforms.uEnableClouds.value = 0.0;
+            if (!isStudio) {
+                if (typeof params !== 'undefined') {
+                    params.groundFog = false;
+                    params.godRays = false;
+                    if (typeof isWindTrailsOn !== 'undefined') params.trails = false;
+                    params.wind = false;
+                    params.rain = false;
+                    params.sceneFog = false;
+                    params.showClouds = false;
+                }
+                // Automatically hide cloud layers only in raw God Mode
+                if (typeof instClouds !== 'undefined') instClouds.visible = false;
+                if (typeof instHighClouds !== 'undefined') instHighClouds.visible = false;
+                if (typeof instWispyClouds !== 'undefined') instWispyClouds.visible = false;
+                if (typeof instMegaClouds !== 'undefined') instMegaClouds.visible = false;
+                if (typeof toonCloudMat !== 'undefined' && toonCloudMat.uniforms && toonCloudMat.uniforms.uEnableClouds) toonCloudMat.uniforms.uEnableClouds.value = 0.0;
 
-            if (typeof scene !== 'undefined' && scene.fog) { scene.fog.near = 100000; scene.fog.far = 200000; }
-            if (typeof groundFog !== 'undefined') groundFog.visible = false;
-            if (typeof godRaysGroup !== 'undefined') godRaysGroup.visible = false;
-            if (typeof windTrailsGroup !== 'undefined') windTrailsGroup.visible = false;
+                if (typeof scene !== 'undefined' && scene.fog) { scene.fog.near = 100000; scene.fog.far = 200000; }
+                if (typeof groundFog !== 'undefined') groundFog.visible = false;
+                if (typeof godRaysGroup !== 'undefined') godRaysGroup.visible = false;
+                if (typeof windTrailsGroup !== 'undefined') windTrailsGroup.visible = false;
+            }
             
-            if (typeof debugFolder !== 'undefined') debugFolder.open();
-            if (typeof envFolder !== 'undefined') envFolder.open();
+            // Do not auto-expand folders programmatically
             isFlightPaused = true;
             const pauseToggle = document.getElementById('pause-toggle');
-            if (pauseToggle) pauseToggle.innerText = '▶';
+            if (pauseToggle) {
+                pauseToggle.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+            }
 
             if (!godCamera) {
                 const gm = setupGodMode(scene, cameraBase, renderer, playerGrp);
@@ -560,7 +860,7 @@ export function initDebugGUI(ctx) {
 
         const btn = document.getElementById('god-mode-btn');
         if (btn) {
-            btn.innerText = '▲';
+            btn.innerText = isGodMode ? 'God Mode: ON' : 'God Mode: OFF';
             btn.style.color = isGodMode ? '#ff4444' : 'rgba(255, 255, 255, 0.95)';
             btn.style.textShadow = isGodMode ? '0 0 10px rgba(255, 68, 68, 0.9), 0 1px 3px rgba(0, 0, 0, 0.5)' : '0 1px 3px rgba(0, 0, 0, 0.35), 0 0 8px rgba(0, 0, 0, 0.2)';
             btn.style.transform = isGodMode ? 'scale(1.15)' : 'scale(1.0)';
@@ -578,6 +878,8 @@ export function initDebugGUI(ctx) {
     function setAllFogEnabled(enabled) {
         params.showFog = enabled;
         params.sceneFog = enabled;
+        params.fogPlane = enabled;
+        params.showFogPlanes = enabled;
         if (!enabled) {
             if (typeof scene !== 'undefined' && scene.fog) {
                 scene.fog.near = 100000;
@@ -599,13 +901,25 @@ export function initDebugGUI(ctx) {
                 scene.fog.far = baseFar / Math.max(0.1, density);
             }
             if (typeof window.fogGroup !== 'undefined') {
-                window.fogGroup.visible = params.showFogPlanes;
+                window.fogGroup.visible = true;
+            }
+        }
+
+        if (window.groundFogEditor) {
+            window.groundFogEditor.runtimeState.enabled = enabled;
+            const curCfg = window.groundFogEditor.getCurrentConfig();
+            if (curCfg) {
+                curCfg.enabled = enabled;
+                window.groundFogEditor.saveConfigsToStorage();
+            }
+            if (window.groundFogEditor.visible) {
+                window.groundFogEditor.syncUI();
             }
         }
 
         if (typeof gui !== 'undefined' && gui) {
             gui.controllersRecursive().forEach(c => {
-                if (c.property === 'sceneFog' || c.property === 'showFog') {
+                if (c.property === 'sceneFog' || c.property === 'showFog' || c.property === 'fogPlane' || c.property === 'showFogPlanes') {
                     c.updateDisplay();
                 }
             });
@@ -615,6 +929,15 @@ export function initDebugGUI(ctx) {
 
     const debugFolder = gui.addFolder('Debug Render');
     debugFolder.add(params, 'godMode').name('God Mode (Free Cam) [G]').listen().onChange(v => setGodMode(v));
+    if (params.cameraFov === undefined) params.cameraFov = 60;
+    debugFolder.add(params, 'cameraFov', 5, 100, 1).name('Camera FOV / Zoom [Z]').listen().onChange(v => {
+        camera.fov = v;
+        camera.updateProjectionMatrix();
+        if (godCamera) {
+            godCamera.fov = v;
+            godCamera.updateProjectionMatrix();
+        }
+    });
     debugFolder.add(params, 'showProceduralSky').name('Procedural Sky').onChange(v => {
         if (typeof window.setSkyRenderMode === 'function') {
             if (!v) {
@@ -658,7 +981,10 @@ export function initDebugGUI(ctx) {
         if (typeof window.birdFlock !== 'undefined' && window.birdFlock) window.birdFlock.visible = v;
         if (typeof window.flamingoFlock !== 'undefined' && window.flamingoFlock) window.flamingoFlock.visible = v;
     });
-    debugFolder.add(params, 'showCrystals').name('Crystals').onChange(v => { instCrystals.visible = v; });
+    debugFolder.add(params, 'showCrystals').name('Crystals').onChange(v => {
+        if (crystalSystem && crystalSystem.instCrystals) crystalSystem.instCrystals.visible = v;
+        else if (typeof window.instCrystals !== 'undefined' && window.instCrystals) window.instCrystals.visible = v;
+    });
 
     const shadingFolder = debugFolder.addFolder('Shade Mode');
     shadingFolder.add(params, 'shadeMode', ['original', 'cel', 'flat'])
@@ -666,6 +992,33 @@ export function initDebugGUI(ctx) {
         .onChange(v => toonShaderManager.apply(scene, v));
 
     debugFolder.add(params, 'showMap').name('World Map').onChange(v => { const el = document.getElementById('world-map'); if(el) el.style.display = v ? 'block' : 'none'; });
+
+    // Distance Rings Overlay (100m, 200m, 300m, 400m, 500m, 600m, 1000m)
+    const distRingsFolder = debugFolder.addFolder('Distance Rings (100m - 1000m) [K]');
+    distRingsFolder.add(params, 'showDistanceOverlay').name('Show Distance Rings [K]').listen().onChange(v => {
+        const overlay = distanceOverlay || (typeof window !== 'undefined' ? window.distanceOverlay : null);
+        if (overlay) overlay.setVisible(v);
+    });
+    distRingsFolder.add(params, 'distanceOverlayOpacity', 0.05, 1.0, 0.05).name('Ring Opacity').onChange(v => {
+        const overlay = distanceOverlay || (typeof window !== 'undefined' ? window.distanceOverlay : null);
+        if (overlay) overlay.setOpacity(v);
+    });
+    distRingsFolder.addColor(params, 'distanceOverlayColor').name('Ring Color').onChange(v => {
+        const overlay = distanceOverlay || (typeof window !== 'undefined' ? window.distanceOverlay : null);
+        if (overlay) overlay.setColor(v);
+    });
+    distRingsFolder.add(params, 'distanceOverlayLabels').name('Distance Labels').onChange(v => {
+        const overlay = distanceOverlay || (typeof window !== 'undefined' ? window.distanceOverlay : null);
+        if (overlay) overlay.setShowLabels(v);
+    });
+    distRingsFolder.add(params, 'distanceOverlayGroundDropline').name('Ground Altitude Line').onChange(v => {
+        const overlay = distanceOverlay || (typeof window !== 'undefined' ? window.distanceOverlay : null);
+        if (overlay && typeof overlay.setShowGroundDropline === 'function') overlay.setShowGroundDropline(v);
+    });
+    distRingsFolder.add(params, 'distanceOverlayMode', ['Horizontal Level', 'Flight Pitch/Roll', 'World Fixed']).name('Alignment Mode').onChange(v => {
+        const overlay = distanceOverlay || (typeof window !== 'undefined' ? window.distanceOverlay : null);
+        if (overlay) overlay.setOrientationMode(v);
+    });
 
     // Bird & Flock Settings
     const birdFolder = debugFolder.addFolder('Bird & Flock Settings');
@@ -679,8 +1032,10 @@ export function initDebugGUI(ctx) {
     params.birdMaxSpeed = 35;
 
     birdFolder.add(params, 'birdCount', 0, 120, 1).name('Bird Count').onChange(v => {
-        instBirds.count = Math.min(v, MAX_BIRD_COUNT);
-        instBirds.instanceMatrix.needsUpdate = true;
+        if (typeof window.instBirds !== 'undefined' && window.instBirds) {
+            window.instBirds.count = Math.min(v, window.MAX_BIRD_COUNT || 120);
+            window.instBirds.instanceMatrix.needsUpdate = true;
+        }
     });
     birdFolder.add(params, 'birdScale', 0.1, 2.0, 0.05).name('Bird Size');
     birdFolder.add(params, 'flamingoScale', 0.001, 0.03, 0.001).name('Flamingo Size').onChange(v => {
@@ -694,7 +1049,9 @@ export function initDebugGUI(ctx) {
         }
     });
     birdFolder.addColor(params, 'birdColor').name('Bird Color').onChange(v => {
-        matBird.color.set(v);
+        if (typeof window.matBird !== 'undefined' && window.matBird) {
+            window.matBird.color.set(v);
+        }
     });
     birdFolder.add(params, 'birdFlockRadius', 5, 80, 1).name('Flock Radius');
     birdFolder.add(params, 'birdFlockSpread', 1, 30, 1).name('Flock Spread');
@@ -704,41 +1061,15 @@ export function initDebugGUI(ctx) {
     function teleportToBiome(biomeName) {
         if (typeof playerGrp === 'undefined') return;
         
-        const zn = ZONES.find(z => z.name === biomeName);
-        if (!zn) return;
+        const coords = getBiomeTeleportCoords(biomeName);
+        const targetX = coords ? coords.x : 0;
+        const targetZ = coords ? coords.z : 0;
 
-        // Smart Search for Islands Mode
-        const SEARCH_STEP = 14000;
-        let radius = 0;
-        let found = false;
-        let targetX = playerGrp.position.x, targetZ = playerGrp.position.z;
+        const groundH = getWorldHeight ? getWorldHeight(targetX, targetZ) : 10;
+        playerGrp.position.set(targetX, Math.max(35, groundH + 40), targetZ);
         
-        while (!found && radius < 120) {
-            for (let x = -radius; x <= radius; x++) {
-                for (let z = -radius; z <= radius; z++) {
-                    if (Math.max(Math.abs(x), Math.abs(z)) !== radius) continue; // Only search outer edge ring
-                    
-                    const sampleX = playerGrp.position.x + x * SEARCH_STEP;
-                    const sampleZ = playerGrp.position.z + z * SEARCH_STEP;
-                    const data = getIslandData(sampleX, sampleZ);
-                    
-                    if (data.mask > 0.2 && data.mainBiome.name === biomeName) {
-                        targetX = sampleX;
-                        targetZ = sampleZ;
-                        found = true;
-                        break;
-                    }
-                }
-                if (found) break;
-            }
-            radius++;
-        }
-        playerGrp.position.set(targetX, 100, targetZ);
-        
-        lastTerrainGridX = -9999;
-        lastTerrainGridZ = -9999;
-        lastDepthFieldGridX = -999999;
-        lastDepthFieldGridZ = -999999;
+        invalidateTerrain();
+        if (window.stylizedTrees) window.stylizedTrees.respawn();
         
         if (typeof navParams !== 'undefined' && typeof navFolder !== 'undefined') {
             navParams.biome = biomeName;
@@ -795,7 +1126,14 @@ export function initDebugGUI(ctx) {
     if (guiToggleBtn) {
         guiToggleBtn.addEventListener('click', () => toggleGUI());
     }
-    toggleGUI(false);
+    
+    window.toggleGUI = toggleGUI;
+    if (isStudio) {
+        toggleGUI(true);
+        if (gui) gui.close();
+    } else {
+        toggleGUI(false);
+    }
 
     function openOceanInGui() {
         toggleGUI(true);
@@ -807,16 +1145,46 @@ export function initDebugGUI(ctx) {
 
     const oceanToggleBtn = document.getElementById('ocean-toggle-btn');
     if (oceanToggleBtn) {
-        oceanToggleBtn.addEventListener('click', openOceanInGui);
+        oceanToggleBtn.addEventListener('click', () => {
+            if (window.waterModalUI) {
+                window.waterModalUI.toggle();
+            } else if (window.summonWaterModal) {
+                window.summonWaterModal(true);
+            } else {
+                openOceanInGui();
+            }
+        });
     }
 
     window.addEventListener('keydown', (e) => {
+        if ((e.key === 'F2' || e.key === 'f2') && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+            e.preventDefault();
+            toggleGUI();
+        }
         if ((e.key === 'o' || e.key === 'O') && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
-            if (window.waterModalUI) window.waterModalUI.toggle();
-            else openOceanInGui();
+            if (window.waterModalUI) {
+                window.waterModalUI.toggle();
+            } else if (window.summonWaterModal) {
+                window.summonWaterModal(true);
+            } else {
+                openOceanInGui();
+            }
         }
         if ((e.key === 'g' || e.key === 'G') && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
             setGodMode();
+        }
+        if ((e.key === 'k' || e.key === 'K') && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+            if (typeof window.toggleDistanceOverlay === 'function') {
+                window.toggleDistanceOverlay();
+            } else if (distanceOverlay) {
+                const nextVal = !params.showDistanceOverlay;
+                params.showDistanceOverlay = nextVal;
+                distanceOverlay.setVisible(nextVal);
+                showVisualToast(nextVal ? 'Distance Rings: ON' : 'Distance Rings: OFF');
+                gui.controllersRecursive().forEach(c => {
+                    if (c.property === 'showDistanceOverlay' && typeof c.updateDisplay === 'function') c.updateDisplay();
+                });
+            }
         }
     });
 
@@ -846,10 +1214,10 @@ export function initDebugGUI(ctx) {
     document.addEventListener('fullscreenchange', () => {
         const isFS = !!document.fullscreenElement;
         if (fsToggleBtn) {
-            fsToggleBtn.innerText = isFS ? '🗵' : '⛶';
+            fsToggleBtn.innerText = isFS ? 'Exit Fullscreen' : 'Fullscreen';
         }
         if (topFullscreenBtn) {
-            topFullscreenBtn.innerText = isFS ? '🗵' : '⛶';
+            topFullscreenBtn.innerText = isFS ? 'Exit Fullscreen' : 'Fullscreen';
         }
     });
 
@@ -878,13 +1246,13 @@ export function initDebugGUI(ctx) {
         mobileMenuBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             mobileDrawer.classList.toggle('open');
-            mobileMenuBtn.innerText = mobileDrawer.classList.contains('open') ? '✕' : '⚙️';
+            mobileMenuBtn.innerText = mobileDrawer.classList.contains('open') ? 'Close' : 'Menu';
         });
 
         document.addEventListener('click', (e) => {
             if (mobileDrawer.classList.contains('open') && !mobileDrawer.contains(e.target) && e.target !== mobileMenuBtn) {
                 mobileDrawer.classList.remove('open');
-                mobileMenuBtn.innerText = '⚙️';
+                mobileMenuBtn.innerText = 'Menu';
             }
         });
     }
@@ -921,12 +1289,15 @@ export function initDebugGUI(ctx) {
         });
     }
     
-
-    
-    document.getElementById('pause-toggle').addEventListener('click', () => {
-        isFlightPaused = !isFlightPaused;
-        document.getElementById('pause-toggle').innerText = isFlightPaused ? '▶' : '⏸';
-    });
+    const pauseToggleBtn = document.getElementById('pause-toggle');
+    if (pauseToggleBtn) {
+        pauseToggleBtn.addEventListener('click', () => {
+            isFlightPaused = !isFlightPaused;
+            pauseToggleBtn.innerHTML = isFlightPaused 
+                ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>'
+                : '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="4" width="4" height="16" rx="1"/><rect x="15" y="4" width="4" height="16" rx="1"/></svg>';
+        });
+    }
 
     if (normalGodBtn) {
         normalGodBtn.addEventListener('click', () => {
@@ -952,29 +1323,33 @@ export function initDebugGUI(ctx) {
 
 
     window.addEventListener('wheel', (e) => {
-        if ((window.editorState && window.editorState.isEditorMode) || isGodMode) return;
-        cameraZoomDist += Math.sign(e.deltaY) * 4.0;
-        cameraZoomDist = Math.max(5.0, Math.min(300.0, cameraZoomDist));
-        if (cameraManager) cameraManager.setZoom(cameraZoomDist);
-        localStorage.setItem('wl_zoomDist', cameraZoomDist);
+        if ((window.editorState && window.editorState.isEditorMode) || (typeof window.isGodMode !== 'undefined' ? window.isGodMode : isGodMode)) return;
+        const cm = window.cameraManager || (typeof cameraManager !== 'undefined' ? cameraManager : null);
+        let curZoom = (cm && cm.cameraZoomDist !== undefined) ? cm.cameraZoomDist : (window.cameraZoomDist !== undefined ? window.cameraZoomDist : 12.0);
+        curZoom += Math.sign(e.deltaY) * 4.0;
+        curZoom = Math.max(6.0, Math.min(300.0, curZoom));
+        window.cameraZoomDist = curZoom;
+        if (cm && typeof cm.setZoom === 'function') cm.setZoom(curZoom);
+        localStorage.setItem('wl_zoomDist', curZoom);
     }, { passive: true });
     
     // Add mobile touch handling for two-finger zoom (pinch gesture)
     let gameInitialTouchDistance = null;
     let gameInitialZoom = null;
     window.addEventListener('touchstart', (e) => {
-        if ((window.editorState && window.editorState.isEditorMode) || isGodMode) return;
+        if ((window.editorState && window.editorState.isEditorMode) || (typeof window.isGodMode !== 'undefined' ? window.isGodMode : isGodMode)) return;
         if (e.touches.length === 2) {
             gameInitialTouchDistance = Math.hypot(
                 e.touches[0].pageX - e.touches[1].pageX,
                 e.touches[0].pageY - e.touches[1].pageY
             );
-            gameInitialZoom = cameraZoomDist;
+            const cm = window.cameraManager || (typeof cameraManager !== 'undefined' ? cameraManager : null);
+            gameInitialZoom = (cm && cm.cameraZoomDist !== undefined) ? cm.cameraZoomDist : (window.cameraZoomDist !== undefined ? window.cameraZoomDist : 12.0);
         }
     }, { passive: true });
 
     window.addEventListener('touchmove', (e) => {
-        if ((window.editorState && window.editorState.isEditorMode) || isGodMode) return;
+        if ((window.editorState && window.editorState.isEditorMode) || (typeof window.isGodMode !== 'undefined' ? window.isGodMode : isGodMode)) return;
         if (e.touches.length === 2 && gameInitialTouchDistance !== null && gameInitialZoom !== null) {
             const currentTouchDistance = Math.hypot(
                 e.touches[0].pageX - e.touches[1].pageX,
@@ -982,10 +1357,12 @@ export function initDebugGUI(ctx) {
             );
             if (gameInitialTouchDistance > 0 && currentTouchDistance > 0) {
                 const factor = gameInitialTouchDistance / currentTouchDistance;
-                cameraZoomDist = gameInitialZoom * factor;
-                cameraZoomDist = Math.max(5.0, Math.min(300.0, cameraZoomDist));
-                if (cameraManager) cameraManager.setZoom(cameraZoomDist);
-                localStorage.setItem('wl_zoomDist', cameraZoomDist);
+                let curZoom = gameInitialZoom * factor;
+                curZoom = Math.max(6.0, Math.min(300.0, curZoom));
+                window.cameraZoomDist = curZoom;
+                const cm = window.cameraManager || (typeof cameraManager !== 'undefined' ? cameraManager : null);
+                if (cm && typeof cm.setZoom === 'function') cm.setZoom(curZoom);
+                localStorage.setItem('wl_zoomDist', curZoom);
             }
         }
     }, { passive: true });
@@ -1012,32 +1389,44 @@ export function initDebugGUI(ctx) {
         };
         
         function updateAtmoParamsFromPhase() {
-            const cur = envConfigs[timePhase];
-            atmoParams.skyColor = '#' + cur.bg.toString(16).padStart(6, '0');
-            atmoParams.fogColor = '#' + cur.fog.toString(16).padStart(6, '0');
-            atmoParams.ambColor = '#' + cur.amb.toString(16).padStart(6, '0');
-            atmoParams.dirColor = '#' + cur.dir.toString(16).padStart(6, '0');
-            atmoParams.ambI = cur.ambI;
-            atmoParams.dirI = cur.dirI;
-            atmoParams.glintCol = '#' + cur.glintCol.toString(16).padStart(6, '0');
-            if (atmoFolder) {
-                atmoFolder.controllers.forEach(c => c.updateDisplay());
+            const currentPhase = (typeof window.getTimePhase === 'function') ? window.getTimePhase() : ((typeof window.timePhase !== 'undefined') ? window.timePhase : (typeof timePhase !== 'undefined' ? timePhase : 0));
+            const cur = envConfigs[currentPhase] || envConfigs[0];
+            if (cur) {
+                atmoParams.skyColor = '#' + cur.bg.toString(16).padStart(6, '0');
+                atmoParams.fogColor = '#' + cur.fog.toString(16).padStart(6, '0');
+                atmoParams.ambColor = '#' + cur.amb.toString(16).padStart(6, '0');
+                atmoParams.dirColor = '#' + cur.dir.toString(16).padStart(6, '0');
+                atmoParams.ambI = cur.ambI;
+                atmoParams.dirI = cur.dirI;
+                atmoParams.glintCol = '#' + cur.glintCol.toString(16).padStart(6, '0');
+                if (cur.sunY !== undefined) {
+                    params.sunAltitude = cur.sunY;
+                }
+                if (atmoFolder) {
+                    atmoFolder.controllers.forEach(c => c.updateDisplay());
+                }
+                if (typeof sunGodRaysFolder !== 'undefined' && sunGodRaysFolder) {
+                    sunGodRaysFolder.controllers.forEach(c => c.updateDisplay());
+                }
             }
         }
+        if (typeof window !== 'undefined') window.updateAtmoParamsFromPhase = updateAtmoParamsFromPhase;
         
         // Listen to phase changes
-        const oldTimeToggle = document.getElementById('time-toggle').onclick;
-        document.getElementById('time-toggle').addEventListener('click', () => {
-            setTimeout(updateAtmoParamsFromPhase, 50);
-        });
+        const timeToggleEl = document.getElementById('time-toggle');
+        if (timeToggleEl) {
+            timeToggleEl.addEventListener('click', () => {
+                setTimeout(updateAtmoParamsFromPhase, 50);
+            });
+        }
 
         // Master Environment Folder
         const envFolder = gui.addFolder('Environment');
 
         // 1. Atmosphere & Lighting Subfolder
         const atmoFolder = envFolder.addFolder('Atmosphere & Lighting');
-        atmoFolder.add(params, 'exposure', 0.5, 4.0, 0.1).name('Global Brightness').onChange(v => {
-            renderer.toneMappingExposure = v;
+        atmoFolder.add(params, 'exposureTrim', 0.4, 2.0, 0.02).name('Global Brightness').onChange(v => {
+            gui.controllersRecursive().forEach(c => { if (c.property === 'exposureTrim') c.updateDisplay(); });
         });
         atmoFolder.add(params, 'summerFilter').name('Summer Filter').onChange(v => {
             const btn = document.getElementById('summer-toggle');
@@ -1188,7 +1577,10 @@ export function initDebugGUI(ctx) {
         const skyCtrlTurb = skyFolder.add(skyEditorParams, 'turbulence', 0, 1, 0.01).name('Storm Turbulence').onChange(v => writeSkyToConfig('turbulence', v));
         const skyCtrlDarken = skyFolder.add(skyEditorParams, 'stormDarken', 0, 1, 0.01).name('Storm Darken').onChange(v => writeSkyToConfig('stormDarken', v));
         skyFolder.add({ opacity: 1.0 }, 'opacity', 0, 1, 0.01).name('Cloud Opacity').onChange(v => { skyUniforms.uCloudOpacity.value = v; });
-        skyFolder.add(skyEditorParams, 'weather', ['clear', 'storm', 'overcast']).name('Weather').onChange(v => { currentWeather = v; });
+        skyFolder.add(skyEditorParams, 'weather', ['clear', 'storm', 'overcast']).name('Weather').onChange(v => {
+        window.currentWeather = v;
+        if (skyUniforms && skyUniforms.uWeather) skyUniforms.uWeather.value = (v === 'storm' ? 2 : v === 'overcast' ? 1 : 0);
+    });
 
         setInterval(() => {
             if (typeof playerGrp !== 'undefined' && playerGrp.position) {
@@ -1216,11 +1608,18 @@ export function initDebugGUI(ctx) {
         // 3. Sun & God Rays Controls Subfolder
         const sunGodRaysFolder = envFolder.addFolder('Sun & God Rays Controls');
         sunGodRaysFolder.add(params, 'sunAltitude', -8000, 15000, 50).name('Sun Height (Altitude)').onChange(v => {
-            currentSunY = v;
+            params.sunAltitude = v;
+            if (typeof envConfigs !== 'undefined' && envConfigs[timePhase]) {
+                envConfigs[timePhase].sunY = v;
+            }
         });
-        sunGodRaysFolder.add(params, 'sunAzimuth', -180, 180, 1).name('Sun Azimuth (Angle °)');
+        sunGodRaysFolder.add(params, 'sunAzimuth', -180, 180, 1).name('Sun Azimuth (Angle)').onChange(v => {
+            params.sunAzimuth = v;
+        });
         sunGodRaysFolder.add(params, 'lockSunToPlayer').name('Lock Sun to Player');
-        sunGodRaysFolder.add(params, 'sunDiscScale', 0.5, 5.0, 0.1).name('Sun Disc Size');
+        sunGodRaysFolder.add(params, 'sunDiscScale', 0.5, 5.0, 0.1).name('Sun Disc Size').onChange(v => {
+            params.sunDiscScale = v;
+        });
         sunGodRaysFolder.add(params, 'godRays').name('God Rays Enable').onChange(v => {
             godRaysPass.enabled = v;
         });
@@ -1258,12 +1657,12 @@ export function initDebugGUI(ctx) {
                 params.sunDiscScale = 1.8;
                 params.godRays = true;
                 godRaysPass.enabled = true;
-                params.godRayIntensity = 0.65;
-                godRaysPass.uniforms.uIntensity.value = 0.65;
+                params.godRayIntensity = 0.35;
+                godRaysPass.uniforms.uIntensity.value = 0.35;
                 params.godRayDensity = 0.50;
                 godRaysPass.uniforms.uDensity.value = 0.50;
-                params.godRayDecay = 0.927;
-                godRaysPass.uniforms.uDecay.value = 0.927;
+                params.godRayDecay = 0.88;
+                godRaysPass.uniforms.uDecay.value = 0.88;
                 params.lumMin = 0.85;
                 godRaysPass.uniforms.uLumMin.value = 0.85;
                 params.lumMax = 0.97;
@@ -1314,7 +1713,7 @@ export function initDebugGUI(ctx) {
         }, 'downloadDusk').name('Download Dusk Settings (.json)');
 
         // 4. Moonlight & Night Subfolder
-        const moonParams = {
+        const moonLightingParams = {
             moonlightColor: '#' + envConfigs[2].dir.toString(16).padStart(6, '0'),
             moonlightIntensity: envConfigs[2].dirI,
             nightAmbColor: '#' + envConfigs[2].amb.toString(16).padStart(6, '0'),
@@ -1328,15 +1727,57 @@ export function initDebugGUI(ctx) {
         // NOTE: this used to write renderer.toneMappingExposure, which is completely inert
         // while PostProcessing sets outputColorTransform = false. It now drives the real
         // exposure multiplier, so the slider actually does something.
-        moonFolder.add(params, 'exposureTrim', 0.4, 2.0, 0.02).name('Global Brightness');
+        moonFolder.add(params, 'exposureTrim', 0.4, 2.0, 0.02).name('Global Brightness').onChange(v => {
+            gui.controllersRecursive().forEach(c => { if (c.property === 'exposureTrim') c.updateDisplay(); });
+        });
         moonFolder.add(params, 'nightExposure', 0.6, 3.0, 0.05).name('Night Exposure');
-        moonFolder.addColor(moonParams, 'moonlightColor').name('Moonlight Color').onChange(v => envConfigs[2].dir = parseInt(v.replace('#',''), 16));
-        moonFolder.add(moonParams, 'moonlightIntensity', 0, 10, 0.1).name('Moonlight Power').onChange(v => envConfigs[2].dirI = v);
-        moonFolder.addColor(moonParams, 'nightAmbColor').name('Night Fill Color').onChange(v => envConfigs[2].amb = parseInt(v.replace('#',''), 16));
-        moonFolder.add(moonParams, 'nightAmbIntensity', 0, 5, 0.1).name('Night Fill Power').onChange(v => envConfigs[2].ambI = v);
-        moonFolder.addColor(moonParams, 'nightSkyColor').name('Night Sky Color').onChange(v => envConfigs[2].bg = parseInt(v.replace('#',''), 16));
-        moonFolder.addColor(moonParams, 'nightFogColor').name('Night Fog Color').onChange(v => envConfigs[2].fog = parseInt(v.replace('#',''), 16));
-        moonFolder.add(moonParams, 'moonAltitude', 200, 4000, 50).name('Moon Altitude').onChange(v => envConfigs[2].moonY = v);
+        moonFolder.addColor(moonLightingParams, 'moonlightColor').name('Moonlight Color').onChange(v => envConfigs[2].dir = parseInt(v.replace('#',''), 16));
+        moonFolder.add(moonLightingParams, 'moonlightIntensity', 0, 10, 0.1).name('Moonlight Power').onChange(v => envConfigs[2].dirI = v);
+        moonFolder.addColor(moonLightingParams, 'nightAmbColor').name('Night Fill Color').onChange(v => envConfigs[2].amb = parseInt(v.replace('#',''), 16));
+        moonFolder.add(moonLightingParams, 'nightAmbIntensity', 0, 5, 0.1).name('Night Fill Power').onChange(v => envConfigs[2].ambI = v);
+        moonFolder.addColor(moonLightingParams, 'nightSkyColor').name('Night Sky Color').onChange(v => envConfigs[2].bg = parseInt(v.replace('#',''), 16));
+        moonFolder.addColor(moonLightingParams, 'nightFogColor').name('Night Fog Color').onChange(v => envConfigs[2].fog = parseInt(v.replace('#',''), 16));
+        moonFolder.add(moonLightingParams, 'moonAltitude', 500, 30000, 100).name('Moon Altitude (Height)').onChange(v => envConfigs[2].moonY = v);
+
+        // 3D Moon Object Controls
+        const moon3dFolder = moonFolder.addFolder('3D Moon Object');
+        moon3dFolder.add(moonParams, 'size', 0.1, 8.0, 0.05).name('Moon Size / Scale').onChange(v => {
+            if (moonMesh) moonMesh.scale.setScalar(v);
+        });
+        moon3dFolder.add(moonParams, 'brightness', 0.0, 5.0, 0.05).name('Moon Brightness').onChange(v => {
+            if (moonMesh && moonMesh.material) moonMesh.material.color.setRGB(v, v, v);
+        });
+        moon3dFolder.add(moonParams, 'glowIntensity', 0.0, 2.0, 0.02).name('Glow / Bloom Intensity').onChange(v => {
+            if (window._moonGlow && window._moonGlow()) {
+                const s = window._moonGlow();
+                s.material.opacity = v;
+                s.visible = v > 0.01;
+            }
+        });
+        moon3dFolder.add(moonParams, 'glowRadius', 1.0, 2.5, 0.01).name('Glow Radius').onChange(v => {
+            if (window._moonGlow && window._moonGlow()) {
+                const s = window._moonGlow();
+                if (s.isSprite) {
+                    const scale = moonParams.baseRadius * 2 * moonParams.size * v;
+                    s.scale.set(scale, scale, 1.0);
+                } else {
+                    const scale = moonParams.size * (v / 1.44);
+                    s.scale.setScalar(scale);
+                }
+            }
+        });
+        moon3dFolder.addColor(moonParams, 'glowColor').name('Glow Tint Color').onChange(v => {
+            if (window._moonGlow && window._moonGlow()) {
+                window._moonGlow().material.color.set(v);
+            }
+        });
+        moon3dFolder.add(moonParams, 'azimuth', 0, 360, 1).name('Position Azimuth (deg)');
+        moon3dFolder.add(moonParams, 'distance', 5000, 60000, 500).name('Position Distance');
+        moon3dFolder.add(moonParams, 'rotationX', -180, 180, 1).name('Rotation X (deg)');
+        moon3dFolder.add(moonParams, 'rotationY', -180, 180, 1).name('Rotation Y (deg)').listen();
+        moon3dFolder.add(moonParams, 'rotationZ', -180, 180, 1).name('Rotation Z (deg)');
+        moon3dFolder.add(moonParams, 'rotationSpeed', -0.05, 0.05, 0.0005).name('Auto-Spin Speed');
+
         moonFolder.add({
             exportNight: () => timeOfDayExporter ? timeOfDayExporter.exportPhase(2, false) : null
         }, 'exportNight').name('Export Night Settings (Copy JSON)');
@@ -1425,8 +1866,10 @@ export function initDebugGUI(ctx) {
         // Dedicated Distance Fog (Horizon & Range) Subfolder
         const distFogFolder = weatherFolder.addFolder('Distance Fog (Horizon & Range)');
         distFogFolder.add(params, 'sceneFog').name('Global Fog').listen().onChange(v => {
-            if (typeof setAllFogEnabled === 'function') {
-                setAllFogEnabled(v);
+            params.sceneFog = v;
+            if (!v && typeof scene !== 'undefined' && scene.fog) {
+                scene.fog.near = 100000;
+                scene.fog.far = 200000;
             }
         });
         distFogFolder.add(params, 'fogNear', 0, 1000, 10).name('Start Dist (Clear Area)').listen().onChange(v => {
@@ -1499,15 +1942,209 @@ export function initDebugGUI(ctx) {
 
         window.biomeFogSettings = window.biomeFogSettings || {};
         const fogFolder = weatherFolder.addFolder('Ground Fog (Per Biome)');
-        fogFolder.add(params, 'fogPlane').name('Enable Fog').onChange(v => { if (typeof window.fogGroup !== 'undefined') window.fogGroup.visible = v; });
-        const fogOffsetCtrl = fogFolder.add(params, 'biomeFogOffset', -50, 50).name('Biome Fog Offset').onChange(v => {
+        const fogEnableCtrl = fogFolder.add(params, 'fogPlane').name('Enable Fog').listen().onChange(v => {
+            params.fogPlane = v;
+            if (window.groundFogEditor) {
+                const curCfg = window.groundFogEditor.getCurrentConfig();
+                if (curCfg) {
+                    curCfg.enabled = v;
+                    window.groundFogEditor.saveConfigsToStorage();
+                    window.groundFogEditor.runtimeState.enabled = v;
+                }
+                if (window.groundFogEditor.visible) {
+                    window.groundFogEditor.syncUI();
+                }
+            }
+            if (typeof window.fogGroup !== 'undefined') {
+                window.fogGroup.visible = v && (params.showFog !== false);
+            }
+        });
+        const fogOffsetCtrl = fogFolder.add(params, 'biomeFogOffset', -80, 100).name('Biome Fog Offset').onChange(v => {
             if (typeof playerGrp !== 'undefined' && playerGrp.position) {
                 const b = getBiomeAt(playerGrp.position.x, playerGrp.position.z);
                 const bName = b ? b.name : 'Unknown';
                 window.biomeFogSettings = window.biomeFogSettings || {};
                 window.biomeFogSettings[bName] = v;
+                if (window.groundFogEditor) {
+                    const curCfg = window.groundFogEditor.getCurrentConfig();
+                    if (curCfg) { curCfg.heightOffset = v; window.groundFogEditor.saveConfigsToStorage(); }
+                }
             }
         });
+
+        const groundFogProxy = {
+            get intensity() {
+                if (window.groundFogEditor) {
+                    const cfg = window.groundFogEditor.getCurrentConfig();
+                    return cfg && cfg.intensity !== undefined ? cfg.intensity : 1.0;
+                }
+                return 1.0;
+            },
+            set intensity(v) {
+                if (window.groundFogEditor) {
+                    const cfg = window.groundFogEditor.getCurrentConfig();
+                    if (cfg) { cfg.intensity = v; window.groundFogEditor.saveConfigsToStorage(); }
+                }
+            },
+            get opacity() {
+                if (window.groundFogEditor) {
+                    const cfg = window.groundFogEditor.getCurrentConfig();
+                    return cfg && cfg.opacity !== undefined ? cfg.opacity : 0.85;
+                }
+                return 0.85;
+            },
+            set opacity(v) {
+                if (window.groundFogEditor) {
+                    const cfg = window.groundFogEditor.getCurrentConfig();
+                    if (cfg) { cfg.opacity = v; window.groundFogEditor.saveConfigsToStorage(); }
+                }
+            },
+            get layerCount() {
+                if (window.groundFogEditor) {
+                    const cfg = window.groundFogEditor.getCurrentConfig();
+                    return cfg && cfg.layerCount !== undefined ? cfg.layerCount : 5;
+                }
+                return 5;
+            },
+            set layerCount(v) {
+                if (window.groundFogEditor) {
+                    const cfg = window.groundFogEditor.getCurrentConfig();
+                    if (cfg) { cfg.layerCount = Math.round(v); window.groundFogEditor.saveConfigsToStorage(); }
+                }
+            },
+            get inversionCeiling() {
+                if (window.groundFogEditor) {
+                    const cfg = window.groundFogEditor.getCurrentConfig();
+                    return cfg && cfg.inversionCeiling !== undefined ? cfg.inversionCeiling : 150;
+                }
+                return 150;
+            },
+            set inversionCeiling(v) {
+                if (window.groundFogEditor) {
+                    const cfg = window.groundFogEditor.getCurrentConfig();
+                    if (cfg) { cfg.inversionCeiling = v; window.groundFogEditor.saveConfigsToStorage(); }
+                }
+            },
+            get ceilingFalloff() {
+                if (window.groundFogEditor) {
+                    const cfg = window.groundFogEditor.getCurrentConfig();
+                    return cfg && cfg.ceilingFalloff !== undefined ? cfg.ceilingFalloff : 40;
+                }
+                return 40;
+            },
+            set ceilingFalloff(v) {
+                if (window.groundFogEditor) {
+                    const cfg = window.groundFogEditor.getCurrentConfig();
+                    if (cfg) { cfg.ceilingFalloff = v; window.groundFogEditor.saveConfigsToStorage(); }
+                }
+            },
+            get layerSpacing() {
+                if (window.groundFogEditor) {
+                    const cfg = window.groundFogEditor.getCurrentConfig();
+                    return cfg && cfg.layerSpacing !== undefined ? cfg.layerSpacing : 20;
+                }
+                return 20;
+            },
+            set layerSpacing(v) {
+                if (window.groundFogEditor) {
+                    const cfg = window.groundFogEditor.getCurrentConfig();
+                    if (cfg) { cfg.layerSpacing = v; window.groundFogEditor.saveConfigsToStorage(); }
+                }
+            },
+            get driftSpeed() {
+                if (window.groundFogEditor) {
+                    const cfg = window.groundFogEditor.getCurrentConfig();
+                    return cfg && cfg.driftSpeed !== undefined ? cfg.driftSpeed : 1.0;
+                }
+                return 1.0;
+            },
+            set driftSpeed(v) {
+                if (window.groundFogEditor) {
+                    const cfg = window.groundFogEditor.getCurrentConfig();
+                    if (cfg) { cfg.driftSpeed = v; window.groundFogEditor.saveConfigsToStorage(); }
+                }
+            },
+            get turbulence() {
+                if (window.groundFogEditor) {
+                    const cfg = window.groundFogEditor.getCurrentConfig();
+                    return cfg && cfg.turbulence !== undefined ? cfg.turbulence : 1.0;
+                }
+                return 1.0;
+            },
+            set turbulence(v) {
+                if (window.groundFogEditor) {
+                    const cfg = window.groundFogEditor.getCurrentConfig();
+                    if (cfg) { cfg.turbulence = v; window.groundFogEditor.saveConfigsToStorage(); }
+                }
+            },
+            get mieIntensity() {
+                if (window.groundFogEditor) {
+                    const cfg = window.groundFogEditor.getCurrentConfig();
+                    return cfg && cfg.mieIntensity !== undefined ? cfg.mieIntensity : 1.3;
+                }
+                return 1.3;
+            },
+            set mieIntensity(v) {
+                if (window.groundFogEditor) {
+                    const cfg = window.groundFogEditor.getCurrentConfig();
+                    if (cfg) { cfg.mieIntensity = v; window.groundFogEditor.saveConfigsToStorage(); }
+                }
+            },
+            get sunGlow() {
+                if (window.groundFogEditor) {
+                    const cfg = window.groundFogEditor.getCurrentConfig();
+                    return cfg && cfg.sunGlow !== undefined ? cfg.sunGlow : 1.2;
+                }
+                return 1.2;
+            },
+            set sunGlow(v) {
+                if (window.groundFogEditor) {
+                    const cfg = window.groundFogEditor.getCurrentConfig();
+                    if (cfg) { cfg.sunGlow = v; window.groundFogEditor.saveConfigsToStorage(); }
+                }
+            }
+        };
+
+        fogFolder.add(groundFogProxy, 'intensity', 0.05, 4.0, 0.05).name('Fog Intensity').listen().onChange(() => {
+            if (window.groundFogEditor && window.groundFogEditor.visible) window.groundFogEditor.syncUI();
+        });
+        fogFolder.add(groundFogProxy, 'opacity', 0.0, 1.0, 0.02).name('Fog Opacity').listen().onChange(() => {
+            if (window.groundFogEditor && window.groundFogEditor.visible) window.groundFogEditor.syncUI();
+        });
+        fogFolder.add(groundFogProxy, 'layerCount', 1, 8, 1).name('Volumetric Slabs').listen().onChange(() => {
+            if (window.groundFogEditor && window.groundFogEditor.visible) window.groundFogEditor.syncUI();
+        });
+        fogFolder.add(groundFogProxy, 'inversionCeiling', 20, 400, 5).name('Inversion Ceiling').listen().onChange(() => {
+            if (window.groundFogEditor && window.groundFogEditor.visible) window.groundFogEditor.syncUI();
+        });
+        fogFolder.add(groundFogProxy, 'ceilingFalloff', 5, 150, 5).name('Ceiling Softness').listen().onChange(() => {
+            if (window.groundFogEditor && window.groundFogEditor.visible) window.groundFogEditor.syncUI();
+        });
+        fogFolder.add(groundFogProxy, 'layerSpacing', 4, 80, 1).name('Layer Spacing').listen().onChange(() => {
+            if (window.groundFogEditor && window.groundFogEditor.visible) window.groundFogEditor.syncUI();
+        });
+        fogFolder.add(groundFogProxy, 'driftSpeed', 0.0, 6.0, 0.1).name('Drift Speed').listen().onChange(() => {
+            if (window.groundFogEditor && window.groundFogEditor.visible) window.groundFogEditor.syncUI();
+        });
+        fogFolder.add(groundFogProxy, 'turbulence', 0.1, 4.0, 0.1).name('Turbulence').listen().onChange(() => {
+            if (window.groundFogEditor && window.groundFogEditor.visible) window.groundFogEditor.syncUI();
+        });
+        fogFolder.add(groundFogProxy, 'mieIntensity', 0.0, 4.0, 0.1).name('Mie Forward Glow').listen().onChange(() => {
+            if (window.groundFogEditor && window.groundFogEditor.visible) window.groundFogEditor.syncUI();
+        });
+        fogFolder.add(groundFogProxy, 'sunGlow', 0.0, 3.0, 0.1).name('Sun Rim Highlight').listen().onChange(() => {
+            if (window.groundFogEditor && window.groundFogEditor.visible) window.groundFogEditor.syncUI();
+        });
+
+        fogFolder.add({ openGroundFogEditor: async () => {
+            if (window.summonGroundFogEditor) {
+                const ed = await window.summonGroundFogEditor();
+                ed.toggle();
+            } else if (window.groundFogEditor) {
+                window.groundFogEditor.toggle();
+            }
+        }}, 'openGroundFogEditor').name('Open Dedicated Fog Editor');
+
         setInterval(() => {
             if (typeof playerGrp !== 'undefined' && playerGrp.position && !fogOffsetCtrl.__onChangeBlocked) {
                 const b = getBiomeAt(playerGrp.position.x, playerGrp.position.z);
@@ -1520,20 +2157,22 @@ export function initDebugGUI(ctx) {
                     fogOffsetCtrl.updateDisplay();
                     fogOffsetCtrl.__onChangeBlocked = false;
                 }
+
+                if (window.groundFogEditor && window.groundFogEditor.biomeConfigs) {
+                    const curCfg = window.groundFogEditor.biomeConfigs[cleanBiomeName(bName)];
+                    if (curCfg && curCfg.enabled !== undefined && params.fogPlane !== curCfg.enabled) {
+                        params.fogPlane = curCfg.enabled;
+                        fogEnableCtrl.updateDisplay();
+                    }
+                }
                 fogFolder.title('Ground Fog (' + bName + ')');
             }
         }, 500);
-        weatherFolder.add({ openGroundFogEditor: () => {
-            if (window.groundFogEditor) window.groundFogEditor.toggle();
-        }}, 'openGroundFogEditor').name('Ground Fog Editor');
 
         // 6. Terrain Colors & Sand Shimmer Subfolder
         const colorEditorFolder = envFolder.addFolder('Terrain Colors & Sand Shimmer');
         const triggerTerrainColorUpdate = () => {
-            lastTerrainGridX = -9999;
-            lastTerrainGridZ = -9999;
-            lastDepthFieldGridX = -999999;
-            lastDepthFieldGridZ = -999999;
+            invalidateTerrain();
         };
         const colorParams = {
             npSnow: '#' + northPoleColors.snowDune.getHexString(),
@@ -1567,220 +2206,13 @@ export function initDebugGUI(ctx) {
             terrainUniforms.uShimmerMult.value = val;
         });
 
-        // Cloud Parameters & Palette Function
-        const cloudParams = {
-            c0: '#' + (typeof pastelColors !== 'undefined' && pastelColors[0] ? pastelColors[0].toString(16).padStart(6, '0') : 'ffffff'),
-            c1: '#' + (typeof pastelColors !== 'undefined' && pastelColors[1] ? pastelColors[1].toString(16).padStart(6, '0') : 'ffffff'),
-            c2: '#' + (typeof pastelColors !== 'undefined' && pastelColors[2] ? pastelColors[2].toString(16).padStart(6, '0') : 'ffffff'),
-            c3: '#' + (typeof pastelColors !== 'undefined' && pastelColors[3] ? pastelColors[3].toString(16).padStart(6, '0') : 'ffffff'),
-            c4: '#' + (typeof pastelColors !== 'undefined' && pastelColors[4] ? pastelColors[4].toString(16).padStart(6, '0') : 'ffffff'),
-            opBase: 1.0,
-            opHigh: 1.0,
-            opWispy: 1.0,
-            opMega: 1.0,
-            opHorizon: 1.0,
-            enableClouds: true,
-            density: 1.0,
-            cloudScale: 1.0
-        };
-
-        let oldCloudColors = typeof pastelColors !== 'undefined' ? [...pastelColors] : [];
-        function updateCloudColorForIndex(idx, newHex) {
-            if (typeof pastelColors === 'undefined') return;
-            const oldHex = oldCloudColors[idx];
-            const newHexVal = parseInt(newHex.replace('#',''), 16);
-            if (oldHex === newHexVal) return;
-            pastelColors[idx] = newHexVal;
-            const oldColor = new THREE.Color(oldHex);
-            const newColor = new THREE.Color(newHexVal);
-            const temp = new THREE.Color();
-            
-            if (typeof instClouds !== 'undefined' && typeof instHighClouds !== 'undefined') {
-                [instClouds, instHighClouds].forEach(mesh => {
-                    if (!mesh) return;
-                    for (let i = 0; i < mesh.count; i++) {
-                        mesh.getColorAt(i, temp);
-                        if (Math.abs(temp.r - oldColor.r) < 0.01 && Math.abs(temp.g - oldColor.g) < 0.01 && Math.abs(temp.b - oldColor.b) < 0.01) {
-                            mesh.setColorAt(i, newColor);
-                        }
-                    }
-                    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-                });
-            }
-            oldCloudColors[idx] = newHexVal;
-        }
-
-        // 7. 3D Clouds & Pastel Editor Subfolder
-        const cloudFolder = envFolder.addFolder('3D Clouds & Pastel Editor');
-        cloudFolder.add(params, 'showClouds').name('Show All Clouds').onChange(v => {
-            params.showCloudsRegular = v;
-            params.showCloudsHigh = v;
-            params.showCloudsWispy = v;
-            params.showCloudsMega = v;
-            params.showCloudsHorizon = v;
-            params.showVolumetricClouds = v;
-            if (typeof instClouds !== 'undefined') instClouds.visible = v;
-            if (typeof instHighClouds !== 'undefined') instHighClouds.visible = v;
-            if (typeof instWispyClouds !== 'undefined') instWispyClouds.visible = v;
-            if (typeof instMegaClouds !== 'undefined') instMegaClouds.visible = v;
-            if (typeof instHorizonClouds1 !== 'undefined') {
-                instHorizonClouds1.visible = v;
-                instHorizonClouds2.visible = v;
-                instHorizonClouds3.visible = v;
-            }
-            if (typeof toonCloudMat !== 'undefined' && toonCloudMat.uniforms && toonCloudMat.uniforms.uEnableClouds) {
-                toonCloudMat.uniforms.uEnableClouds.value = v ? 1.0 : 0.0;
-            }
-            cloudFolder.controllersRecursive().forEach(c => {
-                if (c.property && c.property.startsWith('showClouds') || c.property === 'showVolumetricClouds') c.updateDisplay();
-            });
-        });
-        cloudFolder.add(cloudParams, 'density', 0.1, 2.5, 0.05).name('Overall Density').onChange(v => {
-            if (typeof instClouds !== 'undefined') {
-                instClouds.count = Math.max(1, Math.min(MAX_CLOUD_COUNT, Math.floor(params.cloudCountRegular * v)));
-                if (instClouds.instanceMatrix) instClouds.instanceMatrix.needsUpdate = true;
-            }
-            if (typeof instHighClouds !== 'undefined') {
-                instHighClouds.count = Math.max(1, Math.min(MAX_HIGH_CLOUD_COUNT, Math.floor(params.cloudCountHigh * v)));
-                if (instHighClouds.instanceMatrix) instHighClouds.instanceMatrix.needsUpdate = true;
-            }
-            if (typeof instWispyClouds !== 'undefined') {
-                instWispyClouds.count = Math.max(1, Math.min(MAX_WISPY_CLOUD_COUNT, Math.floor(params.cloudCountWispy * v)));
-                if (instWispyClouds.instanceMatrix) instWispyClouds.instanceMatrix.needsUpdate = true;
-            }
-            if (typeof instMegaClouds !== 'undefined') {
-                instMegaClouds.count = Math.max(1, Math.min(MAX_MEGA_CLOUD_COUNT, Math.floor(params.cloudCountMega * v)));
-                if (instMegaClouds.instanceMatrix) instMegaClouds.instanceMatrix.needsUpdate = true;
-            }
-            if (typeof instHorizonClouds1 !== 'undefined') {
-                const count = Math.max(1, Math.min(MAX_HORIZON_CLOUD_COUNT, Math.floor(params.cloudCountHorizon * v)));
-                instHorizonClouds1.count = count;
-                instHorizonClouds2.count = count;
-                instHorizonClouds3.count = count;
-                if (instHorizonClouds1.instanceMatrix) instHorizonClouds1.instanceMatrix.needsUpdate = true;
-                if (instHorizonClouds2.instanceMatrix) instHorizonClouds2.instanceMatrix.needsUpdate = true;
-                if (instHorizonClouds3.instanceMatrix) instHorizonClouds3.instanceMatrix.needsUpdate = true;
-            }
-        });
-        cloudFolder.add(cloudParams, 'cloudScale', 0.5, 3.0, 0.1).name('Overall Size').onChange(v => {
-            [instClouds, instHighClouds, instWispyClouds, instMegaClouds].forEach(mesh => {
-                if (mesh) mesh.scale.set(v, v, v);
-            });
-        });
-
-        const toggleFolder = cloudFolder.addFolder('Visibility Toggles');
-        toggleFolder.add(params, 'showVolumetricClouds').name('Volumetric Sky Clouds').onChange(v => {
+        // 7. Volumetric Clouds Subfolder
+        const cloudFolder = envFolder.addFolder('Volumetric Clouds');
+        cloudFolder.add(params, 'showVolumetricClouds').name('Volumetric Sky Clouds').onChange(v => {
             if (typeof toonCloudMat !== 'undefined' && toonCloudMat.uniforms && toonCloudMat.uniforms.uEnableClouds) {
                 toonCloudMat.uniforms.uEnableClouds.value = v ? 1.0 : 0.0;
             }
         });
-        toggleFolder.add(params, 'showCloudsRegular').name('Regular (Cumulus)').onChange(v => { if (typeof instClouds !== 'undefined') instClouds.visible = v; });
-        toggleFolder.add(params, 'showCloudsHigh').name('Cumulonimbus').onChange(v => { if (typeof instHighClouds !== 'undefined') instHighClouds.visible = v; });
-        toggleFolder.add(params, 'showCloudsWispy').name('Wispy Clouds').onChange(v => { if (typeof instWispyClouds !== 'undefined') instWispyClouds.visible = v; });
-        toggleFolder.add(params, 'showCloudsMega').name('Mega Clouds').onChange(v => { if (typeof instMegaClouds !== 'undefined') instMegaClouds.visible = v; });
-        toggleFolder.add(params, 'showCloudsHorizon').name('Horizon Clouds (Massive)').onChange(v => { 
-            if (typeof instHorizonClouds1 !== 'undefined') {
-                instHorizonClouds1.visible = v;
-                instHorizonClouds2.visible = v;
-                instHorizonClouds3.visible = v;
-            }
-        });
-
-        const paletteFolder = cloudFolder.addFolder('Pastel Colors');
-        paletteFolder.addColor(cloudParams, 'c0').name('Color 1').onChange(v => updateCloudColorForIndex(0, v));
-        paletteFolder.addColor(cloudParams, 'c1').name('Color 2').onChange(v => updateCloudColorForIndex(1, v));
-        paletteFolder.addColor(cloudParams, 'c2').name('Color 3').onChange(v => updateCloudColorForIndex(2, v));
-        paletteFolder.addColor(cloudParams, 'c3').name('Color 4').onChange(v => updateCloudColorForIndex(3, v));
-        paletteFolder.addColor(cloudParams, 'c4').name('Color 5').onChange(v => updateCloudColorForIndex(4, v));
-        paletteFolder.close();
-
-        const regFolder = cloudFolder.addFolder('Regular (Cumulus)');
-        regFolder.add(params, 'showCloudsRegular').name('Show').onChange(v => { if (typeof instClouds !== 'undefined') instClouds.visible = v; });
-        regFolder.add(params, 'cloudCountRegular', 0, 300, 1).name('Count').onChange(v => {
-            CLOUD_COUNT = v;
-            if (instClouds) {
-                instClouds.count = Math.floor(v * cloudParams.density);
-                if (instClouds.instanceMatrix) instClouds.instanceMatrix.needsUpdate = true;
-            }
-        });
-        let prevRegScale = 1.0;
-        regFolder.add(params, 'cloudScaleRegular', 0.1, 5.0, 0.05).name('Scale').onChange(v => {
-            updateCloudScale(instClouds, v, prevRegScale);
-            prevRegScale = v;
-        });
-        regFolder.add(cloudParams, 'opBase', 0, 1, 0.01).name('Opacity').onChange(v => matCloud.opacity = v);
-        regFolder.close();
-
-        const highFolder = cloudFolder.addFolder('Cumulonimbus');
-        highFolder.add(params, 'showCloudsHigh').name('Show').onChange(v => { if (typeof instHighClouds !== 'undefined') instHighClouds.visible = v; });
-        highFolder.add(params, 'cloudCountHigh', 0, 100, 1).name('Count').onChange(v => {
-            HIGH_CLOUD_COUNT = v;
-            if (instHighClouds) {
-                instHighClouds.count = Math.floor(v * cloudParams.density);
-                if (instHighClouds.instanceMatrix) instHighClouds.instanceMatrix.needsUpdate = true;
-            }
-        });
-        let prevHighScale = 1.0;
-        highFolder.add(params, 'cloudScaleHigh', 0.1, 5.0, 0.05).name('Scale').onChange(v => {
-            updateCloudScale(instHighClouds, v, prevHighScale);
-            prevHighScale = v;
-        });
-        highFolder.add(cloudParams, 'opHigh', 0, 1, 0.01).name('Opacity').onChange(v => highCloudMat.opacity = v);
-        highFolder.close();
-
-        const wispyFolder = cloudFolder.addFolder('Wispy Clouds');
-        wispyFolder.add(params, 'showCloudsWispy').name('Show').onChange(v => { if (typeof instWispyClouds !== 'undefined') instWispyClouds.visible = v; });
-        wispyFolder.add(params, 'cloudCountWispy', 0, 100, 1).name('Count').onChange(v => {
-            WISPY_CLOUD_COUNT = v;
-            if (instWispyClouds) {
-                instWispyClouds.count = Math.floor(v * cloudParams.density);
-                if (instWispyClouds.instanceMatrix) instWispyClouds.instanceMatrix.needsUpdate = true;
-            }
-        });
-        let prevWispyScale = 1.0;
-        wispyFolder.add(params, 'cloudScaleWispy', 0.1, 5.0, 0.05).name('Scale').onChange(v => {
-            updateCloudScale(instWispyClouds, v, prevWispyScale);
-            prevWispyScale = v;
-        });
-        wispyFolder.add(cloudParams, 'opWispy', 0, 1, 0.01).name('Opacity').onChange(v => matWispyCloud.opacity = v);
-        wispyFolder.close();
-
-        const megaFolder = cloudFolder.addFolder('Mega Clouds');
-        megaFolder.add(params, 'showCloudsMega').name('Show').onChange(v => { if (typeof instMegaClouds !== 'undefined') instMegaClouds.visible = v; });
-        megaFolder.add(params, 'cloudCountMega', 0, 100, 1).name('Count').onChange(v => {
-            MEGA_CLOUD_COUNT = v;
-            if (instMegaClouds) {
-                instMegaClouds.count = Math.floor(v * cloudParams.density);
-                if (instMegaClouds.instanceMatrix) instMegaClouds.instanceMatrix.needsUpdate = true;
-            }
-        });
-        let prevMegaScale = 1.0;
-        megaFolder.add(params, 'cloudScaleMega', 0.1, 5.0, 0.05).name('Scale').onChange(v => {
-            updateCloudScale(instMegaClouds, v, prevMegaScale);
-            prevMegaScale = v;
-        });
-        megaFolder.add(cloudParams, 'opMega', 0, 1, 0.01).name('Opacity').onChange(v => megaCloudMat.opacity = v);
-        megaFolder.close();
-
-        const horizonFolder = cloudFolder.addFolder('Horizon Clouds');
-        horizonFolder.add(params, 'showCloudsHorizon').name('Show').onChange(v => { 
-            if (typeof instHorizonClouds1 !== 'undefined') {
-                instHorizonClouds1.visible = v;
-                instHorizonClouds2.visible = v;
-                instHorizonClouds3.visible = v;
-            }
-        });
-        horizonFolder.add(params, 'cloudCountHorizon', 0, 100, 1).name('Count').onChange(v => {
-            if (typeof instHorizonClouds1 !== 'undefined') {
-                instHorizonClouds1.count = Math.floor(v * cloudParams.density);
-                instHorizonClouds2.count = Math.floor(v * cloudParams.density);
-                instHorizonClouds3.count = Math.floor(v * cloudParams.density);
-                if (instHorizonClouds1.instanceMatrix) instHorizonClouds1.instanceMatrix.needsUpdate = true;
-                if (instHorizonClouds2.instanceMatrix) instHorizonClouds2.instanceMatrix.needsUpdate = true;
-                if (instHorizonClouds3.instanceMatrix) instHorizonClouds3.instanceMatrix.needsUpdate = true;
-            }
-        });
-        horizonFolder.close();
 
         // 8. Character Glow & Trees Subfolder
         const charFloraFolder = envFolder.addFolder('Character Glow & Trees');
@@ -1792,25 +2224,36 @@ export function initDebugGUI(ctx) {
             color: '#ffaa44'
         };
         glowFolder.add(kikiGlowParams, 'intensity', 0, 8, 0.1).name('Glow Power').onChange(v => {
-            kikiLeftLight.intensity = v;
-            kikiRightLight.intensity = v;
+            const l1 = typeof kikiLeftLight !== 'undefined' ? kikiLeftLight : window.kikiLeftLight;
+            const l2 = typeof kikiRightLight !== 'undefined' ? kikiRightLight : window.kikiRightLight;
+            if (l1) l1.intensity = v;
+            if (l2) l2.intensity = v;
         });
         glowFolder.add(kikiGlowParams, 'distance', 50, 800, 10).name('Glow Range').onChange(v => {
-            kikiLeftLight.distance = v;
-            kikiRightLight.distance = v;
+            const l1 = typeof kikiLeftLight !== 'undefined' ? kikiLeftLight : window.kikiLeftLight;
+            const l2 = typeof kikiRightLight !== 'undefined' ? kikiRightLight : window.kikiRightLight;
+            if (l1) l1.distance = v;
+            if (l2) l2.distance = v;
         });
         glowFolder.add(kikiGlowParams, 'spread', 5, 100, 1).name('Side Spread').onChange(v => {
-            kikiLeftLight.position.x = -v;
-            kikiRightLight.position.x = v;
+            const l1 = typeof kikiLeftLight !== 'undefined' ? kikiLeftLight : window.kikiLeftLight;
+            const l2 = typeof kikiRightLight !== 'undefined' ? kikiRightLight : window.kikiRightLight;
+            if (l1) l1.position.x = -v;
+            if (l2) l2.position.x = v;
         });
         glowFolder.addColor(kikiGlowParams, 'color').name('Glow Color').onChange(v => {
             const col = new THREE.Color(v);
-            kikiLeftLight.color.copy(col);
-            kikiRightLight.color.copy(col);
+            const l1 = typeof kikiLeftLight !== 'undefined' ? kikiLeftLight : window.kikiLeftLight;
+            const l2 = typeof kikiRightLight !== 'undefined' ? kikiRightLight : window.kikiRightLight;
+            if (l1) l1.color.copy(col);
+            if (l2) l2.color.copy(col);
         });
 
         const treeFolder = charFloraFolder.addFolder('Global Tree Settings');
-        treeFolder.add(params, 'treeScale', 0.5, 4.0).name('Tree Scale').onChange(v => treeUniforms.uTreeScale.value = v);
+        treeFolder.add(params, 'treeScale', 0.5, 4.0).name('Tree Scale').onChange(v => {
+            const tu = typeof treeUniforms !== 'undefined' ? treeUniforms : window.treeUniforms;
+            if (tu && tu.uTreeScale) tu.uTreeScale.value = v;
+        });
 
         // 9. Ocean & Water Subfolder
         const oceanFolder = envFolder.addFolder('Ocean & Water');
@@ -1831,28 +2274,13 @@ export function initDebugGUI(ctx) {
                 if (typeof window.fogGroup !== 'undefined') window.fogGroup.visible = false;
                 params.timeOfDay = 'day';
                 if (typeof window.setTimePhase === 'function') window.setTimePhase(0);
-                else timePhase = 0;
+                else if (typeof setTimePhase === 'function') setTimePhase(0);
                 if (typeof cloudParams !== 'undefined') {
                     cloudParams.density = 0.1;
                     params.showVolumetricClouds = false;
-                    if (typeof toonCloudMat !== 'undefined' && toonCloudMat.uniforms && toonCloudMat.uniforms.uEnableClouds) {
-                        toonCloudMat.uniforms.uEnableClouds.value = 0.0;
-                    }
-                    if (typeof instClouds !== 'undefined') {
-                        instClouds.count = Math.max(1, Math.floor(params.cloudCountRegular * cloudParams.density));
-                        if (instClouds.instanceMatrix) instClouds.instanceMatrix.needsUpdate = true;
-                    }
-                    if (typeof instHighClouds !== 'undefined') {
-                        instHighClouds.count = Math.max(1, Math.floor(params.cloudCountHigh * cloudParams.density));
-                        if (instHighClouds.instanceMatrix) instHighClouds.instanceMatrix.needsUpdate = true;
-                    }
-                    if (typeof instWispyClouds !== 'undefined') {
-                        instWispyClouds.count = Math.max(1, Math.floor(params.cloudCountWispy * cloudParams.density));
-                        if (instWispyClouds.instanceMatrix) instWispyClouds.instanceMatrix.needsUpdate = true;
-                    }
-                    if (typeof instMegaClouds !== 'undefined') {
-                        instMegaClouds.count = Math.max(1, Math.floor(params.cloudCountMega * cloudParams.density));
-                        if (instMegaClouds.instanceMatrix) instMegaClouds.instanceMatrix.needsUpdate = true;
+                    const tcm = typeof toonCloudMat !== 'undefined' ? toonCloudMat : window.toonCloudMat;
+                    if (tcm && tcm.uniforms && tcm.uniforms.uEnableClouds) {
+                        tcm.uniforms.uEnableClouds.value = 0.0;
                     }
                 }
                 gui.controllersRecursive().forEach(c => c.updateDisplay());
@@ -1866,7 +2294,7 @@ export function initDebugGUI(ctx) {
                 const { TimeOfDayExporter } = await import('../tools/TimeOfDayExporter.js');
                 _todExporterInstance = new TimeOfDayExporter(() => ({
                     envConfigs,
-                    timePhase,
+                    timePhase: (typeof window.getTimePhase === 'function') ? window.getTimePhase() : ((typeof window.timePhase !== 'undefined') ? window.timePhase : (typeof timePhase !== 'undefined' ? timePhase : 0)),
                     params,
                     skyUniforms,
                     godRaysPass,
@@ -2055,7 +2483,7 @@ export function initDebugGUI(ctx) {
 
         // Reorder folders: most-used first
         const folderOrder = [
-            flightFolder, editorFolder, audioFolder, debugFolder, navFolder, perfFolder, envFolder, presetsFolder, biomeSavesFolder
+            lowPowerFolder, flightFolder, editorFolder, audioFolder, debugFolder, navFolder, perfFolder, envFolder, presetsFolder, biomeSavesFolder
         ].filter(Boolean);
         const guiContainer = gui.$children || gui.domElement.querySelector('.children') || gui.domElement;
         folderOrder.forEach(f => {
@@ -2063,7 +2491,7 @@ export function initDebugGUI(ctx) {
             if (dom && dom.parentElement) guiContainer.appendChild(dom);
         });
 
-        // Close all folders by default
+        // Close all folders by default always
         if (gui.folders) {
             gui.folders.forEach(f => {
                 f.close();
@@ -2073,20 +2501,74 @@ export function initDebugGUI(ctx) {
                 gui.__folders[i].close();
             }
         }
+        if (isStudio) {
+            toggleGUI(true);
+            if (gui) gui.close();
+            setTimeout(() => {
+                setGodMode(true);
+                if (typeof playerGrp !== 'undefined' && playerGrp) playerGrp.visible = false;
+            }, 100);
+        }
 
         if (typeof loadAllSettings === 'function') {
             loadAllSettings();
+        } else if (typeof window.loadAllSettings === 'function') {
+            window.loadAllSettings();
+        } else if (ctx && typeof ctx.loadAllSettings === 'function') {
+            ctx.loadAllSettings();
         }
         isInitializingGui = false;
 
-        // Auto-save all gui settings whenever anything changes (debounced 800ms)
         let _autoSaveTimer = null;
-        gui.onChange(() => {
-            if (isInitializingGui) return;
+        let _isReceivingLiveSync = false;
+
+        gui.onChange((event) => {
+            if (isInitializingGui || _isReceivingLiveSync) return;
+            
+            // Broadcast live parameter change to all open game windows immediately (0ms)
+            if (event && event.property !== undefined) {
+                liveSync.sendParamChange(event.controller && event.controller.parent ? event.controller.parent.title : 'global', event.property, event.value);
+            }
+
             clearTimeout(_autoSaveTimer);
             _autoSaveTimer = setTimeout(() => {
-                localStorage.setItem('flightSettings', JSON.stringify(gui.save()));
-            }, 800);
+                const fullState = gui.save();
+                localStorage.setItem('flightSettings', JSON.stringify(fullState));
+                liveSync.sendStateSync(fullState);
+            }, 300);
+        });
+
+        // Listen for live sync broadcasts from editor window in real-time
+        liveSync.onMessage((msg) => {
+            if (isInitializingGui) return;
+            if (msg.type === 'PARAM_CHANGE') {
+                const { key, property, value } = msg.payload || {};
+                const targetProp = key || property;
+                if (targetProp !== undefined) {
+                    _isReceivingLiveSync = true;
+                    try {
+                        gui.controllersRecursive().forEach(c => {
+                            if (c.property === targetProp && c.getValue() !== value) {
+                                c.setValue(value);
+                            }
+                        });
+                    } finally {
+                        _isReceivingLiveSync = false;
+                    }
+                }
+            } else if (msg.type === 'FULL_STATE_SYNC' && msg.payload && msg.payload.state) {
+                _isReceivingLiveSync = true;
+                try {
+                    gui.load(msg.payload.state);
+                } catch (e) {
+                } finally {
+                    _isReceivingLiveSync = false;
+                }
+            } else if (msg.type === 'FULL_PRESET_APPLIED' && msg.payload && msg.payload.preset) {
+                if (typeof applyPresetData === 'function') {
+                    applyPresetData(msg.payload.preset, ctx);
+                }
+            }
         });
     }
 

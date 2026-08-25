@@ -92,9 +92,10 @@ export const pixelBudget = PIXEL_BUDGET[deviceTier];
  * Never upscales past the device's own ratio; floors at 0.5 so text stays legible.
  */
 export function budgetedPixelRatio(width, height, dpr = window.devicePixelRatio || 1, budget = pixelBudget) {
+    const cappedDpr = Math.min(1.0, dpr);
     const cssPixels = Math.max(1, width * height);
     const maxRatio = Math.sqrt(budget / cssPixels);
-    return Math.max(0.5, Math.min(dpr, maxRatio));
+    return Math.max(0.5, Math.min(cappedDpr, maxRatio));
 }
 
 /**
@@ -113,7 +114,7 @@ export class AdaptiveResolution {
         this.windowSize = windowSize;
         this.samples = [];
         this.scale = 1.0;
-        this.enabled = true;
+        this.enabled = false;
         this.minScale = 0.6;
         this.maxScale = 1.0;
         this.step = 0.1;

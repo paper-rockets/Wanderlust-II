@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 const colorDeepWater = new THREE.Color(0x1a4a8c);
+const colorWetSand = new THREE.Color(0xd9c49a);
 const colorSand = new THREE.Color(0xf2e1b8);
 const colorIslandGrass = new THREE.Color(0x76d149);
 const colorEmeraldGrass = new THREE.Color(0x56b847);
@@ -16,33 +17,29 @@ export default {
         let y = snoise(x * 0.0015, z * 0.0015) * 90.0 + snoise(x * 0.005, z * 0.005) * 35.0 + snoise(x * 0.009, z * 0.009) * 6.0;
         if (y < 12.0) y = (y - 12.0) * 0.25 + 12.0;
         
-        // Smooth continuous river channels
+        // Smooth continuous river channels (broadened to eliminate 1-vertex notch artifacts)
         const rn = snoise(x * 0.0015 + 100.0, z * 0.0015 + 100.0);
         const rw = snoise(x * 0.004, z * 0.004) * 0.015;
         const rd = Math.abs(rn + rw);
-        if (rd < 0.05) { 
-            let c = 1.0 - rd / 0.05; 
+        if (rd < 0.11) { 
+            let c = 1.0 - rd / 0.11; 
             c = c * c * (3.0 - 2.0 * c); 
-            y -= c * 14.0; 
+            y -= c * 13.0; 
         }
         
-        // Smooth broad lakes
+        // Smooth broad lakes with clean concave basins
         const ln = snoise(x * 0.0015 - 500.0, z * 0.0015 + 500.0);
-        if (ln > 0.72) {
-            const d = Math.min((ln - 0.72) * 3.2, 1.0); 
+        if (ln > 0.65) {
+            const d = Math.min((ln - 0.65) * 2.5, 1.0); 
             let c = d * d * (3.0 - 2.0 * d); 
-            y -= c * 15.0; 
+            y -= c * 16.0; 
         }
 
-        // Continuous shoreline smoothing: creates clean, smooth sandy beaches without isolated polygon punctures
-        if (y < 6.0) {
-            if (y > 0.0) {
-                const t = y / 6.0;
-                const st = t * t * (3.0 - 2.0 * t);
-                y = -3.0 + 9.0 * st;
-            } else {
-                y = -3.0 + y * 0.15;
-            }
+        // Natural continuous shoreline slope (eliminates flat 6m terrace shelf)
+        if (y < 3.5) {
+            const t = Math.max(0.0, Math.min(1.0, (y + 4.0) / 7.5));
+            const st = t * t * (3.0 - 2.0 * t);
+            y = -4.0 + st * 7.5;
         }
 
         return y;
@@ -51,14 +48,17 @@ export default {
         const meadowNoise = snoise(x * 0.0035, z * 0.0035);
         const oliveNoise = snoise(x * 0.008 + 200, z * 0.008 + 200);
 
-        if (h < 0.5) {
+        // Underwater shallow sand to dry land grass progression
+        if (h < -1.5) {
             tempColor.copy(colorDeepWater);
-        } else if (h < 2.2) {
-            tempColor.lerpColors(colorDeepWater, colorSand, smoothstep(0.5, 2.2, h));
-        } else if (h < 4.0) {
+        } else if (h < 0.5) {
+            tempColor.lerpColors(colorDeepWater, colorWetSand, smoothstep(-1.5, 0.5, h));
+        } else if (h < 2.4) {
+            tempColor.lerpColors(colorWetSand, colorSand, smoothstep(0.5, 2.4, h));
+        } else if (h < 4.5) {
             tempColor.copy(colorSand);
         } else if (h < 9.0) {
-            tempColor.lerpColors(colorSand, colorIslandGrass, smoothstep(4.0, 9.0, h));
+            tempColor.lerpColors(colorSand, colorIslandGrass, smoothstep(4.5, 9.0, h));
         } else if (h < 25) {
             const patchColor = colorIslandGrass.clone();
             if (meadowNoise > 0.15) patchColor.lerp(colorEmeraldGrass, Math.min(1, (meadowNoise - 0.15) * 2.5));

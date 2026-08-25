@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 const colorDeepWater = new THREE.Color(0x1a4a8c);
+const colorWetSand = new THREE.Color(0xd9c49a);
 const colorSand = new THREE.Color(0xf2e1b8);
 const colorIslandGrass = new THREE.Color(0x76d149);
 const colorEmeraldGrass = new THREE.Color(0x56b847);
@@ -144,7 +145,7 @@ export default {
         if (maxIslandH < 4.5) {
             const t = maxIslandH / 4.5;
             const smoothT = t * t * (3.0 - 2.0 * t);
-            y = -1.8 + smoothT * 6.3; // -1.8m up to 4.5m
+            y = -2.5 + smoothT * 7.0; // -2.5m up to 4.5m
         } else {
             y = maxIslandH;
         }
@@ -156,14 +157,16 @@ export default {
         const meadowNoise = snoise(x * 0.0035, z * 0.0035);
         const oliveNoise = snoise(x * 0.008 + 200, z * 0.008 + 200);
 
-        if (h < 0.5) {
+        if (h < -1.5) {
             tempColor.copy(colorDeepWater);
-        } else if (h < 2.2) {
-            tempColor.lerpColors(colorDeepWater, colorSand, smoothstep(0.5, 2.2, h));
-        } else if (h < 4.0) {
+        } else if (h < 0.5) {
+            tempColor.lerpColors(colorDeepWater, colorWetSand, smoothstep(-1.5, 0.5, h));
+        } else if (h < 2.4) {
+            tempColor.lerpColors(colorWetSand, colorSand, smoothstep(0.5, 2.4, h));
+        } else if (h < 4.5) {
             tempColor.copy(colorSand);
         } else if (h < 10.0) {
-            tempColor.lerpColors(colorSand, colorIslandGrass, smoothstep(4.0, 10.0, h));
+            tempColor.lerpColors(colorSand, colorIslandGrass, smoothstep(4.5, 10.0, h));
         } else if (h < 25) {
             _tempPatchColor.copy(colorIslandGrass);
             if (meadowNoise > 0.15) _tempPatchColor.lerp(colorEmeraldGrass, Math.min(1, (meadowNoise - 0.15) * 2.5));

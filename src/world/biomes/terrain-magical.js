@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 const colorDeepWater = new THREE.Color(0x0a1c3a); // Dark navy water
+const colorWetSand = new THREE.Color(0x80deea);   // Glowing shallow teal sand
 const colorSand = new THREE.Color(0xb2ebf2);       // Glowing pale cyan shore sand
 const colorMagicalViolet = new THREE.Color(0xab47bc); // Purple/violet mystical grass
 const colorMagicalPink = new THREE.Color(0xf8bbd0);   // Soft glowing pink highlight grass
@@ -16,19 +17,21 @@ export default {
         const n2 = snoise(x * 0.008, z * 0.008);
         const pillars = Math.max(0, Math.sin(x * 0.004) * Math.cos(z * 0.004));
         const h = n1 * 45.0 + n2 * 10.0 + (pillars * pillars) * 80.0 + 10.0;
-        return Math.max(6.0, h);
+        return Math.max(1.0, h);
     },
     getColor(h, x, z, snoise, tempColor, smoothstep) {
-        if (h < 1.0) {
+        if (h < -1.5) {
             tempColor.copy(colorDeepWater);
-        } else if (h < 2.35) {
-            tempColor.lerpColors(colorDeepWater, colorSand, smoothstep(1.0, 2.35, h));
-        } else if (h < 4.2) {
+        } else if (h < 0.5) {
+            tempColor.lerpColors(colorDeepWater, colorWetSand, smoothstep(-1.5, 0.5, h));
+        } else if (h < 2.4) {
+            tempColor.lerpColors(colorWetSand, colorSand, smoothstep(0.5, 2.4, h));
+        } else if (h < 4.5) {
             tempColor.copy(colorSand);
-        } else if (h < 6.2) {
-            tempColor.lerpColors(colorSand, colorMagicalViolet, smoothstep(4.2, 6.2, h));
+        } else if (h < 7.0) {
+            tempColor.lerpColors(colorSand, colorMagicalViolet, smoothstep(4.5, 7.0, h));
         } else if (h < 25) {
-            tempColor.lerpColors(colorMagicalViolet, colorMagicalPink, smoothstep(6.2, 25, h));
+            tempColor.lerpColors(colorMagicalViolet, colorMagicalPink, smoothstep(7.0, 25, h));
         } else if (h < 38) {
             tempColor.lerpColors(colorMagicalPink, colorMagicalRock, smoothstep(25, 38, h));
         } else {

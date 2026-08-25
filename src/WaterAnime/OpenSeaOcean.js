@@ -138,7 +138,11 @@ export const DEPTH_FIELD_SENTINEL = -1000.0;
 // texture bound. Must match the real field's format/type/filters/wrapping so
 // the generated WGSL is identical when the real texture is swapped in.
 const _depthFieldPlaceholder = new THREE.DataTexture(
-  new Float32Array([DEPTH_FIELD_SENTINEL]), 1, 1, THREE.RedFormat, THREE.FloatType
+  new Uint16Array([
+    THREE.DataUtils.toHalfFloat(DEPTH_FIELD_SENTINEL),
+    THREE.DataUtils.toHalfFloat(1.0)
+  ]),
+  1, 1, THREE.RGFormat, THREE.HalfFloatType
 );
 _depthFieldPlaceholder.minFilter = THREE.LinearFilter;
 _depthFieldPlaceholder.magFilter = THREE.LinearFilter;
@@ -609,17 +613,24 @@ const skyColor = Fn(([rawDir]) => {
  * Returns a large positive number ("very deep") whenever the field is unavailable, so every
  * shore effect degrades to open ocean rather than popping.
  */
-const sampleWaterDepth = Fn(([worldXz]) => {
+const sampleTerrainField = Fn(([worldXz]) => {
   const uv = worldXz.sub(depthFieldOriginUniform).div(depthFieldSizeUniform).toVar();
-  // The texture clamps to edge, so outside the footprint we must mask explicitly or the
-  // border texel would smear a fake shoreline across the whole horizon.
-  const inside = step(0.0, uv.x).mul(step(uv.x, 1.0))
-    .mul(step(0.0, uv.y)).mul(step(uv.y, 1.0));
-  const terrainH = terrainDepthTexNode.sample(uv).r;
+  const clampedUv = clamp(uv, vec2(0.001, 0.001), vec2(0.999, 0.999)).toVar();
+  const borderDistX = min(uv.x, float(1.0).sub(uv.x));
+  const borderDistY = min(uv.y, float(1.0).sub(uv.y));
+  const borderDist = min(borderDistX, borderDistY);
+  const borderMask = smoothstep(float(0.0), float(0.04), borderDist);
+
+  const fieldSample = terrainDepthTexNode.sample(clampedUv);
+  const terrainH = fieldSample.r;
+  const openWaterRaw = fieldSample.g;
   const rawDepth = waterLevelUniform.sub(terrainH);
-  // Unbaked texels hold DEPTH_FIELD_SENTINEL (-1000), which yields a huge depth already.
-  return mix(float(9999.0), rawDepth, inside.mul(depthFieldValidUniform));
+  const effectiveDepth = mix(float(60.0), rawDepth, borderMask.mul(depthFieldValidUniform));
+  const effectiveOpenWater = mix(float(1.0), openWaterRaw, borderMask.mul(depthFieldValidUniform));
+  return vec2(max(effectiveDepth, float(0.0)), effectiveOpenWater);
 });
+
+const sampleWaterDepth = Fn(([worldXz]) => sampleTerrainField(worldXz).x);
 
 /* ============================================================
    Create Open Sea NodeMaterial
@@ -628,26 +639,27 @@ export const createOpenSeaMaterial = () => {
   const oceanMaterial = new THREE.MeshBasicNodeMaterial();
   oceanMaterial.transparent = true;
   oceanMaterial.side = THREE.DoubleSide;
-  oceanMaterial.depthWrite = true;
+  oceanMaterial.depthWrite = false;
   oceanMaterial.depthTest = true;
-  oceanMaterial.polygonOffset = true;
-  oceanMaterial.polygonOffsetFactor = 1.0;
-  oceanMaterial.polygonOffsetUnits = 1.0;
 
   const scaledTime = timeUniform.mul(speedUniform);
 
   // Waves must die as the water shallows out, or the surface swings several metres up and down
   // through the beach face every cycle (the swinging waterline in WATER_DIAGNOSIS.md 3.7).
-  // Sampled at the undisplaced grid position; explicit level 0 because the vertex stage has no
-  // derivatives and the field has no mips.
+  // In landlocked inland lakes, openWater is 0 so Gerstner waves are completely eliminated.
   const vtxWorldXz = positionWorld.xz;
   const vtxUv = vtxWorldXz.sub(depthFieldOriginUniform).div(depthFieldSizeUniform);
-  const vtxInside = step(0.0, vtxUv.x).mul(step(vtxUv.x, 1.0))
-    .mul(step(0.0, vtxUv.y)).mul(step(vtxUv.y, 1.0));
-  const vtxTerrainH = terrainDepthTexNodeVS.sample(vtxUv).level(0).r;
-  const vtxDepth = mix(float(9999.0), waterLevelUniform.sub(vtxTerrainH),
-                       vtxInside.mul(depthFieldValidUniform));
-  const shallowFade = smoothstep(0.0, shoreDepthUniform.mul(0.9), vtxDepth);
+  const vtxClampedUv = clamp(vtxUv, vec2(0.001, 0.001), vec2(0.999, 0.999));
+  const vtxBorderDist = min(min(vtxUv.x, float(1.0).sub(vtxUv.x)), min(vtxUv.y, float(1.0).sub(vtxUv.y)));
+  const vtxBorderMask = smoothstep(float(0.0), float(0.04), vtxBorderDist);
+  const vtxSample = terrainDepthTexNodeVS.sample(vtxClampedUv).level(0);
+  const vtxTerrainH = vtxSample.r;
+  const vtxOpenWaterRaw = vtxSample.g;
+  const vtxDepth = mix(float(60.0), waterLevelUniform.sub(vtxTerrainH),
+                       vtxBorderMask.mul(depthFieldValidUniform));
+  const vtxOpenWater = mix(float(1.0), vtxOpenWaterRaw,
+                           vtxBorderMask.mul(depthFieldValidUniform));
+  const shallowFade = smoothstep(0.0, shoreDepthUniform.mul(0.9), vtxDepth).mul(vtxOpenWater);
 
   const gerstnerP = wavePosition(positionLocal.xz, scaledTime, seaUniform, shallowFade);
   oceanMaterial.positionNode = vec3(gerstnerP.x, gerstnerP.y, gerstnerP.z);
@@ -686,10 +698,12 @@ export const createOpenSeaMaterial = () => {
     const footprint = clamp(camDist.div(600.0), 0.0, 1.0).toVar();
     const sharpness = float(1.0).sub(footprint.mul(0.92));
 
-    const depth = sampleWaterDepth(xz).toVar();
-    const shallowFadeF = smoothstep(0.0, shoreDepthUniform.mul(0.9), depth).toVar();
+    const fieldData = sampleTerrainField(xz).toVar();
+    const depth = fieldData.x.toVar();
+    const openWater = fieldData.y.toVar();
+    const shallowFadeF = smoothstep(0.0, shoreDepthUniform.mul(0.9), depth).mul(openWater).toVar();
 
-    const n4 = waveNormal(xz, scaledTime, seaUniform, sharpness).toVar();
+    const n4 = waveNormal(xz, scaledTime, seaUniform.mul(openWater), sharpness).toVar();
     const n0 = n4.xyz.toVar();
     const swellLostVar = n4.w.toVar();
 
@@ -870,19 +884,27 @@ export const createOpenSeaMaterial = () => {
 
     const capFoam = capRaw.mul(streakMask);
 
-    // ---- The surf line -----------------------------------------------------
-    // Gated on DEPTH, so it follows the bathymetry contour rather than the polygon edge. The
-    // crest term phases the run-up with the incoming swell, so surf arrives in sets and reaches
-    // further up the beach behind a big wave.
-    const runUp = sin(depth.mul(2.4)
-        .sub(scaledTime.mul(shoreFoamSpeedUniform).mul(2.2))
-        .add(crest.mul(1.1)))
-      .mul(0.5).add(0.5);
-    const shoreBand = smoothstep(shoreFoamWidthUniform.mul(2.0), 0.0, depth);
-    const waterline = smoothstep(0.35, 0.0, abs(depth)).mul(0.65);
-    const shoreFoam = shoreBand.mul(runUp.mul(0.75).add(0.25))
-      .mul(mix(float(1.0), streakMask, 0.5))
-      .mul(foamNoise.mul(0.5).add(0.6))
+    // ---- The surf line (contour-hugging shore waves & beach swash) --------
+    // Waves wrap naturally around islands following the depth contours (Job Talle method)
+    // instead of a single global direction, broken into short organic wave arcs.
+    const depthNoise = foamNoise.mul(0.4).sub(0.2);
+    const distortedDepth = max(depth.add(depthNoise), float(0.0));
+
+    // Rolling shore wave crests moving along depth gradient toward the shore
+    const shoreWavePhase = distortedDepth.mul(3.2)
+      .sub(scaledTime.mul(shoreFoamSpeedUniform).mul(2.0))
+      .add(crest.mul(0.6));
+    const waveCrest = pow(max(sin(shoreWavePhase), float(0.0)), 3.5);
+
+    // Break up continuous lines into short, natural foam patches
+    const waveBreak = smoothstep(0.2, 0.7, foamNoise);
+    const shoreWave = waveCrest.mul(waveBreak);
+
+    // Shore surf zone & delicate beach waterline swash
+    const shoreBand = smoothstep(shoreFoamWidthUniform, 0.0, depth);
+    const waterline = smoothstep(0.4, 0.0, depth).mul(foamNoise.mul(0.5).add(0.5)).mul(0.7);
+
+    const shoreFoam = shoreBand.mul(shoreWave.mul(0.75).mul(openWater))
       .add(waterline)
       .mul(shoreFoamStrengthUniform);
 
@@ -901,14 +923,18 @@ export const createOpenSeaMaterial = () => {
       .sub(exp(camDist.div(max(aerialDistanceUniform, float(1.0))).negate()))
       .mul(aerialStrengthUniform);
     color.assign(mix(color, horizonColorUniform, clamp(aerial, 0.0, 1.0)));
-    // Hard dissolve at the rim of the 16 km plane so its edge never shows.
-    color.assign(mix(color, horizonColorUniform, smoothstep(9000.0, 15500.0, camDist)));
-
     /* ---------------- Alpha ------------------------------------------------ */
 
     const depthAlpha = mix(shoreOpacityUniform, waterOpacityUniform,
                            smoothstep(0.0, shoreDepthUniform, depth));
-    const alpha = max(depthAlpha, foamMask.mul(foamOpacityUniform));
+    const alpha = max(depthAlpha, foamMask.mul(foamOpacityUniform)).toVar();
+
+    // Dissolve the ocean seamlessly to the horizon color and 0 opacity before the mesh boundary (at 8,000m XZ)
+    const camDistXZ = length(positionWorld.xz.sub(cameraPosition.xz));
+    const horizonFade = smoothstep(float(5500.0), float(7800.0), camDistXZ);
+
+    color.assign(mix(color, horizonColorUniform, horizonFade));
+    alpha.assign(alpha.mul(float(1.0).sub(horizonFade)));
 
     return vec4(color, clamp(alpha, 0.0, 1.0));
   })();

@@ -21,7 +21,7 @@ import { CameraManager } from '../physics/CameraManager.js';
 import { FlightControlsBridge } from '../physics/FlightControlsBridge.js';
 import { FlightModelManager } from '../entities/FlightModelManager.js';
 import { AnimatedFlockSystem } from '../entities/AnimatedFlockSystem.js';
-import { initMoon } from '../environment/CelestialObjects.js';
+import { initMoon, updateMoon, moonParams } from '../environment/CelestialObjects.js';
 import {
     getWorldHeight, getWorldColor, getIslandData, getPathStrength,
     getBiomeAt, getWorldWaterHeight, worldOriginOffset, setWorldOriginOffset
@@ -78,7 +78,7 @@ const sunMesh = new THREE.Mesh(sunGeo, sunMat);
 staticSun.add(sunMesh);
 
 // Moon
-const { staticMoon } = initMoon({ scene });
+const { staticMoon } = initMoon({ scene, resolveAssetUrl });
 
 // 2. PROCEDURAL SKY
 const proceduralSky = createLowPowerProceduralSky();
@@ -101,8 +101,9 @@ function createSandNoiseTexture(size = 128) {
     const tex = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
     tex.wrapS = THREE.RepeatWrapping;
     tex.wrapT = THREE.RepeatWrapping;
-    tex.minFilter = THREE.LinearFilter;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
     tex.magFilter = THREE.LinearFilter;
+    tex.generateMipmaps = true;
     tex.needsUpdate = true;
     return tex;
 }
@@ -161,7 +162,7 @@ playerGrp.add(playerVisuals);
 const flightModelManager = new FlightModelManager(playerVisuals, gltfLoader, resolveAssetUrl);
 
 // Load default flight model
-flightModelManager.setModelById('kiki');
+flightModelManager.setModelById('psx_saviola_s21');
 
 // 6. INSTANCED FOLIAGE (2-LOD Band Low Power Pines)
 const pineSystem = new StylizedPineSystemLowPower({
@@ -170,8 +171,9 @@ const pineSystem = new StylizedPineSystemLowPower({
     gltfLoader,
     resolveAssetUrl,
     uTime: terrainUniforms.uTime,
+    uSunDir: terrainUniforms.uSunDir,
     gradientMap,
-    getWorldHeight,
+    getWorldHeight: (x, z) => terrainMeshManager.getGroundedHeight(x, z),
     getBiomeAt,
     getIslandData,
     getPathStrength,
@@ -180,33 +182,7 @@ const pineSystem = new StylizedPineSystemLowPower({
 pineSystem.load();
 
 // 7. LOW-POWER INSTANCED DIORAMA PROPS
-// Clouds (30 instances)
-const CLOUD_COUNT = 30;
-const geoCloud = new THREE.IcosahedronGeometry(25, 1);
-geoCloud.scale(2.0, 1.0, 1.5);
-const matCloud = new THREE.MeshToonMaterial({
-    color: 0xffffff,
-    transparent: true,
-    opacity: 0.85,
-    gradientMap
-});
-const instClouds = new THREE.InstancedMesh(geoCloud, matCloud, CLOUD_COUNT);
-instClouds.frustumCulled = false;
-scene.add(instClouds);
 
-const dummy = new THREE.Object3D();
-for (let i = 0; i < CLOUD_COUNT; i++) {
-    const cx = (Math.random() - 0.5) * 3000;
-    const cz = (Math.random() - 0.5) * 3000;
-    const cy = 120 + Math.random() * 200;
-    const cs = 0.8 + Math.random() * 1.5;
-    dummy.position.set(cx, cy, cz);
-    dummy.scale.set(cs * 1.8, cs, cs * 1.3);
-    dummy.rotation.set(0, Math.random() * Math.PI * 2, 0);
-    dummy.updateMatrix();
-    instClouds.setMatrixAt(i, dummy.matrix);
-}
-instClouds.instanceMatrix.needsUpdate = true;
 
 // Wind Trails (25 instances)
 const TRAIL_COUNT = 25;
@@ -383,12 +359,17 @@ async function animate() {
     const dt = Math.min(0.08, clock.getDelta());
     const time = clock.getElapsedTime();
 
-    // FPS Meter
+    // FPS Meter & Biome Display
     frameCount++;
     const now = performance.now();
     if (now - lastFpsTime >= 500) {
         const fps = Math.round((frameCount * 1000) / (now - lastFpsTime));
         if (fpsElement) fpsElement.innerText = `${fps} FPS [Tab S6 Lite]`;
+        const biomeElement = document.getElementById('biome-label');
+        if (biomeElement && playerGrp) {
+            const currZn = getBiomeAt(playerGrp.position.x, playerGrp.position.z);
+            if (currZn) biomeElement.innerText = currZn.name || '';
+        }
         frameCount = 0;
         lastFpsTime = now;
         adaptiveRes.sample(1000 / Math.max(1, fps));
@@ -428,6 +409,9 @@ async function animate() {
         terrain.position.z -= shiftZ;
         setWorldOriginOffset(worldOriginOffset.x + shiftX, worldOriginOffset.y + shiftZ);
         terrainMeshManager.update(playerGrp.position.x, playerGrp.position.z, waterSystem);
+        if (pineSystem && typeof pineSystem.respawn === 'function') {
+            pineSystem.respawn();
+        }
     }
 
     // Update Terrain & Foliage
@@ -447,8 +431,11 @@ async function animate() {
     staticSun.visible = (timePhase !== 2);
 
     if (staticMoon) {
-        staticMoon.position.set(playerGrp.position.x + 10000, playerGrp.position.y * 0.45 + currentMoonY, playerGrp.position.z - 15000);
+        staticMoon.position.set(playerGrp.position.x, playerGrp.position.y * 0.45 + currentMoonY, playerGrp.position.z - 20000);
         staticMoon.visible = (timePhase === 2);
+        if (timePhase === 2) {
+            updateMoon(dt);
+        }
     }
 
     // Sky Uniforms
@@ -456,7 +443,8 @@ async function animate() {
     skyU.uTime.value = time;
     skyU.uNightFactor.value = timePhase === 2 ? 1.0 : 0.0;
     skyU.uDuskFactor.value = timePhase === 1 ? 1.0 : 0.0;
-    tempSunPos.copy(staticSun.position).sub(playerGrp.position).normalize();
+    const activeTarget = (timePhase === 2 && staticMoon) ? staticMoon : staticSun;
+    tempSunPos.copy(activeTarget.position).sub(playerGrp.position).normalize();
     skyU.uSunPosition.value.copy(tempSunPos);
 
     dirLight.position.copy(playerGrp.position).add(tempSunPos.multiplyScalar(2000));

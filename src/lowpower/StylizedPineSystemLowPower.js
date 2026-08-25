@@ -3,27 +3,24 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 import { MeshToonNodeMaterial } from 'three/webgpu';
 import {
     Fn, vec3, vec4, float, uniform, attribute, texture, uv, mix, clamp,
-    smoothstep, positionLocal, positionGeometry, modelWorldMatrix, fract, sin, cos, max, pow
+    smoothstep, positionLocal, positionGeometry, positionWorld, normalWorld, cameraPosition,
+    modelWorldMatrix, fract, sin, cos, max, pow, normalize, dot
 } from 'three/tsl';
 
 const PINE_FILES = [
-    { key: 'cluster_grove',    path: 'assets/models/trees_med/pine_forest_cluster.glb', fallbackPath: 'assets/models/trees/pine_forest_cluster.glb', targetHeight: 8.5,  isCluster: true,  footprintRadius: 13.0, boundingRadius: 22.0 },
-    { key: 'pine_01_med',      path: 'assets/models/trees_med/pine_tree_01.glb',        fallbackPath: 'assets/models/trees/pine_tree_01.glb',        targetHeight: 6.0,  isCluster: false, footprintRadius: 3.5,  boundingRadius: 7.0 },
-    { key: 'pine_02_full',     path: 'assets/models/trees_med/pine_tree_02.glb',        fallbackPath: 'assets/models/trees/pine_tree_02.glb',        targetHeight: 6.0,  isCluster: false, footprintRadius: 3.5,  boundingRadius: 7.0 },
-    { key: 'pine_03_dense',    path: 'assets/models/trees_med/pine_tree_03.glb',        fallbackPath: 'assets/models/trees/pine_tree_03.glb',        targetHeight: 6.5,  isCluster: false, footprintRadius: 4.0,  boundingRadius: 7.5 },
-    { key: 'pine_04_stylized', path: 'assets/models/trees_med/pine_tree_04.glb',        fallbackPath: 'assets/models/trees/pine_tree_04.glb',        targetHeight: 6.0,  isCluster: false, footprintRadius: 3.5,  boundingRadius: 7.0 },
-    { key: 'pine_05_tall',     path: 'assets/models/trees_med/pine_tree_05.glb',        fallbackPath: 'assets/models/trees/pine_tree_05.glb',        targetHeight: 9.5,  isCluster: false, footprintRadius: 4.5,  boundingRadius: 10.5 },
-    { key: 'pine_06_ancient',  path: 'assets/models/trees_med/pine_tree_06.glb',        fallbackPath: 'assets/models/trees/pine_tree_06.glb',        targetHeight: 11.5, isCluster: false, footprintRadius: 5.5,  boundingRadius: 12.5 },
-    { key: 'pine_07_small',    path: 'assets/models/trees_med/pine_tree_07.glb',        fallbackPath: 'assets/models/trees/pine_tree_07.glb',        targetHeight: 3.5,  isCluster: false, footprintRadius: 2.5,  boundingRadius: 4.5 }
+    { key: 'pine_01_rugged',   path: 'assets/models/trees_baked/pine_tree_01.glb', fallbackPath: 'assets/models/trees_low/pine_tree_01.glb', targetHeight: 6.5,  isCluster: false, footprintRadius: 3.5,  boundingRadius: 8.5 },
+    { key: 'pine_05_tall',     path: 'assets/models/trees_baked/pine_tree_05.glb', fallbackPath: 'assets/models/trees_low/pine_tree_05.glb', targetHeight: 9.5,  isCluster: false, footprintRadius: 4.5,  boundingRadius: 10.5 },
+    { key: 'pine_06_ancient',  path: 'assets/models/trees_baked/pine_tree_06.glb', fallbackPath: 'assets/models/trees_low/pine_tree_06.glb', targetHeight: 11.5, isCluster: false, footprintRadius: 5.5,  boundingRadius: 12.5 },
+    { key: 'pine_07_slender',  path: 'assets/models/trees_baked/pine_tree_07.glb', fallbackPath: 'assets/models/trees_low/pine_tree_07.glb', targetHeight: 4.5,  isCluster: false, footprintRadius: 2.8,  boundingRadius: 6.5 }
 ];
 
-// 2 LOD bands (0-200m near, 200-450m mid) - Far band culled for Galaxy Tab S6 Lite
+// 2 LOD bands (0-200m near full 3D, 200-500m far plus impostor)
 const LOD_BANDS = [
-    { name: 'near', maxDist: 200, doubleSided: false, sway: true,  alphaTest: 0.40 },
-    { name: 'mid',  maxDist: 450, doubleSided: false, sway: false, alphaTest: 0.50 }
+    { name: 'near', maxDist: 200, isImpostor: false, doubleSided: true, sway: true,  alphaTest: 0.50 },
+    { name: 'mid',  maxDist: 500, isImpostor: true,  doubleSided: true, sway: false, alphaTest: 0.40 }
 ];
 
-const DEFAULT_CELL_SIZE = 32.0;  // 32m cell size reduces cell traversal by ~70%
+const DEFAULT_CELL_SIZE = 32.0;
 const REBUILD_DISTANCE = 30.0;
 const REBUILD_ROT_DIFF = 0.25;
 const REBUILD_FRAMES = 8;
@@ -47,6 +44,7 @@ export class StylizedPineSystemLowPower {
         this.getIslandData = opts.getIslandData;
         this.getPathStrength = opts.getPathStrength || (() => 0);
         this.densityScale = opts.densityScale !== undefined ? opts.densityScale : 0.4;
+        this.uSunDir = opts.uSunDir || uniform(new THREE.Vector3(0.3, 0.8, 0.5));
 
         this.ready = false;
         this.enabled = true;
@@ -60,6 +58,7 @@ export class StylizedPineSystemLowPower {
         this._collected = [];
         this.lastCounts = { near: 0, mid: 0 };
         this.leafTexture = null;
+        this.impostorTexture = null;
 
         // Frustum Culling
         this._frustum = new THREE.Frustum();
@@ -81,38 +80,132 @@ export class StylizedPineSystemLowPower {
         this.uWindStrength   = uniform(0.8);
         this.uTreeScale      = uniform(1.0);
 
-        // Low-power pool sizes
+        // Low-power pool sizes (per variant)
         this.poolSizes = {
-            near: 150,
-            mid:  250
+            near: 350,
+            mid:  800
         };
 
-        this.minElevation = 1.0;
+        this.minElevation = 5.5;
         this.maxElevation = 140.0;
+        this.maxSlope = 0.52;
+        this.rootEmbed = 0.35;
         this.density = 0.55;
         this.scaleMul = 1.0;
         this.cellSize = DEFAULT_CELL_SIZE;
         this.currentPreset = 'auto';
     }
 
+    _generateImpostorTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 256;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, 256, 256);
+
+        // Trunk
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(122, 195, 12, 61);
+
+        // Wide layered needle skirts
+        const skirts = [
+            { topY: 135, botY: 225, w: 118, cutCount: 8, depth: 7 },
+            { topY: 100, botY: 180, w: 102, cutCount: 7, depth: 6 },
+            { topY: 65,  botY: 138, w: 84,  cutCount: 6, depth: 5 },
+            { topY: 35,  botY: 98,  w: 62,  cutCount: 5, depth: 4 },
+            { topY: 12,  botY: 60,  w: 41,  cutCount: 4, depth: 3 },
+            { topY: 3,   botY: 30,  w: 21,  cutCount: 3, depth: 2 }
+        ];
+
+        skirts.forEach(s => {
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.moveTo(128, s.topY);
+            ctx.lineTo(128 + s.w, s.botY);
+            for (let i = s.cutCount; i >= -s.cutCount; i--) {
+                const px = 128 + (i / s.cutCount) * s.w;
+                const py = s.botY + (Math.abs(i) % 2 === 1 ? -s.depth : s.depth * 0.5);
+                ctx.lineTo(px, py);
+            }
+            ctx.lineTo(128 - s.w, s.botY);
+            ctx.closePath();
+            ctx.fill();
+        });
+
+        this.impostorTexture = new THREE.CanvasTexture(canvas);
+        this.impostorTexture.generateMipmaps = true;
+        this.impostorTexture.minFilter = THREE.LinearMipmapLinearFilter;
+        this.impostorTexture.magFilter = THREE.LinearFilter;
+        this.impostorTexture.wrapS = THREE.ClampToEdgeWrapping;
+        this.impostorTexture.wrapT = THREE.ClampToEdgeWrapping;
+    }
+
+    _buildPlusSignGeometry() {
+        const geo = new THREE.BufferGeometry();
+        const baseW = 1.95 * 1.65;
+        const h = 9.5;
+
+        const angles = [0, Math.PI / 2];
+        const positions = [];
+        const uvs = [];
+        const normals = [];
+        const indices = [];
+
+        angles.forEach((ang, qIdx) => {
+            const cosA = Math.cos(ang);
+            const sinA = Math.sin(ang);
+
+            const x0 = -baseW * cosA, z0 = -baseW * sinA;
+            const x1 =  baseW * cosA, z1 =  baseW * sinA;
+
+            const base = qIdx * 4;
+            positions.push(
+                x0, 0, z0,
+                x1, 0, z1,
+                x1, h, z1,
+                x0, h, z0
+            );
+
+            uvs.push(0, 0, 1, 0, 1, 1, 0, 1);
+
+            const nx = -sinA, nz = cosA;
+            normals.push(
+                nx, 0.15, nz,
+                nx, 0.15, nz,
+                nx, 0.15, nz,
+                nx, 0.15, nz
+            );
+
+            indices.push(
+                base, base + 1, base + 2,
+                base, base + 2, base + 3
+            );
+        });
+
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+        geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+        geo.setIndex(indices);
+        geo.computeBoundingBox();
+        return geo;
+    }
+
     async load() {
+        this._generateImpostorTexture();
+        const plusSignGeo = this._buildPlusSignGeometry();
+
         const gltfs = await Promise.all(PINE_FILES.map(f =>
             new Promise((res) => {
                 const cleanPath = f.path.replace(/^\.?\//, '');
                 const cleanFallback = (f.fallbackPath || '').replace(/^\.?\//, '');
                 const candidateUrls = [
-                    this.resolveAssetUrl(f.path),
-                    `./${cleanPath}`,
-                    cleanPath,
-                    `public/${cleanPath}`,
-                    `./public/${cleanPath}`,
-                    f.fallbackPath ? this.resolveAssetUrl(f.fallbackPath) : null,
-                    cleanFallback ? `./${cleanFallback}` : null,
-                    cleanFallback ? cleanFallback : null
+                    this.resolveAssetUrl(cleanPath),
+                    cleanFallback ? this.resolveAssetUrl(cleanFallback) : null
                 ].filter(Boolean);
 
                 const tryLoad = (idx) => {
                     if (idx >= candidateUrls.length) {
+                        console.warn(`[StylizedPineSystemLowPower] Failed to load pine model for ${f.key}`);
                         return res(null);
                     }
                     this.gltfLoader.load(
@@ -126,7 +219,6 @@ export class StylizedPineSystemLowPower {
             })
         ));
 
-        // Extract shared leaf texture
         gltfs.forEach(gltf => {
             if (gltf && !this.leafTexture) {
                 gltf.scene.traverse(c => {
@@ -148,16 +240,15 @@ export class StylizedPineSystemLowPower {
         });
 
         gltfs.forEach((gltf, vi) => {
-            if (!gltf) return;
-            const geo = this._extractMergedGeometry(gltf, PINE_FILES[vi].targetHeight);
-            if (!geo) return;
+            const geoHero = gltf ? this._extractMergedGeometry(gltf, PINE_FILES[vi].targetHeight) : null;
 
             const row = [];
             LOD_BANDS.forEach((band) => {
                 const mat = this._buildMaterial(band);
-                const count = this.poolSizes[band.name] || 150;
+                const count = this.poolSizes[band.name] || 350;
 
-                const instGeo = geo.clone();
+                const baseGeo = (band.isImpostor || !geoHero) ? plusSignGeo.clone() : geoHero.clone();
+                const instGeo = baseGeo.clone();
                 const seasonArr = new Float32Array(count);
                 instGeo.setAttribute('aSeason', new THREE.InstancedBufferAttribute(seasonArr, 1));
 
@@ -188,18 +279,22 @@ export class StylizedPineSystemLowPower {
                 const g = c.geometry.clone();
                 g.applyMatrix4(c.matrixWorld);
 
-                const m = Array.isArray(c.material) ? c.material[0] : c.material;
-                const matName = (m && m.name) ? m.name.toLowerCase() : '';
-                const meshName = (c.name || '').toLowerCase();
-                const isBark = meshName.includes('trunk') || meshName.includes('bark') ||
-                               matName.includes('trunk') || matName.includes('bark') ? 1.0 : 0.0;
+                let barkAttr = g.attributes._aisbark || g.attributes.aIsBark;
+                if (!barkAttr) {
+                    const m = Array.isArray(c.material) ? c.material[0] : c.material;
+                    const matName = (m && m.name) ? m.name.toLowerCase() : '';
+                    const meshName = (c.name || '').toLowerCase();
+                    const isBark = meshName.includes('trunk') || meshName.includes('bark') ||
+                                   matName.includes('trunk') || matName.includes('bark') ? 1.0 : 0.0;
 
-                const nVerts = g.attributes.position.count;
-                const barkArr = new Float32Array(nVerts).fill(isBark);
-                g.setAttribute('aIsBark', new THREE.BufferAttribute(barkArr, 1));
+                    const nVerts = g.attributes.position.count;
+                    const barkArr = new Float32Array(nVerts).fill(isBark);
+                    barkAttr = new THREE.BufferAttribute(barkArr, 1);
+                }
+                g.setAttribute('aIsBark', barkAttr);
 
+                if (g.attributes.normal) g.computeVertexNormals();
                 if (g.attributes.tangent) g.deleteAttribute('tangent');
-                if (g.attributes.color) g.deleteAttribute('color');
 
                 subGeos.push(g);
             }
@@ -223,20 +318,23 @@ export class StylizedPineSystemLowPower {
     }
 
     _buildMaterial(band) {
+        const tex = band.isImpostor ? this.impostorTexture : this.leafTexture;
+
         const mat = new MeshToonNodeMaterial({
-            gradientMap: this.gradientMap || undefined,
-            side: THREE.FrontSide,
-            transparent: false,
+            map: tex || null,
+            side: band.doubleSided ? THREE.DoubleSide : THREE.FrontSide,
             alphaTest: band.alphaTest,
+            transparent: false,
             depthWrite: true,
+            depthTest: true,
             dithering: false
         });
 
         const aIsBark = attribute('aIsBark', 'float');
         const aSeason = attribute('aSeason', 'float');
 
-        if (this.leafTexture) {
-            const texMap = texture(this.leafTexture, uv());
+        if (tex) {
+            const texMap = texture(tex, uv());
             const finalAlpha = mix(texMap.a, float(1.0), aIsBark);
             mat.opacityNode = finalAlpha;
             mat.alphaNode = finalAlpha;
@@ -244,38 +342,64 @@ export class StylizedPineSystemLowPower {
 
         mat.colorNode = Fn(() => {
             const localY = clamp(positionLocal.y.div(8.5), 0.0, 1.0);
-
-            const spBottom = this.uLeafBottom;
-            const spTop    = this.uLeafTop;
-            const auBottom = vec3(1.00, 0.69, 0.21);
-            const auTop    = vec3(1.00, 0.10, 0.06);
-            const wiBottom = vec3(0.13, 0.23, 0.24);
-            const wiTop    = vec3(0.92, 0.96, 0.98);
-
             const isAutumn = smoothstep(float(0.4), float(0.6), aSeason);
             const isWinter = smoothstep(float(1.4), float(1.6), aSeason);
 
-            const nonWinterBottom = mix(spBottom, auBottom, isAutumn);
-            const nonWinterTop    = mix(spTop, auTop, isAutumn);
+            const autumnLeafBottom = vec3(0.40, 0.15, 0.05);
+            const autumnLeafTop    = vec3(0.95, 0.45, 0.08);
 
-            const leafColBottom = mix(nonWinterBottom, wiBottom, isWinter);
-            const leafColTop    = mix(nonWinterTop, wiTop, isWinter);
+            const winterLeafBottom = vec3(0.12, 0.22, 0.26);
+            const winterLeafTop    = vec3(0.85, 0.92, 0.96);
+
+            const nonWinterBottom = mix(this.uLeafBottom, autumnLeafBottom, isAutumn);
+            const nonWinterTop    = mix(this.uLeafTop, autumnLeafTop, isAutumn);
+
+            const curLeafBottom   = mix(nonWinterBottom, winterLeafBottom, isWinter);
+            const curLeafTop      = mix(nonWinterTop, winterLeafTop, isWinter);
 
             const gradT = pow(localY, this.uLeafGradPower);
-            const leafBase = mix(leafColBottom, leafColTop, gradT);
+            const foliageCol = mix(curLeafBottom, curLeafTop, gradT).mul(this.uLeafBrightness);
 
-            const barkCol = mix(this.uBarkBase, this.uBarkTop, smoothstep(float(0.0), float(0.6), localY)).mul(this.uBarkBrightness);
-            return mix(leafBase, barkCol, aIsBark);
+            const warmBarkBase = this.uBarkBase;
+            const warmBarkTop  = this.uBarkTop;
+            const coolBarkBase = vec3(0.13, 0.14, 0.15);
+            const coolBarkTop  = vec3(0.28, 0.30, 0.31);
+
+            const curBarkBase = mix(warmBarkBase, coolBarkBase, isWinter);
+            const curBarkTop  = mix(warmBarkTop, coolBarkTop, isWinter);
+            const barkCol = mix(curBarkBase, curBarkTop, smoothstep(float(0.0), float(0.6), localY)).mul(this.uBarkBrightness);
+
+            return mix(foliageCol, barkCol, aIsBark);
+        })();
+
+        mat.emissiveNode = Fn(() => {
+            const viewDir = normalize(cameraPosition.sub(positionWorld));
+            const lightDir = normalize(this.uSunDir);
+            const norm = normalize(normalWorld);
+
+            // Subsurface scattering when looking toward the sun through needle canopy
+            const backDot = clamp(dot(viewDir.negate(), lightDir), 0.0, 1.0);
+            const foliageRim = pow(float(1.0).sub(clamp(dot(norm, viewDir), 0.0, 1.0)), 2.8);
+            const sunSubsurface = pow(backDot, 3.2).mul(foliageRim.mul(1.2).add(0.15)).mul(vec3(0.08, 0.18, 0.04));
+
+            // Soft atmospheric sky bounce on upward surfaces
+            const skyBounce = clamp(norm.y.mul(0.5).add(0.5), 0.0, 1.0).mul(vec3(0.01, 0.025, 0.04));
+
+            return sunSubsurface.add(skyBounce).mul(float(1.0).sub(aIsBark));
         })();
 
         if (band.sway) {
             mat.positionNode = Fn(() => {
                 const p = positionLocal.toVar();
-                const origin = modelWorldMatrix.mul(vec4(0.0, 0.0, 0.0, 1.0));
-                const w1 = sin(this.uTime.mul(1.4).add(origin.x.mul(0.025)).add(origin.z.mul(0.02))).mul(0.05);
-                const heightFactor = max(0.0, positionGeometry.y).div(6.0);
-                const totalSway = w1.mul(heightFactor).mul(this.uWindStrength);
+                const speed = 1.2;
+                const str = this.uWindStrength;
+                const wave = sin(this.uTime.mul(speed)).mul(0.06).add(cos(this.uTime.mul(speed.mul(1.5))).mul(0.03));
+                const heightFactor = clamp(positionGeometry.y.div(8.0), 0.0, 1.0);
+                const mask = heightFactor.mul(heightFactor);
+                const totalSway = wave.mul(mask).mul(str);
+
                 p.x.addAssign(totalSway);
+                p.z.addAssign(totalSway.mul(0.6));
                 return p;
             })();
         }
@@ -283,14 +407,31 @@ export class StylizedPineSystemLowPower {
         return mat;
     }
 
-    _isValidSite(cx, cz, footprintRadius = 13.0, isCluster = true) {
+    _isValidSite(cx, cz, footprintRadius = 3.5, isCluster = false) {
         const biome = this.getBiomeAt(cx, cz);
         if (!biome || !biome.name) return null;
+
         const bName = biome.name.toLowerCase();
 
-        if (bName.includes('crystal') || bName.includes('jungle') || bName.includes('desert') || bName.includes('ocean')) {
+        if (biome.treesOk === false ||
+            bName.includes('crystal') ||
+            bName.includes('jungle') ||
+            bName.includes('magical') ||
+            bName.includes('sanctuary') ||
+            bName.includes('desert') ||
+            bName.includes('ocean')) {
             return null;
         }
+
+        const isAllowed = biome.treesOk === true ||
+                          bName.includes('archipelago') ||
+                          bName.includes('ghibli') ||
+                          bName.includes('misty') ||
+                          bName.includes('mountain') ||
+                          bName.includes('plains') ||
+                          bName.includes('highland') ||
+                          bName.includes('north');
+        if (!isAllowed) return null;
 
         const centerH = this.getWorldHeight(cx, cz);
         if (centerH < this.minElevation || centerH > this.maxElevation) return null;
@@ -300,43 +441,57 @@ export class StylizedPineSystemLowPower {
         if (this.getPathStrength(cx, cz) >= 0.35) return null;
 
         const isMisty = bName.includes('misty') || bName.includes('mountain') || bName.includes('north');
-        return { h: centerH, isMisty };
+        return {
+            h: centerH,
+            isMisty: isMisty
+        };
     }
 
-    _visitCell(cx, cz, focusX, focusZ, maxDistSq, out, frustum) {
-        const ddx = (cx + 0.5) * this.cellSize - focusX;
-        const ddz = (cz + 0.5) * this.cellSize - focusZ;
+    _visitCell(cx, cz, focusX, focusZ, maxDistSq, out) {
+        const cellCenterX = (cx + 0.5) * this.cellSize;
+        const cellCenterZ = (cz + 0.5) * this.cellSize;
+        const ddx = cellCenterX - focusX;
+        const ddz = cellCenterZ - focusZ;
         const distSq = ddx * ddx + ddz * ddz;
         if (distSq > maxDistSq) return;
 
-        const d = this.density;
-        const fill = cellHash(cx, cz, 0);
+        const effDensity = this.density * this.densityScale;
+        if (effDensity < 0.15) return;
 
-        if (fill < 0.75 * d) {
-            const jx = (cellHash(cx, cz, 1) - 0.5) * 0.5;
-            const jz = (cellHash(cx, cz, 2) - 0.5) * 0.5;
-            const x = (cx + 0.5 + jx) * this.cellSize;
-            const z = (cz + 0.5 + jz) * this.cellSize;
+        const jx = (cellHash(cx, cz, 1) - 0.5) * 0.8;
+        const jz = (cellHash(cx, cz, 2) - 0.5) * 0.8;
+        const px = (cx + 0.5 + jx) * this.cellSize;
+        const pz = (cz + 0.5 + jz) * this.cellSize;
 
-            const site = this._isValidSite(x, z, PINE_FILES[0].footprintRadius, true);
-            if (site !== null) {
-                this._sphere.center.set(x, site.h, z);
-                this._sphere.radius = PINE_FILES[0].boundingRadius + 15.0;
+        const vIdx = Math.floor(cellHash(cx, cz, 3) * PINE_FILES.length) % PINE_FILES.length;
+        const cfg = PINE_FILES[vIdx];
 
-                if (!frustum || frustum.intersectsSphere(this._sphere)) {
-                    let season = site.isMisty ? 2.0 : ((cellHash(cx, cz, 7) < 0.10) ? 1.0 : 0.0);
-                    const r = cellHash(cx, cz, 3);
-                    out.push({
-                        x, y: site.h, z,
-                        variant: 0,
-                        rot: r * Math.PI * 2.0,
-                        scale: (0.90 + cellHash(cx, cz, 4) * 0.25) * this.scaleMul,
-                        season,
-                        dist: Math.sqrt(distSq)
-                    });
-                }
-            }
+        const site = this._isValidSite(px, pz, cfg.footprintRadius, cfg.isCluster);
+        if (site === null) return;
+
+        const dist = Math.sqrt(distSq);
+        let season = 0.0;
+        if (this.currentPreset === 'auto') {
+            if (site.isMisty) season = 2.0;
+            else season = (cellHash(cx, cz, 7) < 0.12) ? 1.0 : 0.0;
+        } else if (this.currentPreset === 'autumn' || this.currentPreset === 'fall') {
+            season = 1.0;
+        } else if (this.currentPreset === 'winter') {
+            season = 2.0;
         }
+
+        const rotY = cellHash(cx, cz, 4) * Math.PI * 2.0;
+        const scaleJitter = 0.85 + cellHash(cx, cz, 5) * 0.35;
+        const scale = scaleJitter * this.scaleMul;
+
+        out.push({
+            x: px, y: site.h - this.rootEmbed, z: pz,
+            variant: vIdx,
+            rotY,
+            scale,
+            season,
+            dist
+        });
     }
 
     _commit(focusX, focusZ) {
@@ -346,11 +501,7 @@ export class StylizedPineSystemLowPower {
         this._collected.sort((a, b) => a.dist - b.dist);
 
         for (const c of this._collected) {
-            let band = -1;
-            for (let b = 0; b < LOD_BANDS.length; b++) {
-                if (c.dist <= LOD_BANDS[b].maxDist) { band = b; break; }
-            }
-            if (band < 0) continue;
+            const band = (c.dist <= 200) ? 0 : 1;
 
             const row = this._byVariantBand[c.variant];
             if (!row) continue;
@@ -361,8 +512,8 @@ export class StylizedPineSystemLowPower {
             if (idx >= mesh.instanceMatrix.count) continue;
 
             dummy.position.set(c.x, c.y, c.z);
-            dummy.rotation.set(0, c.rot, 0);
-            dummy.scale.setScalar(c.scale);
+            dummy.rotation.set(0, c.rotY, 0);
+            dummy.scale.set(c.scale, c.scale, c.scale);
             dummy.updateMatrix();
 
             mesh.setMatrixAt(idx, dummy.matrix);
@@ -382,25 +533,16 @@ export class StylizedPineSystemLowPower {
                 if (mesh.geometry && mesh.geometry.attributes && mesh.geometry.attributes.aSeason) {
                     mesh.geometry.attributes.aSeason.needsUpdate = true;
                 }
-                mesh.boundingSphere.center.set(focusX, 0, focusZ);
-                mesh.boundingSphere.radius = LOD_BANDS[bi].maxDist + 40;
-                mesh.frustumCulled = true;
-                counts[LOD_BANDS[bi].name] += mesh.count;
+                if (bi === 0) counts.near += mesh.count;
+                else counts.mid += mesh.count;
             });
         });
+
         this.lastCounts = counts;
     }
 
-    update(focusX, focusZ, activeCamera = null) {
+    update(focusX, focusZ, camera = null) {
         if (!this.ready || !this.enabled) return;
-
-        const cam = activeCamera || this.camera;
-        let frustum = null;
-        if (cam) {
-            this._projScreenMatrix.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
-            this._frustum.setFromProjectionMatrix(this._projScreenMatrix);
-            frustum = this._frustum;
-        }
 
         if (this._walk) {
             const w = this._walk;
@@ -410,7 +552,7 @@ export class StylizedPineSystemLowPower {
             for (let i = w.i; i < end; i++) {
                 const dx = (i % w.width) - w.radius;
                 const dz = ((i / w.width) | 0) - w.radius;
-                this._visitCell(w.baseCX + dx, w.baseCZ + dz, w.focusX, w.focusZ, w.maxDistSq, this._collected, frustum);
+                this._visitCell(w.baseCX + dx, w.baseCZ + dz, w.focusX, w.focusZ, w.maxDistSq, this._collected);
             }
             w.i = end;
 
@@ -425,19 +567,12 @@ export class StylizedPineSystemLowPower {
         const dz = focusZ - this._lastFocusZ;
         const distMovedSq = dx * dx + dz * dz;
 
-        let camRotDiff = 0;
-        if (cam) {
-            const curYaw = cam.rotation ? cam.rotation.y : 0;
-            camRotDiff = Math.abs(curYaw - this._lastCamYaw);
-        }
-
-        if (distMovedSq < REBUILD_DISTANCE * REBUILD_DISTANCE && camRotDiff < REBUILD_ROT_DIFF) return;
+        if (distMovedSq < REBUILD_DISTANCE * REBUILD_DISTANCE) return;
 
         this._lastFocusX = focusX;
         this._lastFocusZ = focusZ;
-        if (cam && cam.rotation) this._lastCamYaw = cam.rotation.y;
 
-        const maxDist = LOD_BANDS[LOD_BANDS.length - 1].maxDist;
+        const maxDist = 500.0;
         const radius = Math.ceil(maxDist / this.cellSize);
         const width = radius * 2 + 1;
 
@@ -453,8 +588,20 @@ export class StylizedPineSystemLowPower {
         };
     }
 
+    respawn() {
+        this._lastFocusX = Infinity;
+        this._lastFocusZ = Infinity;
+        this._walk = null;
+        this._collected = [];
+        this.meshes.forEach(m => {
+            m.count = 0;
+            m.instanceMatrix.needsUpdate = true;
+        });
+    }
+
     setVisible(visible) {
         this.enabled = visible;
         this.meshes.forEach(m => { m.visible = visible; });
+        if (visible) this.respawn();
     }
 }

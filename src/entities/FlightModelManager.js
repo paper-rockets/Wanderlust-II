@@ -188,14 +188,20 @@ export class FlightModelManager {
                                 child.receiveShadow = true;
                                 child.frustumCulled = false;
                                 if (child.material) {
+                                    const applyMatConfig = (m) => {
+                                        m.side = THREE.DoubleSide;
+                                        if (cfg.transparent !== undefined) {
+                                            m.transparent = cfg.transparent;
+                                        }
+                                        if (cfg.alphaTest !== undefined) {
+                                            m.alphaTest = cfg.alphaTest;
+                                        }
+                                        m.needsUpdate = true;
+                                    };
                                     if (Array.isArray(child.material)) {
-                                        child.material.forEach(m => {
-                                            m.side = THREE.DoubleSide;
-                                            m.needsUpdate = true;
-                                        });
+                                        child.material.forEach(applyMatConfig);
                                     } else {
-                                        child.material.side = THREE.DoubleSide;
-                                        child.material.needsUpdate = true;
+                                        applyMatConfig(child.material);
                                     }
                                 }
                             }

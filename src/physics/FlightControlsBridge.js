@@ -1,4 +1,4 @@
-﻿export class FlightControlsBridge {
+export class FlightControlsBridge {
     constructor(options = {}) {
         this.keys = { w: false, a: false, s: false, d: false, shift: false, space: false };
         this.touchState = { x: 0, y: 0, boost: false, brake: false };
@@ -12,10 +12,18 @@
         this.initialPinchDist = null;
         this.initialZoomDist = null;
 
+        const params = (typeof window !== 'undefined' && window.location) ? new URLSearchParams(window.location.search) : null;
+        const hasMobileParam = params ? params.has('mobile') : false;
+        const isTouch = (typeof window !== 'undefined') && (('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches));
+        const isMobileUA = (typeof navigator !== 'undefined') && (/Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|webOS/i.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1));
+        const isTouchOnly = (typeof window !== 'undefined' && window.matchMedia) ? window.matchMedia('(hover: none) and (pointer: coarse)').matches : false;
+
         this.isMobileMode = typeof document !== 'undefined' && (
+            hasMobileParam ||
             document.documentElement.classList.contains('force-mobile') ||
             document.body.classList.contains('force-mobile') ||
-            window.innerWidth <= 1024
+            (isMobileUA && isTouch) ||
+            isTouchOnly
         );
 
         this._initKeyboard();
@@ -27,15 +35,7 @@
         if (typeof window === 'undefined') return;
 
         window.addEventListener('keydown', e => {
-            const pcHint = document.getElementById('pc-controls-hint');
-            if (pcHint && !this.pcControlsShown && e.key !== 'F12' && e.key !== 'F5') {
-                pcHint.style.display = 'block';
-                this.pcControlsShown = true;
-                setTimeout(() => {
-                    const h = document.getElementById('pc-controls-hint');
-                    if (h) h.style.opacity = '0';
-                }, 10000);
-            }
+
 
             const k = e.key.toLowerCase();
             if (k === 'w' || e.key === 'ArrowUp') this.keys.w = true;
@@ -82,6 +82,11 @@
 
     _initTouchAndJoystick() {
         if (typeof document === 'undefined') return;
+
+        const touchControls = document.getElementById('touch-controls');
+        if (touchControls) {
+            touchControls.style.display = this.isMobileMode ? 'block' : 'none';
+        }
 
         const joyBase = document.getElementById('joystick-base');
         const joyKnob = document.getElementById('joystick-knob');
@@ -161,7 +166,7 @@
                 const newDist = Math.sqrt(dx * dx + dy * dy);
                 const cm = this.options.getCameraManager();
                 if (cm) {
-                    cm.cameraZoomDist = Math.max(5.0, Math.min(300.0, this.initialZoomDist * (newDist / this.initialPinchDist)));
+                    cm.cameraZoomDist = Math.max(6.0, Math.min(300.0, this.initialZoomDist * (this.initialPinchDist / newDist)));
                 }
             } else {
                 for (let touch of e.changedTouches) {
@@ -221,6 +226,13 @@
         if (typeof document === 'undefined') return;
         const boostBtn = document.getElementById('boost-btn');
         if (boostBtn) {
+            if (!this.isMobileMode) {
+                boostBtn.style.display = 'none';
+                boostBtn.style.pointerEvents = 'none';
+            } else {
+                boostBtn.style.display = 'flex';
+                boostBtn.style.pointerEvents = 'auto';
+            }
             const startBoost = (e) => { e.preventDefault(); this.touchState.boost = true; boostBtn.style.transform = 'scale(0.9)'; };
             const resetBoost = (e) => { e.preventDefault(); this.touchState.boost = false; boostBtn.style.transform = 'scale(1)'; };
             boostBtn.addEventListener('touchstart', startBoost);

@@ -47,7 +47,7 @@ export class WaterSystem {
         // CPU-baked terrain height field for shoreline shading.
         // MUST be constructed and registered before createOpenSeaMaterial(): TSL node
         // graphs are built once, so the texture has to exist when the graph is created.
-        this.depthField = new TerrainDepthField(512, 4000, 32);
+        this.depthField = new TerrainDepthField(512, 8000, 64);
         setTerrainDepthTexture(this.depthField.texture);
 
         this.waterLevel = 2.4;

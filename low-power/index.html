@@ -18,6 +18,11 @@
 
     #touch-controls {
       position: fixed; inset: 0; z-index: 20; pointer-events: none;
+      display: none;
+    }
+    body.force-mobile #touch-controls,
+    .force-mobile #touch-controls {
+      display: block !important;
     }
 
     #joystick-base {
@@ -77,6 +82,16 @@
       text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
       user-select: none;
     }
+    #biome-label {
+      color: rgba(255, 255, 255, 0.85);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.4px;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+      user-select: none;
+      pointer-events: none;
+      white-space: nowrap;
+    }
 
     .top-btn {
       display: inline-flex;
@@ -99,6 +114,21 @@
       color: #38bdf8;
     }
   </style>
+  <script>
+    (function() {
+      var params = new URLSearchParams(window.location.search);
+      var isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+      var isMobileUA = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|webOS/i.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+      var isTouchOnly = window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+      var isMobile = params.has('mobile') || (isMobileUA && isTouch) || isTouchOnly;
+      if (isMobile) {
+        document.documentElement.classList.add('force-mobile');
+        document.addEventListener('DOMContentLoaded', function() {
+          document.body.classList.add('force-mobile');
+        });
+      }
+    })();
+  </script>
 </head>
 <body>
   <div id="app"></div>
@@ -106,6 +136,7 @@
   <div id="top-bar">
     <div id="title-tag">WANDERLUST [TAB S6 LITE / LOW POWER]</div>
     <div id="fps-counter">-- FPS</div>
+    <div id="biome-label"></div>
     <button id="time-toggle" class="top-btn">Dusk</button>
     <button id="zoom-toggle" class="top-btn">Zoom: 20m</button>
     <button id="sound-toggle" class="top-btn">Audio ON</button>

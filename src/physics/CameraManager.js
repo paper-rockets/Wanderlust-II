@@ -14,7 +14,9 @@ export class CameraManager {
         
         // Settings
         this.BASE_FOV = 60;
-        this.cameraZoomDist = initialZoomDist;
+        this.MIN_ZOOM = 6.0;
+        this.MAX_ZOOM = 300.0;
+        this.cameraZoomDist = Math.max(this.MIN_ZOOM, Math.min(this.MAX_ZOOM, initialZoomDist));
         this.minTerrainClearance = 8.0;
         this.minWaterClearance = 32.0; // Enforces higher minimum elevation above sea level to prevent underwater camera
         this.currentLiftY = 0.0;
@@ -108,6 +110,6 @@ export class CameraManager {
     }
     
     setZoom(dist) {
-        this.cameraZoomDist = Math.max(5.0, Math.min(300.0, dist));
+        this.cameraZoomDist = Math.max(this.MIN_ZOOM, Math.min(this.MAX_ZOOM, dist));
     }
 }

@@ -1,4 +1,4 @@
-﻿import * as THREE from 'three';
+import * as THREE from 'three';
 
 export const northPoleColors = {
     ocean:         new THREE.Color(0x0c2548),
@@ -30,15 +30,11 @@ export default {
 
         let y = macro + ridge;
 
-        // Continuous shoreline smoothing
-        if (y < 6.0) {
-            if (y > 0.0) {
-                const t = y / 6.0;
-                const st = t * t * (3.0 - 2.0 * t);
-                y = -3.0 + 9.0 * st;
-            } else {
-                y = -3.0 + y * 0.15;
-            }
+        // Natural continuous glacial slope down to water level 2.4m
+        if (y < 4.0) {
+            const t = Math.max(0.0, Math.min(1.0, (y + 3.0) / 7.0));
+            const st = t * t * (3.0 - 2.0 * t);
+            y = -3.0 + st * 7.0;
         }
 
         return y;
@@ -46,14 +42,16 @@ export default {
     getColor(h, x, z, snoise, tempColor, smoothstep) {
         const shadowNoise = snoise(x * 0.004 + 100.0, z * 0.004 + 100.0);
 
-        if (h < 0.5) {
+        if (h < -1.5) {
             tempColor.copy(northPoleColors.ocean);
-        } else if (h < 2.2) {
-            tempColor.lerpColors(northPoleColors.ocean, northPoleColors.iceWater, smoothstep(0.5, 2.2, h));
-        } else if (h < 4.0) {
-            tempColor.copy(northPoleColors.iceShelf);
+        } else if (h < 0.5) {
+            tempColor.lerpColors(northPoleColors.ocean, northPoleColors.iceWater, smoothstep(-1.5, 0.5, h));
+        } else if (h < 2.4) {
+            tempColor.lerpColors(northPoleColors.iceWater, northPoleColors.glacierShore, smoothstep(0.5, 2.4, h));
+        } else if (h < 5.0) {
+            tempColor.lerpColors(northPoleColors.glacierShore, northPoleColors.iceShelf, smoothstep(2.4, 5.0, h));
         } else if (h < 18.0) {
-            tempColor.lerpColors(northPoleColors.iceShelf, northPoleColors.snowDune, smoothstep(4.0, 18.0, h));
+            tempColor.lerpColors(northPoleColors.iceShelf, northPoleColors.snowDune, smoothstep(5.0, 18.0, h));
             if (shadowNoise > 0.15) {
                 tempColor.lerp(northPoleColors.snowShadow, (shadowNoise - 0.15) * 0.5);
             }

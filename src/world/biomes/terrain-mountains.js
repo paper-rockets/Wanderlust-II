@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 const colorDeepWater = new THREE.Color(0x1a4a8c);
+const colorWetSand = new THREE.Color(0xd9c49a);
 const colorSand = new THREE.Color(0xf2e1b8);
 const colorMountainGrass = new THREE.Color(0x4b7043); // Dark alpine green
 const colorMountainRock = new THREE.Color(0x5a5e6b);  // Slate grey rock
@@ -27,7 +28,12 @@ export default {
         ridge = ridge * ridge * (3.0 - 2.0 * ridge); // Smoothstep curve eliminates sharp crease artifacts
 
         const h = ridge * 165.0 + n2 * 22.0 + n3 * 6.0 + 8.0;
-        return h < 6.0 ? 6.0 + (h - 6.0) * 0.15 : h;
+        if (h < 4.5) {
+            const t = Math.max(0.0, Math.min(1.0, (h + 3.0) / 7.5));
+            const st = t * t * (3.0 - 2.0 * t);
+            return -3.0 + st * 7.5;
+        }
+        return h;
     },
     getColor(h, x, z, snoise, tempColor, smoothstep) {
         // Natural organic variation on snow line using noise
@@ -35,10 +41,12 @@ export default {
         const snowStart = 55.0 + nNoise;
         const snowFull = 105.0 + nNoise;
 
-        if (h < 1.0) {
+        if (h < -1.5) {
             tempColor.copy(colorDeepWater);
-        } else if (h < 2.35) {
-            tempColor.lerpColors(colorDeepWater, colorSand, smoothstep(1.0, 2.35, h));
+        } else if (h < 0.5) {
+            tempColor.lerpColors(colorDeepWater, colorWetSand, smoothstep(-1.5, 0.5, h));
+        } else if (h < 2.4) {
+            tempColor.lerpColors(colorWetSand, colorSand, smoothstep(0.5, 2.4, h));
         } else if (h < 4.2) {
             tempColor.copy(colorSand);
         } else if (h < 15.0) {

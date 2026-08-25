@@ -32,17 +32,17 @@ export function initPostProcessing() {
 // Note: flight-merged's ShaderPass samples the *bloomed* previous pass; a TSL Fn can only sample a
 // texture, so this samples the raw scene pass. Rays are therefore marginally crisper than WebGL's.
 export const uSunScreenPos = uniform(vec2(0.5, 0.5));
-export const uIntensity = uniform(0.85);
-export const uDecay = uniform(0.927);
+export const uIntensity = uniform(0.60);
+export const uDecay = uniform(0.92);
 export const uDensity = uniform(0.50);
-export const uWeight = uniform(0.75);
-export const uLumMin = uniform(0.85);
-export const uLumMax = uniform(0.97);
+export const uWeight = uniform(0.80);
+export const uLumMin = uniform(0.80);
+export const uLumMax = uniform(0.98);
 export const uDitherStrength = uniform(1.0);
 export const uEdgeFadeDist = uniform(1.5);
 export const uSunVisible = uniform(1.0);
-export const uRayColorInner = uniform(new THREE.Color(1.0, 0.9, 0.7));
-export const uRayColorOuter = uniform(new THREE.Color(1.0, 0.9, 0.7)); // == inner: flight-merged uses one flat ray colour
+export const uRayColorInner = uniform(new THREE.Color(1.0, 0.92, 0.65));
+export const uRayColorOuter = uniform(new THREE.Color(1.0, 0.60, 0.20));
 export const uHaloRadius = uniform(0.2);
 export const uHaloStrength = uniform(0.0);  // flight-merged has NO halo term; 0.25 here lifted every
                                             // sample near the sun over the 0.45 luminance gate and

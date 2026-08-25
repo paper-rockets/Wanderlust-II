@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <link rel="icon" href="data:;base64,iVBORw0KGgo=" />
   <title>Wanderlust</title>
   <style>
     :root { color-scheme: dark; }
@@ -56,17 +57,18 @@
     .force-mobile #touch-controls {
       display: block !important;
     }
-    body.force-mobile #world-map,
-    .force-mobile #world-map {
-      display: none !important;
-    }
+
     .dg { zoom: 1.2 !important; }
     .dg.ac { zoom: 1.2 !important; }
   </style>
   <script>
     (function() {
       var params = new URLSearchParams(window.location.search);
-      if (params.has('mobile') || window.self !== window.top || window.innerWidth <= 1024) {
+      var isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+      var isMobileUA = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|webOS/i.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+      var isTouchOnly = window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+      var isMobile = params.has('mobile') || (isMobileUA && isTouch) || isTouchOnly;
+      if (isMobile) {
         document.documentElement.classList.add('force-mobile');
         document.addEventListener('DOMContentLoaded', function() {
           document.body.classList.add('force-mobile');
@@ -103,6 +105,18 @@
       user-select: none;
       pointer-events: none;
       line-height: 1;
+    }
+    #biome-label {
+      color: rgba(255, 255, 255, 0.85);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.4px;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 0 8px rgba(0, 0, 0, 0.25);
+      user-select: none;
+      pointer-events: none;
+      line-height: 1;
+      white-space: nowrap;
     }
     .top-save-container {
       position: relative;
@@ -198,6 +212,7 @@
       #top-model-select { font-size: 11px !important; padding: 3px 6px !important; }
       #top-bar #top-save-setting-btn,
       #top-bar #top-save-all-btn { font-size: 11px !important; padding: 3px 6px !important; }
+      #biome-label { font-size: 11px !important; }
     }
     
     /* Avoid clipping in forced mobile viewport simulation */
@@ -207,6 +222,10 @@
       right: 10px;
       top: 10px;
       gap: 6px;
+    }
+    body.force-mobile #biome-label,
+    .force-mobile #biome-label {
+      font-size: 10px !important;
     }
     body.force-mobile #top-bar #top-save-setting-btn,
     .force-mobile #top-bar #top-save-setting-btn,
@@ -263,7 +282,7 @@
       z-index: 95 !important;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
     }
-
+    
   </style>
 </head>
 <body>
@@ -297,17 +316,16 @@ window.addEventListener("unhandledrejection", function(event) {
 
   <div id="top-bar">
     <div id="fps-counter">FPS 60</div>
+    <div id="biome-label"></div>
     <div class="top-save-container" style="display: flex; gap: 8px;">
-      <a href="low_power.html" id="top-low-power-btn" style="text-decoration: none; display: inline-flex; align-items: center; justify-content: center; background: rgba(15, 20, 28, 0.94); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 8px; padding: 4px 10px; color: #38bdf8; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 12px; font-weight: 600; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);">Tab S6 Lite Mode</a>
-      <button id="top-studio-btn" title="Open World & Grass Studio [F2]" aria-label="Studio" style="background: rgba(30, 58, 138, 0.7); border: 1px solid rgba(96, 165, 250, 0.4);">Studio (F2)</button>
       <button id="top-save-all-btn" title="Save All Settings (Restored on Reload)" aria-label="Save All">Save All</button>
       <button id="top-save-setting-btn" title="Per-Biome & Global Saves" aria-label="Save Setting">Save Setting</button>
     </div>
     <select id="top-model-select" class="top-model-select" title="Flight Model Selector" aria-label="Flight Model Selector">
+      <option value="psx_saviola_s21">Savoia</option>
       <option value="kiki">Kiki</option>
       <option value="mitsubishi_b2m2">B2M2</option>
       <option value="sopwith_pup">Sopwith</option>
-      <option value="psx_saviola_s21">Savoia</option>
       <option value="sikorski_s16">Sikorsky</option>
       <option value="princess">Whale</option>
       <option value="american_robin">Robin</option>
@@ -331,24 +349,10 @@ window.addEventListener("unhandledrejection", function(event) {
     <button id="gui-toggle-btn" title="Settings & Editor Panel" aria-label="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
   </div>
 
-  <!-- World Map Overlay -->
-  <div id="world-map" style="display: none; position: fixed; bottom: 20px; left: 20px; z-index: 15; background: rgba(10, 14, 22, 0.96); border-radius: 12px; padding: 12px; border: 1px solid rgba(255,255,255,0.3); width: 230px; box-sizing: border-box; box-shadow: 0 8px 32px rgba(0,0,0,0.6); transition: all 0.25s ease-in-out;">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-      <div id="map-title-text" style="color: #ffe066; font-family: monospace; font-size: 11px; font-weight: bold; letter-spacing: 0.5px;">RADAR MAP</div>
-      <div style="display: flex; gap: 4px; align-items: center;">
-        <button id="zoom-out-btn" title="Zoom Out" style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); color: #fff; font-family: monospace; font-size: 12px; font-weight: bold; cursor: pointer; padding: 1px 6px; border-radius: 4px; line-height: 1.2;">-</button>
-        <button id="zoom-in-btn" title="Zoom In" style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); color: #fff; font-family: monospace; font-size: 12px; font-weight: bold; cursor: pointer; padding: 1px 6px; border-radius: 4px; line-height: 1.2;">+</button>
-        <button id="expand-map-btn" title="Expand / Collapse Map (M)" style="background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); color: #66ccff; font-family: monospace; font-size: 12px; font-weight: bold; cursor: pointer; padding: 1px 6px; border-radius: 4px; line-height: 1.2;">[M]</button>
-        <button id="close-map-btn" title="Hide Map" style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); color: #ff6666; font-family: monospace; font-size: 12px; font-weight: bold; cursor: pointer; padding: 1px 6px; border-radius: 4px; line-height: 1.2;">X</button>
-      </div>
-    </div>
-    <canvas id="map-canvas" width="200" height="200" style="display: block; border-radius: 8px; margin: 0 auto; border: 1px solid rgba(255,255,255,0.35); max-width: 100%;"></canvas>
-    <div id="map-info-text" style="color: #ffffff; font-family: monospace; font-size: 10px; margin-top: 6px; opacity: 0.95; text-align: center; font-weight: bold;">Z: 0m</div>
-  </div>
+
 
   <div id="hidden-ui" style="display: none;">
       <div id="time-label"></div>
-      <div id="biome-label"></div>
       <button id="god-mode-btn">God Mode</button>
       <button id="char-toggle">MODEL: KIKI</button>
       <button id="editor-toggle">Terrain Editor</button>
@@ -403,9 +407,7 @@ window.addEventListener("unhandledrejection", function(event) {
     <div id="boost-btn">BOOST</div>
   </div>
   
-  <div id="pc-controls-hint" style="display: none; position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.5); color: white; padding: 10px 20px; border-radius: 8px; font-family: sans-serif; pointer-events: none; z-index: 100;">
-    Controls: WASD/Arrows to move, Shift to Boost, Space to Brake, Scroll Wheel to Zoom
-  </div>
+
 
   <script type="importmap">
   {

@@ -1,72 +1,53 @@
 import * as THREE from 'three';
-function smoothstep(edge0, edge1, x) {
-    const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
-    return t * t * (3 - 2 * t);
-}
 
-
-const colorDeepWater  = new THREE.Color(0x0d2d5a);
-const colorCrystalSea = new THREE.Color(0x2ab0c5);
-const colorSand       = new THREE.Color(0xc8e8f2);
-const colorValleyFloor= new THREE.Color(0x4ecdc4);
-const colorCrystalLow = new THREE.Color(0x7fffd4);
-const colorCrystalMid = new THREE.Color(0xa78bfa);
-const colorCrystalHigh= new THREE.Color(0xe0b0ff);
-const colorSpire      = new THREE.Color(0xffffff);
+const colorDeepWater   = new THREE.Color(0x0a1e3f);
+const colorCrystalSea  = new THREE.Color(0x19a0c7);
+const colorCrystalSand = new THREE.Color(0xd5effa);
+const colorCrystalFloor= new THREE.Color(0x38bdf8); // Vibrant crystalline blue bedrock
+const colorAmethystLow = new THREE.Color(0x818cf8); // Celestite / light amethyst crystal
+const colorAmethystMid = new THREE.Color(0xc084fc); // Rich purple amethyst
+const colorPrismHigh   = new THREE.Color(0xf472b6); // Luminous prism magenta crystal
+const colorSpire       = new THREE.Color(0xffffff); // Pure faceted quartz spires
 
 export default {
     name: 'Crystal Land',
     getHeight(x, z, snoise) {
-        // Broad gentle valley floor
-        const valley = snoise(x * 0.0008, z * 0.0008) * 18.0 + snoise(x * 0.002, z * 0.002) * 8.0 + 14.0;
+        // High crystalline plateau foundation (always above sea level 2.4m)
+        const baseFloor = Math.abs(snoise(x * 0.0004, z * 0.0004)) * 28.0 + 18.0;
 
-        // Crystal spire clusters — sharp narrow peaks scattered across the valley
-        const spikeN1 = snoise(x * 0.011 + 300, z * 0.011 - 200);
-        const spikeN2 = snoise(x * 0.013 - 500, z * 0.013 + 400);
-        const spikeN3 = snoise(x * 0.009 + 700, z * 0.009 + 100);
+        // Stepped quartz terraces and geometric faceted crystal ridges
+        const terrace = Math.floor(baseFloor / 6.0) * 6.0;
+        const plateau = baseFloor * 0.4 + terrace * 0.6;
 
-        let s1 = Math.max(0, spikeN1 - 0.60) / 0.40;  // threshold 0.60
-        let s2 = Math.max(0, spikeN2 - 0.62) / 0.38;
-        let s3 = Math.max(0, spikeN3 - 0.64) / 0.36;
+        // Faceted crystal harmonics & pyramidal spikes across the entire terrain
+        const fx = Math.abs((x * 0.015) % 2.0 - 1.0);
+        const fz = Math.abs((z * 0.015) % 2.0 - 1.0);
+        const pyramidFacet = (1.0 - Math.max(fx, fz)) * 18.0;
 
-        s1 = s1 * s1 * (3.0 - 2.0 * s1);
-        s2 = s2 * s2 * (3.0 - 2.0 * s2);
-        s3 = s3 * s3 * (3.0 - 2.0 * s3);
+        // Giant sharp quartz towers and crystalline obelisks
+        const spike1 = Math.pow(Math.max(0, snoise(x * 0.0025 + 300, z * 0.0025 - 200)), 2.0) * 75.0;
+        const spike2 = Math.pow(Math.max(0, snoise(x * 0.0042 - 500, z * 0.0042 + 400)), 2.2) * 55.0;
+        const spike3 = Math.pow(Math.max(0, snoise(x * 0.0075 + 700, z * 0.0075 + 100)), 2.5) * 40.0;
 
-        const spires = (s1 * 90.0) + (s2 * 70.0) + (s3 * 55.0);
+        // Crystalline ridges and needle formations
+        const ridge = (1.0 - Math.abs(snoise(x * 0.008 + 120, z * 0.008 - 120))) * 14.0;
 
-        // Shallow crystal lakes scattered in low spots
-        const lakeN = snoise(x * 0.006 + 900, z * 0.006 - 700);
-        let lake = 0.0;
-        if (lakeN > 0.70) {
-            let lt = Math.min(1.0, (lakeN - 0.70) / 0.15);
-            lt = lt * lt * (3.0 - 2.0 * lt);
-            lake = -lt * 18.0;
-        }
-
-        const totalH = valley + spires + lake;
-        return totalH < -2.0 ? -2.0 + (totalH + 2.0) * 0.15 : totalH;
+        const totalH = plateau + pyramidFacet + spike1 + spike2 + spike3 + ridge;
+        return Math.max(12.0, totalH);
     },
     getColor(h, x, z, snoise, tempColor, smoothstep) {
         const shimmer = snoise(x * 0.025 + 1000, z * 0.025 + 1000) * 0.5 + 0.5;
 
-        if (h < -1.0) {
-            tempColor.copy(colorDeepWater);
-        } else if (h < 1.0) {
-            tempColor.lerpColors(colorDeepWater, colorCrystalSea, smoothstep(-1.0, 1.0, h));
-        } else if (h < 3.5) {
-            tempColor.copy(colorSand);
-        } else if (h < 14.0) {
-            tempColor.lerpColors(colorSand, colorValleyFloor, smoothstep(3.5, 14.0, h));
-        } else if (h < 25.0) {
-            tempColor.lerpColors(colorValleyFloor, colorCrystalLow, smoothstep(14.0, 25.0, h));
-        } else if (h < 55.0) {
-            const t = smoothstep(25.0, 55.0, h);
-            tempColor.lerpColors(colorCrystalLow, colorCrystalMid, t);
-            // shimmer shift toward purple on certain faces
-            if (shimmer > 0.65) tempColor.lerp(colorCrystalHigh, (shimmer - 0.65) * 1.5);
+        if (h < 15.0) {
+            tempColor.lerpColors(colorCrystalSand, colorCrystalFloor, smoothstep(8.0, 15.0, h));
+        } else if (h < 30.0) {
+            tempColor.lerpColors(colorCrystalFloor, colorAmethystLow, smoothstep(15.0, 30.0, h));
+        } else if (h < 65.0) {
+            const t = smoothstep(30.0, 65.0, h);
+            tempColor.lerpColors(colorAmethystLow, colorAmethystMid, t);
+            if (shimmer > 0.5) tempColor.lerp(colorPrismHigh, (shimmer - 0.5) * 1.8);
         } else {
-            tempColor.lerpColors(colorCrystalMid, colorSpire, smoothstep(55.0, 95.0, h));
+            tempColor.lerpColors(colorAmethystMid, colorSpire, smoothstep(65.0, 110.0, h));
         }
     }
 };

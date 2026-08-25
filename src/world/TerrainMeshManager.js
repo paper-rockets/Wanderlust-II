@@ -1,4 +1,4 @@
-﻿import * as THREE from 'three';
+import * as THREE from 'three';
 import { snoise } from './Noise.js';
 import { getWorldHeight, getWorldColor } from './TerrainGenerator.js';
 
@@ -22,9 +22,79 @@ export class TerrainMeshManager {
         this.tempColor = new THREE.Color();
     }
 
+    invalidate() {
+        this.lastTerrainGridX = -999999;
+        this.lastTerrainGridZ = -999999;
+        this.lastDepthFieldGridX = -999999;
+        this.lastDepthFieldGridZ = -999999;
+    }
+
+    setResolution(newRes, playerX = null, playerZ = null, animeWaterSystem = null) {
+        const parsedRes = parseInt(newRes, 10);
+        if (!parsedRes || parsedRes <= 0) return;
+        this.terrainRes = parsedRes;
+
+        const newGeo = new THREE.PlaneGeometry(this.terrainSize, this.terrainSize, this.terrainRes, this.terrainRes);
+        newGeo.rotateX(-Math.PI / 2);
+
+        const count = newGeo.attributes.position.count;
+        newGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(count * 3), 3));
+
+        if (this.terrainGeo) {
+            this.terrainGeo.dispose();
+        }
+        this.terrainGeo = newGeo;
+        this.terrain.geometry = newGeo;
+
+        this.invalidate();
+
+        if (playerX !== null && playerZ !== null) {
+            this.update(playerX, playerZ, animeWaterSystem);
+        }
+    }
+
     _smoothstep(edge0, edge1, x) {
         const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
         return t * t * (3 - 2 * t);
+    }
+
+    getGroundedHeight(worldX, worldZ) {
+        const gridX = (this.lastTerrainGridX !== -9999 && this.lastTerrainGridX !== -999999) ? this.lastTerrainGridX : 0;
+        const gridZ = (this.lastTerrainGridZ !== -9999 && this.lastTerrainGridZ !== -999999) ? this.lastTerrainGridZ : 0;
+        const halfSize = this.terrainSize * 0.5;
+        const cellSpacing = this.terrainSize / this.terrainRes;
+        const localX = worldX - gridX;
+        const localZ = worldZ - gridZ;
+
+        const u = (localX + halfSize) / cellSpacing;
+        const v = (localZ + halfSize) / cellSpacing;
+
+        const col0 = Math.floor(u);
+        const row0 = Math.floor(v);
+
+        if (col0 < 0 || col0 >= this.terrainRes || row0 < 0 || row0 >= this.terrainRes) {
+            return getWorldHeight(worldX, worldZ);
+        }
+
+        const fx = u - col0;
+        const fz = v - row0;
+        const N = this.terrainRes + 1;
+        const pos = this.terrainGeo && this.terrainGeo.attributes ? this.terrainGeo.attributes.position : null;
+
+        if (pos) {
+            const h00 = pos.getY(row0 * N + col0);
+            const h10 = pos.getY(row0 * N + col0 + 1);
+            const h01 = pos.getY((row0 + 1) * N + col0);
+            const h11 = pos.getY((row0 + 1) * N + col0 + 1);
+
+            if (fx + fz <= 1.0) {
+                return h00 + fx * (h10 - h00) + fz * (h01 - h00);
+            } else {
+                return h11 + (1.0 - fx) * (h01 - h11) + (1.0 - fz) * (h10 - h11);
+            }
+        }
+
+        return getWorldHeight(worldX, worldZ);
     }
 
     update(playerX, playerZ, animeWaterSystem) {

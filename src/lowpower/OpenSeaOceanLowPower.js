@@ -38,7 +38,7 @@ export const objActiveUniform = uniform(0.0);
 // Shoreline depth field uniforms
 export const DEPTH_FIELD_SENTINEL = -1000.0;
 const _depthFieldPlaceholder = new THREE.DataTexture(
-  new Float32Array([DEPTH_FIELD_SENTINEL]), 1, 1, THREE.RedFormat, THREE.FloatType
+  new Uint16Array([THREE.DataUtils.toHalfFloat(DEPTH_FIELD_SENTINEL)]), 1, 1, THREE.RedFormat, THREE.HalfFloatType
 );
 _depthFieldPlaceholder.minFilter = THREE.LinearFilter;
 _depthFieldPlaceholder.magFilter = THREE.LinearFilter;
@@ -186,8 +186,17 @@ export const createLowPowerOpenSeaMaterial = () => {
     const H = normalize(sunDirUniform.add(V));
     const spec = pow(max(dot(N, H), 0.0), 32.0).mul(0.45);
 
-    const finalColor = mix(body, skyRefl, fresnel).add(sunColorUniform.mul(spec));
-    return vec4(finalColor, waterOpacityUniform);
+    const finalColor = mix(body, skyRefl, fresnel).add(sunColorUniform.mul(spec)).toVar();
+    const alpha = waterOpacityUniform.toVar();
+
+    // Dissolve the ocean seamlessly to the horizon color and 0 opacity before the mesh boundary (at 8,000m XZ)
+    const camDistXZ = length(positionWorld.xz.sub(cameraPosition.xz));
+    const horizonFade = smoothstep(float(5500.0), float(7800.0), camDistXZ);
+
+    finalColor.assign(mix(finalColor, horizonColorUniform, horizonFade));
+    alpha.assign(alpha.mul(float(1.0).sub(horizonFade)));
+
+    return vec4(finalColor, alpha);
   })();
 
   return oceanMaterial;

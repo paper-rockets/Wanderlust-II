@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { MeshStandardNodeMaterial } from 'three/webgpu';
 import {
-    Fn, vec2, vec3, float, sin, cos, dot, mix, clamp, pow,
+    Fn, vec2, vec3, float, sin, cos, dot, mix, clamp, pow, length,
     positionWorld, normalWorld, smoothstep as tslSmoothstep,
     floor, fract, uniform, cameraPosition, normalize, reflect, step, texture,
     vertexColor
@@ -63,14 +63,20 @@ export function createTerrainColorNode(
         const halfDir = normalize(sunDirection.add(viewDir));
         const shimmerMult = uShimmerMult || float(1.0);
 
+        // Distance-based glint attenuation (prevents high-frequency sparkle noise / grain on distant terrain)
+        const camDist = length(cameraPosition.sub(p));
+        const glintDistFade = clamp(float(1.0).sub(camDist.sub(40.0).div(200.0)), 0.0, 1.0);
+
         // Biome Masking - reconstruct true world Z by adding floating origin offset
-        // Desert Dunes: [155,000 - 180,000] (Sand shimmer)
-        // North Pole: [180,000 - 205,000] & Misty Mountains: [40,000 - 70,000] (Snow & ice shimmer)
+        // Crystal Land: [42,000 - 65,000] (Crystal prism shimmer)
+        // Misty Mountains: [100,000 - 125,000] & North Pole: [172,000 - 197,000] (Snow & ice shimmer)
+        // Desert Dunes: [137,000 - 162,000] (Sand shimmer)
         const worldZ = p.z.add(uWorldOriginZ || float(0.0));
         const wz = fract(worldZ.div(float(215000.0))).mul(215000.0);
-        const desertMask = tslSmoothstep(float(152500.0), float(155000.0), wz).mul(tslSmoothstep(float(182500.0), float(180000.0), wz));
-        const northPoleMask = tslSmoothstep(float(177500.0), float(180000.0), wz).mul(tslSmoothstep(float(207500.0), float(205000.0), wz));
-        const mtnMask = tslSmoothstep(float(37500.0), float(40000.0), wz).mul(tslSmoothstep(float(72500.0), float(70000.0), wz));
+        const crystalMask = tslSmoothstep(float(40000.0), float(42000.0), wz).mul(tslSmoothstep(float(67000.0), float(65000.0), wz));
+        const mtnMask = tslSmoothstep(float(98000.0), float(100000.0), wz).mul(tslSmoothstep(float(127000.0), float(125000.0), wz));
+        const desertMask = tslSmoothstep(float(135000.0), float(137000.0), wz).mul(tslSmoothstep(float(164000.0), float(162000.0), wz));
+        const northPoleMask = tslSmoothstep(float(170000.0), float(172000.0), wz).mul(tslSmoothstep(float(199000.0), float(197000.0), wz));
         const snowBiomeMask = clamp(northPoleMask.add(mtnMask), 0.0, 1.0);
 
         // Resolve noise texture
@@ -91,15 +97,14 @@ export function createTerrainColorNode(
         const rimStrength = pow(rim, float(4.5)).mul(0.5);
         const rimGlow = vec3(1.0, 0.72, 0.38).mul(rimStrength);
 
-        // Journey Sand Specular Glitter (Blinn-Phong Specular)
+        // Journey Sand Specular Glitter (Blinn-Phong Specular with distance fade)
         const NdotH = clamp(dot(norm, halfDir), 0.0, 1.0);
-        const mainSpec = pow(NdotH, float(12.0)).mul(4.5);
-
+        const mainSpec = pow(NdotH, float(24.0)).mul(1.5);
         const sandNoiseVal = rawTex ? texture(rawTex, p.xz.mul(0.07)).r.mul(1.2) : vnoise2D(p.xz.mul(2.5)).mul(1.2);
-        const textureGlitter = pow(clamp(sandNoiseVal, 0.0, 1.0), float(1.8));
+        const textureGlitter = pow(clamp(sandNoiseVal, 0.0, 1.0), float(2.2)).mul(glintDistFade);
         const sandSpec = mainSpec.mul(textureGlitter);
 
-        const rimSpec = pow(rim, float(2.8)).mul(textureGlitter).mul(2.5);
+        const rimSpec = pow(rim, float(2.8)).mul(textureGlitter).mul(1.5);
         const sandSpecColor = sandSpec.add(rimSpec).mul(vec3(1.0, 0.82, 0.55)).mul(shimmerMult);
         const sandEffects = rimGlow.add(sandSpecColor).mul(isSand);
 
@@ -110,23 +115,43 @@ export function createTerrainColorNode(
         const snowRimStrength = pow(rim, float(4.0)).mul(0.35);
         const snowRimGlow = vec3(0.65, 0.85, 1.0).mul(snowRimStrength);
 
-        // Diamond Snow & Ice Specular Glitter (Blinn-Phong Specular)
-        const mainSnowSpec = pow(NdotH, float(10.0)).mul(4.0);
-        const snowNoiseVal = rawTex ? texture(rawTex, p.xz.mul(0.12)).r.mul(1.25) : vnoise2D(p.xz.mul(4.0)).mul(1.25);
-        const snowGlitter = pow(clamp(snowNoiseVal, 0.0, 1.0), float(2.0));
+        // Diamond Snow & Ice Specular Glitter (Blinn-Phong Specular with distance fade)
+        const mainSnowSpec = pow(NdotH, float(22.0)).mul(1.6);
+        const snowNoiseVal = rawTex ? texture(rawTex, p.xz.mul(0.12)).r.mul(1.25) : vnoise2D(p.xz.mul(3.0)).mul(1.25);
+        const snowGlitter = pow(clamp(snowNoiseVal, 0.0, 1.0), float(2.5)).mul(glintDistFade);
         const snowSpec = mainSnowSpec.mul(snowGlitter);
 
-        const snowRimSpec = pow(rim, float(2.8)).mul(snowGlitter).mul(2.5);
+        const snowRimSpec = pow(rim, float(2.8)).mul(snowGlitter).mul(1.5);
         const snowSpecColor = snowSpec.add(snowRimSpec).mul(vec3(0.85, 0.95, 1.0)).mul(1.2).mul(shimmerMult);
         const snowEffects = snowRimGlow.add(snowSpecColor).mul(isSnow);
 
-        // 3. High-Frequency Painterly Grass Mottling & Randomization Texture (Protected: NEVER applies to sand dunes or snow)
+        // 3. Crystalline Prism & Gemstone Shimmer (Restricted to Crystal Land)
+        // A. Iridescent Prism Fresnel Rim
+        const crystalRimStrength = pow(rim, float(3.2)).mul(0.45);
+        const prismShift = sin(p.x.mul(0.006).add(p.z.mul(0.006))).mul(0.5).add(0.5);
+        const crystalRimColor = mix(vec3(0.65, 0.35, 1.0), vec3(0.2, 0.85, 1.0), prismShift);
+        const crystalRimGlow = crystalRimColor.mul(crystalRimStrength);
+
+        // B. Smooth Broad Specular Sheen (Clean, luminous crystal highlights without aliasing)
+        const crystalSheen = pow(NdotH, float(28.0)).mul(0.75);
+        const crystalSheenColor = crystalSheen.mul(mix(vec3(0.8, 0.65, 1.0), vec3(0.35, 0.85, 1.0), prismShift));
+
+        // C. Subtle Micro-Glints (Sharp localized sparkles near camera only)
+        const tightSpec = pow(NdotH, float(64.0)).mul(2.2);
+        const crystalNoiseVal = rawTex ? texture(rawTex, p.xz.mul(0.08)).r : vnoise2D(p.xz.mul(2.0));
+        const crystalGlitter = pow(clamp(crystalNoiseVal, 0.0, 1.0), float(3.0)).mul(glintDistFade);
+        const crystalMicroGlint = tightSpec.mul(crystalGlitter).mul(vec3(0.95, 0.90, 1.0));
+
+        const crystalEffects = crystalRimGlow.add(crystalSheenColor).add(crystalMicroGlint).mul(shimmerMult).mul(crystalMask);
+
+        // 4. High-Frequency Painterly Grass Mottling (Protected: NEVER applies to sand dunes, snow, or crystals)
         const isGrass = step(float(0.12), baseColor.g)
             .mul(step(baseColor.r, baseColor.g.mul(1.25)))
             .mul(step(baseColor.b, baseColor.g.mul(1.15)))
             .mul(float(1.0).sub(isSand))
             .mul(float(1.0).sub(desertMask))
-            .mul(float(1.0).sub(snowBiomeMask));
+            .mul(float(1.0).sub(snowBiomeMask))
+            .mul(float(1.0).sub(crystalMask));
 
         const mScale = uGrassMottleScale ? uGrassMottleScale : float(1.0);
         const mIntensity = uGrassMottleIntensity ? uGrassMottleIntensity : float(1.0);
@@ -152,7 +177,7 @@ export function createTerrainColorNode(
 
         const surfaceColor = mix(baseColor.rgb, mottledGrass, isGrass.mul(mIntensity));
 
-        return surfaceColor.add(sandEffects).add(snowEffects);
+        return surfaceColor.add(sandEffects).add(snowEffects).add(crystalEffects);
     });
 }
 

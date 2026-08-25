@@ -64,13 +64,11 @@ export class PlayerPhysics {
         const groundY = Math.max(getWorldHeight(this.character.position.x, this.character.position.z), seaLevelY);
         const minimumFlightHeight = 24;
         
-        // In Lush Jungle, raise the floor so Kiki flies above the canopy (trees are ~36m tall)
-        const biome = getBiomeAt(this.character.position.x, this.character.position.z);
-        const inJungle = biome && biome.name && biome.name.toLowerCase().includes('jungle');
-        const canopyHeight = inJungle ? 42 : 18; // clearance above ground/sea
+        // Clearance above ground/sea
+        const canopyHeight = 18;
 
         // Auto-swoop pitch adjustment before quaternion calculation
-        const targetMinY = groundY + (inJungle ? 65 : 45);
+        const targetMinY = groundY + 45;
         if (this.character.position.y < targetMinY) {
             const depth = targetMinY - this.character.position.y;
             const swoopPitch = Math.min(Math.PI / 4, depth / 40.0);

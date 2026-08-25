@@ -3,6 +3,18 @@
 
 export const FLIGHT_MODELS = [
     {
+        id: 'psx_saviola_s21',
+        name: 'Savoia',
+        file: 'flight_models/psx_saviola_s21.glb',
+        rotX: 0,
+        rotY: 180,
+        rotZ: 0,
+        scale: 1.6,
+        offsetY: 0,
+        anim: 'Saviola flight',
+        isPlane: true
+    },
+    {
         id: 'kiki',
         name: 'Kiki',
         file: 'flight_models/kiki-draco.glb',
@@ -35,18 +47,6 @@ export const FLIGHT_MODELS = [
         scale: 1.6,
         offsetY: 0,
         anim: 'Take 001',
-        isPlane: true
-    },
-    {
-        id: 'psx_saviola_s21',
-        name: 'Savoia',
-        file: 'flight_models/psx_saviola_s21.glb',
-        rotX: 0,
-        rotY: 180,
-        rotZ: 0,
-        scale: 1.6,
-        offsetY: 0,
-        anim: 'Saviola flight',
         isPlane: true
     },
     {
@@ -147,7 +147,9 @@ export const FLIGHT_MODELS = [
         rotZ: 0,
         scale: 2.8,
         offsetY: 2.5,
-        anim: 'Take 001'
+        anim: 'Take 001',
+        transparent: false,
+        alphaTest: 0.01
     },
     {
         id: 'charizard',

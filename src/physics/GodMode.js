@@ -5,10 +5,14 @@ import { getWorldHeight } from '../world/TerrainGenerator.js';
 const _flyFwd = new THREE.Vector3();
 const _flyRight = new THREE.Vector3();
 const _flyUp = new THREE.Vector3(0, 1, 0);
+const _lookDir = new THREE.Vector3();
+
+let _isZKeyDown = false;
+let _baseGodFov = 60.0;
 
 export function setupGodMode(scene, cameraBase, renderer, playerGrp) {
-    // Huge far clipping plane (10M units) so zooming out and going high never clips terrain/world
-    const godCamera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.5, 10000000);
+    // Ultra-wide depth range: 0.01m near plane for millimeter full zoom-in, 10M far plane for unlimited zoom-out
+    const godCamera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 10000000);
     godCamera.position.set(0, 150, 400);
 
     // CRITICAL: Attach godCamera directly to scene (world space), NOT cameraBase!
@@ -16,7 +20,7 @@ export function setupGodMode(scene, cameraBase, renderer, playerGrp) {
     scene.add(godCamera);
 
     const godControls = new OrbitControls(godCamera, renderer.domElement);
-    godControls.minDistance = 0.5;
+    godControls.minDistance = 0.001; // Allow zooming all the way in to millimeter range
     godControls.maxDistance = 10000000; // Unlimited zoom out distance
     godControls.minPolarAngle = 0.0001; // Allow looking straight down from high altitude
     godControls.maxPolarAngle = Math.PI - 0.0001; // Full 180-degree vertical freedom
@@ -40,6 +44,62 @@ export function setupGodMode(scene, cameraBase, renderer, playerGrp) {
         TWO: THREE.TOUCH.DOLLY_PAN
     };
 
+    // Dynamic wheel zoom speed modifier: Shift for turbo zoom, Alt/Ctrl for precision zoom
+    const domElem = renderer.domElement;
+    if (domElem) {
+        domElem.addEventListener('wheel', (e) => {
+            if (!godControls.enabled) return;
+            if (e.shiftKey) {
+                godControls.zoomSpeed = 4.5;
+            } else if (e.altKey || e.ctrlKey) {
+                godControls.zoomSpeed = 0.4;
+            } else {
+                godControls.zoomSpeed = 1.6;
+            }
+        }, { passive: true, capture: true });
+
+        // Double-click to zoom directly in towards clicked position
+        const _raycaster = new THREE.Raycaster();
+        const _mouseVec = new THREE.Vector2();
+        domElem.addEventListener('dblclick', (e) => {
+            if (!godControls.enabled) return;
+            const rect = domElem.getBoundingClientRect();
+            _mouseVec.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            _mouseVec.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+            _raycaster.setFromCamera(_mouseVec, godCamera);
+
+            // Compute ray intersection along look ray or scene objects
+            const curDist = godCamera.position.distanceTo(godControls.target);
+            const zoomInStep = Math.max(2.0, curDist * 0.5);
+            godCamera.position.addScaledVector(_raycaster.ray.direction, zoomInStep);
+            godControls.target.addScaledVector(_raycaster.ray.direction, zoomInStep * 0.5);
+            godControls.update();
+        });
+    }
+
+    // Keyboard zoom controls: Z for telescopic lens zoom, + / - for dolly zoom steps
+    window.addEventListener('keydown', (e) => {
+        if (!godControls.enabled) return;
+        if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+        if (e.key === 'z' || e.key === 'Z') {
+            _isZKeyDown = true;
+        }
+        if (e.key === '=' || e.key === '+' || e.key === 'PageUp') {
+            godControls.dollyIn(1.35);
+            godControls.update();
+        }
+        if (e.key === '-' || e.key === '_' || e.key === 'PageDown') {
+            godControls.dollyOut(1.35);
+            godControls.update();
+        }
+    });
+
+    window.addEventListener('keyup', (e) => {
+        if (e.key === 'z' || e.key === 'Z') {
+            _isZKeyDown = false;
+        }
+    });
+
     if (playerGrp) {
         godControls.target.copy(playerGrp.position);
     }
@@ -50,13 +110,13 @@ export function setupGodMode(scene, cameraBase, renderer, playerGrp) {
 
 export function clampGodCameraAboveTerrainAndWater(godControls, godCamera, waterLevel = 2.4) {
     const effWaterY = (waterLevel !== undefined && waterLevel !== null) ? waterLevel : 2.4;
-    const minWaterClearance = 2.5;
-    const minTerrainClearance = 2.0;
+    const minWaterClearance = 0.05;
+    const minTerrainClearance = 0.05;
 
     // 1. Clamp godControls.target
     if (godControls && godControls.target) {
         const targetTerrainH = getWorldHeight(godControls.target.x, godControls.target.z);
-        const minTargetY = Math.max(targetTerrainH + 1.0, effWaterY + 1.0);
+        const minTargetY = Math.max(targetTerrainH + 0.02, effWaterY + 0.02);
         if (godControls.target.y < minTargetY) {
             godControls.target.y = minTargetY;
         }
@@ -79,6 +139,7 @@ export function toggleGodMode(isGodMode, godCamera, camera, godControls, playerG
         camera.getWorldPosition(godCamera.position);
         camera.getWorldQuaternion(godCamera.quaternion);
 
+        godCamera.near = 0.01;
         godCamera.far = 10000000;
         godCamera.updateProjectionMatrix();
 
@@ -101,11 +162,31 @@ export function updateGodMode(dt, keys, godControls, godCamera, waterLevel = 2.4
     // Process smooth OrbitControls damping and mouse/wheel updates
     godControls.update();
 
+    // Prevent OrbitControls target freeze when zooming in close
+    // As the camera zooms close to target, advance target along view direction so zooming in continues smoothly
+    godCamera.getWorldDirection(_lookDir);
+    const distToTarget = godCamera.position.distanceTo(godControls.target);
+    if (distToTarget < 0.5) {
+        godControls.target.copy(godCamera.position).addScaledVector(_lookDir, 0.5);
+    }
+
+    // Smooth telescopic optical FOV zoom when holding Z
+    const targetFov = _isZKeyDown ? 10.0 : (window.params && window.params.cameraFov ? window.params.cameraFov : 60.0);
+    if (Math.abs(godCamera.fov - targetFov) > 0.05) {
+        godCamera.fov = THREE.MathUtils.lerp(godCamera.fov, targetFov, 1.0 - Math.exp(-12.0 * dt));
+        godCamera.updateProjectionMatrix();
+    }
+
     if (keys) {
-        // Dynamically scale movement speed based on distance/height so panning high in the sky feels fast and responsive
+        // Dynamically scale movement speed based on distance/height so panning high in the sky feels fast, while close-up is precise
+        const effWaterY = (waterLevel !== undefined && waterLevel !== null) ? waterLevel : 2.4;
+        const camTerrainH = getWorldHeight(godCamera.position.x, godCamera.position.z);
+        const altAboveSurface = Math.max(0.1, godCamera.position.y - Math.max(camTerrainH, effWaterY));
         const currentDist = godCamera.position.distanceTo(godControls.target);
-        const speedMult = Math.max(1.0, currentDist * 0.05, godCamera.position.y * 0.05);
-        const moveSpeed = (keys.shift ? 400.0 : 100.0) * speedMult * dt;
+        
+        const speedMult = Math.max(0.05, currentDist * 0.04, altAboveSurface * 0.04);
+        const baseSpeed = keys.shift ? 400.0 : (keys.alt ? 15.0 : 80.0);
+        const moveSpeed = baseSpeed * speedMult * dt;
 
         godCamera.getWorldDirection(_flyFwd);
         _flyFwd.y = 0;

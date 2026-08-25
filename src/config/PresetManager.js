@@ -1,3 +1,5 @@
+import { liveSync } from '../core/LiveSync.js';
+
 export function downloadPresetFile(data, filename) {
     try {
         const jsonStr = JSON.stringify(data, null, 2);
@@ -60,6 +62,9 @@ export function updateAllPresetDropdowns(selectedName, presetDropdownControllers
 
 export function applyPresetData(p, ctx = {}) {
     if (!p) return;
+    if (!ctx._isSyncing) {
+        liveSync.sendFullPreset(p);
+    }
     const {
         envConfigs,
         params,
@@ -156,7 +161,7 @@ export function saveAllSettings(ctx = {}) {
         savedState.guiData = gui.save();
     }
     if (flightModelManager) {
-        savedState.modelId = flightModelManager.getCurrentConfig()?.id || 'kiki';
+        savedState.modelId = flightModelManager.getCurrentConfig()?.id || 'psx_saviola_s21';
     }
     if (timePhase !== undefined) {
         savedState.timePhase = timePhase;
@@ -289,7 +294,7 @@ export function loadAllSettings(ctx = {}) {
         }
 
         if (saved.cameraZoomDist !== undefined && typeof setCameraZoomDist === 'function') {
-            setCameraZoomDist(saved.cameraZoomDist);
+            setCameraZoomDist(Math.max(6.0, Math.min(300.0, saved.cameraZoomDist)));
         }
 
         if (saved.crystalSettings) {

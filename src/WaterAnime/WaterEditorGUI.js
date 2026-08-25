@@ -34,16 +34,24 @@ export class WaterEditorGUI {
         this.waterSystem = waterSystem;
 
         if (parentGui) {
-            this.gui = parentGui.addFolder('🌊 Ocean & Waves (Kimi Sea)');
+            this.gui = parentGui.addFolder('Ocean and Waves (Kimi Sea)');
         } else {
-            this.gui = new GUI({ title: '🌊 Ocean & Waves (Kimi Sea)' });
+            this.gui = new GUI({ title: 'Ocean and Waves (Kimi Sea)' });
         }
 
         // Quick button to open full floating modal UI
-        this.gui.add({ openModal: () => { if (window.waterModalUI) window.waterModalUI.toggle(); } }, 'openModal').name('🌊 Open Sea Modal (O)');
+        this.gui.add({
+            openModal: () => {
+                if (window.waterModalUI) {
+                    window.waterModalUI.toggle();
+                } else if (window.summonWaterModal) {
+                    window.summonWaterModal(true);
+                }
+            }
+        }, 'openModal').name('Open Sea Modal (O)');
 
         // Performance & Quality Controls
-        const fPerf = this.gui.addFolder('⚡ Quality & Performance');
+        const fPerf = this.gui.addFolder('Quality and Performance');
         const perfState = {
             quality: 'High (Cinematic)',
             resolution: '512x512 (Ultra)',
@@ -78,7 +86,7 @@ export class WaterEditorGUI {
             windSpread: 45
         };
 
-        const fWaves = this.gui.addFolder('🌊 Waves & Scale');
+        const fWaves = this.gui.addFolder('Waves and Scale');
         fWaves.add(oceanScaleUniform, 'value', 0.1, 4.0, 0.05).name('Ocean Scale (Density)');
         fWaves.add(waveHeightUniform, 'value', 0.0, 4.0, 0.05).name('Global Wave Height');
         fWaves.add(swellWavelengthUniform, 'value', 0.2, 4.0, 0.05).name('Swell Wavelength');
@@ -94,21 +102,21 @@ export class WaterEditorGUI {
             waterSystem.setHeight(v);
         });
 
-        const fColors = this.gui.addFolder('🎨 Ocean Colors');
+        const fColors = this.gui.addFolder('Ocean Colors');
         fColors.addColor(colors, 'deep').name('Deep Abyss Color').onChange(c => deepColorUniform.value.set(c));
         fColors.addColor(colors, 'shallow').name('Shallow Crest Color').onChange(c => shallowColorUniform.value.set(c));
         fColors.addColor(colors, 'horizon').name('Horizon Blend Color').onChange(c => horizonColorUniform.value.set(c));
         fColors.addColor(colors, 'zenith').name('Zenith Sky Color').onChange(c => zenithColorUniform.value.set(c));
         fColors.addColor(colors, 'sun').name('Sun Specular Color').onChange(c => sunColorUniform.value.set(c));
 
-        const fSurface = this.gui.addFolder('✨ Surface & Foam');
+        const fSurface = this.gui.addFolder('Surface and Foam');
         fSurface.add(waterOpacityUniform, 'value', 0.1, 1.0, 0.01).name('Water Opacity');
         fSurface.add(detailAmountUniform, 'value', 0.0, 3.0, 0.05).name('Capillary Choppiness');
         fSurface.add(foamAmountUniform, 'value', 0.0, 3.0, 0.05).name('Foam Amount');
         fSurface.add(chopPatchinessUniform, 'value', 0.0, 3.0, 0.05).name('Chop Patchiness');
         fSurface.add(foamEnabledUniform, 'value', 0.0, 1.0, 1.0).name('Foam Enabled (0/1)');
 
-        const fShore = this.gui.addFolder('🏖️ Shore');
+        const fShore = this.gui.addFolder('Shore');
         fShore.addColor(colors, 'sand').name('Sand Band Color').onChange(c => sandColorUniform.value.set(c));
         fShore.addColor(colors, 'shoreShallow').name('Shore Shallow Color').onChange(c => shoreShallowColorUniform.value.set(c));
         fShore.add(shoreDepthUniform, 'value', 0.5, 30.0, 0.1).name('Shore Depth (m)');
@@ -118,10 +126,10 @@ export class WaterEditorGUI {
         fShore.add(shoreFoamStrengthUniform, 'value', 0.0, 3.0, 0.05).name('Shore Foam Strength');
         fShore.add(shoreRefractionUniform, 'value', 0.0, 2.0, 0.01).name('Shore Refraction');
 
-        const fSpectrum = this.gui.addFolder('📊 Spectral Waves');
+        const fSpectrum = this.gui.addFolder('Spectral Waves');
         fSpectrum.add({ randomize: () => {
             randomizeSeaSpectrum();
-        } }, 'randomize').name('🎲 Randomize Wave Spectrum');
+        } }, 'randomize').name('Randomize Wave Spectrum');
 
         WAVE_PARAMS.forEach((p, i) => {
             const sub = fSpectrum.addFolder(`Wave ${i + 1} (${p.wavelength.toFixed(1)}m)`);

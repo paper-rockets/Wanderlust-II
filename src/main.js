@@ -1,8 +1,8 @@
 import { initMilkyWay, updateMilkyWay, milkyWayParams, applyMilkyWayTilt, uMilkyWayOpacity, uMilkyWayBrightness, uMilkyWayContrast, uMilkyWayHue, uMilkyWaySat } from './environment/MilkyWaySystem.js';
-import { initMoon, initAurora, updateAurora, auroraParams, uAuroraOpacity, uAuroraIntensity, uAuroraTime } from './environment/CelestialObjects.js';
+import { initMoon, updateMoon, moonParams, initAurora, updateAurora, auroraParams, uAuroraOpacity, uAuroraIntensity, uAuroraTime } from './environment/CelestialObjects.js';
 import { initAudio, selectMusicTrack, toggleMusic, getAudioContext, getWindGain, getWindFilter, getMusicGain, setAutoAdvance, setMusicMuted as setAudioMuted, updateWindSound, tracks, isTrackPlaying, getCurrentTrackIndex } from './audio/MusicSynthesizer.js';
 import { saveAllSettings as runSaveAllSettings, loadAllSettings as runLoadAllSettings, downloadPresetFile, applyPresetData as runApplyPresetData, handlePresetFile as runHandlePresetFile, updateAllPresetDropdowns } from './config/PresetManager.js';
-import { initMapUI, toggleMapExpand, drawWorldMap as _drawWorldMap, showVisualToast, toggleFullscreen } from './ui/MinimapHUD.js';
+import { initMapUI, toggleMapExpand, drawWorldMap, showVisualToast, toggleFullscreen } from './ui/MinimapHUD.js';
 import terrainArch from './world/biomes/terrain-archipelago.js';
 import terrainGhibli from './world/biomes/terrain-ghibli.js';
 import terrainMtn from './world/biomes/terrain-mountains.js';
@@ -14,14 +14,23 @@ import terrainNorthPole, { northPoleColors } from './world/biomes/terrain-northp
 
 import { WaterSystem } from './WaterAnime/WaterSystem.js';
 import { WaterEditorGUI } from './WaterAnime/WaterEditorGUI.js';
+import { WaterModalUI } from './tools/WaterModalUI.js';
 import { zenithColorUniform, horizonColorUniform, sunColorUniform, sunDirUniform, deepColorUniform, shallowColorUniform } from './WaterAnime/OpenSeaOcean.js';
 import { cleanBiomeName, DEFAULT_BIOME_FOG_CONFIGS } from './config/FogConfig.js';
+import { DEFAULT_PRESETS } from './config/PresetsConfig.js';
 import { CrystalSystem } from './entities/CrystalSystem.js';
 import { RainSystem } from './vfx/RainSystem.js';
 import { GroundFogSystem } from './environment/GroundFogSystem.js';
 import { TerrainMeshManager } from './world/TerrainMeshManager.js';
 import { FlightControlsBridge } from './physics/FlightControlsBridge.js';
-import { initDebugGUI } from './ui/DebugGUI.js';
+import { TreePlacementEditor } from './tools/TreePlacementEditor.js';
+import { initDebugGUI } from './tools/DebugGUI.js';
+import { createLightingSystem, updateLightingPosition } from './environment/LightingSystem.js';
+import { createBirdSystem, updateBirdsGen, updateFlocks, shiftBirds } from './entities/BirdSystem.js';
+import { createDioramaSystem, shiftDiorama } from './entities/DioramaSystem.js';
+import { createWindTrails, updateWindTrails, shiftWindTrails } from './vfx/WindTrailsSystem.js';
+import { DistanceOverlay } from './vfx/DistanceOverlay.js';
+import { liveSync } from './core/LiveSync.js';
 
 
 import { LOW_GFX, TERRAIN_RES } from './config/constants.js';
@@ -57,6 +66,13 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
     import { LensflareMesh, LensflareElement } from 'three/addons/objects/LensflareMesh.js';
     import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
     import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+    // Override addFolder globally to start all folders collapsed, with no auto-expand unless clicked
+    const originalAddFolder = GUI.prototype.addFolder;
+    GUI.prototype.addFolder = function(title) {
+        const folder = originalAddFolder.call(this, title);
+        folder.close();
+        return folder;
+    };
     import { ToonShaderManager } from './vfx/ToonShaderManager.js';
     import { createTerrainMaterial } from './shaders/materials/TerrainNodeMaterial.js';
     import { createTreeMaterial } from './shaders/materials/TreeNodeMaterial.js';
@@ -72,10 +88,16 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
     function resolveAssetUrl(p) {
         if (!p) return p;
         if (p.startsWith('http://') || p.startsWith('https://') || p.startsWith('data:') || p.startsWith('blob:')) return p;
-        const cleanPath = p.replace(/^\.?\//, '');
+        let cleanPath = p.replace(/^\.?\//, '');
+        if (typeof import.meta === 'undefined' || !import.meta.env || !import.meta.env.MODE) {
+            if (!cleanPath.startsWith('public/')) {
+                cleanPath = 'public/' + cleanPath;
+            }
+        }
         const cleanBase = BASE_URL.endsWith('/') ? BASE_URL : (BASE_URL + '/');
         return `${cleanBase}${cleanPath}`;
     }
+    window.resolveAssetUrl = resolveAssetUrl;
 
     let isWindOn = false;
     Object.defineProperty(window, 'isWindOn', { get: () => isWindOn, set: (v) => { isWindOn = v; }, configurable: true });
@@ -100,7 +122,9 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         }
     });
     let cameraZoomDist = parseFloat(localStorage.getItem('wl_zoomDist')) || (deviceTier === 'mobile' ? 22.0 : 12.0);
-    Object.defineProperty(window, 'cameraZoomDist', { get: () => cameraZoomDist, set: (v) => { cameraZoomDist = v; }, configurable: true });
+    if (cameraZoomDist < 6.0) cameraZoomDist = (deviceTier === 'mobile' ? 22.0 : 12.0);
+    cameraZoomDist = Math.max(6.0, Math.min(300.0, cameraZoomDist));
+    Object.defineProperty(window, 'cameraZoomDist', { get: () => cameraZoomDist, set: (v) => { cameraZoomDist = Math.max(6.0, Math.min(300.0, v)); }, configurable: true });
     if (deviceTier === 'mobile' && cameraZoomDist < 14.0) cameraZoomDist = 22.0;
     let playerPhysics = null;
     let cameraManager = null;
@@ -125,16 +149,14 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
     let cameraBase = null;
     let isInitializingGui = true;
 
-    // Clouds config
-    let CLOUD_COUNT = LOW_GFX ? 40 : 150;
-    let HIGH_CLOUD_COUNT = LOW_GFX ? 0 : 24;
-    let WISPY_CLOUD_COUNT = 0; // flight-merged ships these off
-    let MEGA_CLOUD_COUNT = LOW_GFX ? 0 : 24;
-
 
 
     const loadedCustomModels = [];
+    window.loadedCustomModels = loadedCustomModels;
     let selectedModelIndex = -1;
+    window.selectedModelIndex = selectedModelIndex;
+    window.setSelectedModelIndex = (idx) => { selectedModelIndex = idx; window.selectedModelIndex = idx; };
+    window.getSelectedModelIndex = () => selectedModelIndex;
     let customModelBaseScale = 1.0;
     let customModelScaleMult = 1.0;
     let customModelOffsetX = 0.0;
@@ -175,6 +197,7 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
     let presetDropdownControllers = [];
 
     const gui = new GUI({ title: 'Controls & Settings' });
+    window.gui = gui;
     gui.domElement.id = 'main-settings-gui';
     gui.domElement.classList.add('main-settings-gui');
     const origGuiOpen = gui.open.bind(gui);
@@ -193,33 +216,33 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
     let timePhase = (localStorage.getItem('wl_timePhase') !== null) ? parseInt(localStorage.getItem('wl_timePhase')) : 1; // Default to 1: Dusk
 
     let envConfigs = [
-        {name: 'Day', bg: 0x3f7fc4, mid: 0x74add9, fog: 0xbcd2e2, amb: 0xcfe6f7, dir: 0xfff3d8, ambI: 0.75, dirI: 1.60, starOp: 0, sunY: 10000, moonY: -8000, glintCol: 0xfff0d0, cloudCol: 0xfdf7e8}, // Day / Morning — light energy cut from 3.6 to 2.35 and hue pulled off pure white; near-white light at high intensity pushed R,G,B over the soft-clip knee together, which is what flattened the frame to haze
-        {name: 'Dusk', bg: 0x2a5090, mid: 0xc85078, fog: 0xffa07a, amb: 0xffdab9, dir: 0xffaa00, ambI: 1.1, dirI: 3.2, starOp: 0, sunY: 160, moonY: 200, glintCol: 0xffaa00, cloudCol: 0xfffaec}, // Dusk — deep blue zenith, magenta/peach mid, warm orange horizon+fog
-        {name: 'Twilight', bg: 0x0a1330, mid: 0x1b2f5c, fog: 0x24406e, amb: 0x6b82ad, dir: 0x9ecbff, ambI: 1.05, dirI: 2.2, starOp: 1.0, sunY: -8000, moonY: 9000, glintCol: 0x8cc4ff, cloudCol: 0x33507d}, // Twilight / Night — moonlight lifted so terrain is readable; sky no longer collapses to a flat 2% dome
+        {name: 'Day', bg: 0x3a88d6, mid: 0x72b2e8, fog: 0xb8daf2, amb: 0xd8eefa, dir: 0xfffbf0, ambI: 1.25, dirI: 2.50, starOp: 0, sunY: 10000, moonY: -8000, glintCol: 0xfff0d0, cloudCol: 0xfffcf5}, // Day - vibrant Ghibli azure sky, warm crisp sunlight, lush ambient fill, soft periwinkle haze
+        {name: 'Dusk', bg: 0x2a5090, mid: 0xc85078, fog: 0xffa07a, amb: 0xffdab9, dir: 0xffaa00, ambI: 1.1, dirI: 3.2, starOp: 0, sunY: 160, moonY: 200, glintCol: 0xffaa00, cloudCol: 0xfffaec}, // Dusk - deep blue zenith, magenta/peach mid, warm golden orange horizon
+        {name: 'Twilight', bg: 0x080d1e, mid: 0x121e3d, fog: 0x14223d, amb: 0x485878, dir: 0xd8e8ff, ambI: 0.95, dirI: 2.0, starOp: 1.0, sunY: -8000, moonY: 9000, glintCol: 0x88b0e8, cloudCol: 0x162238}, // Twilight / Night - deep midnight indigo, silver moonlight, balanced starlight contrast
     ];
 
     const params = {
         worldMode: 'Islands',
         sceneFog: true,
         showFog: true,
-        fogNear: 80,
-        fogFar: 1800,
-        fogDensity: 1.0,
+        fogNear: 150,
+        fogFar: 3000,
+        fogDensity: 0.75,
         fogAltitudeScale: 1.2,
         fogAutoAltitude: true,
         fogIntensity: 1.0,
         terrainSmoothing: 0.0,
-        trails: isWindTrailsOn, lockSunToPlayer: true,
+        trails: isWindTrailsOn,
         shadows: isShadowsOn,
         treeShadows: isTreeShadowsOn,
         shadowDist: shadowDistMode,
         bloom: isBloomOn,
         terrainRes: String(terrainRes),
-        autoResolution: true,
+        autoResolution: false,
         renderScale: 1.0,
         exposureTrim: 1.0,
-        dayExposure: 0.62,
-        nightExposure: 1.35,
+        dayExposure: 0.95,
+        nightExposure: 1.10,
         treeColor0: '#ffffff',
         treeColor1: '#ddff88',
         treeColor2: '#88cc99',
@@ -231,13 +254,13 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         modelVisible: true,
         wind: isWindOn,
         rain: isRainOn,
-        fogPlane: false,
+        fogPlane: true,
         godRays: true,
-        godRayIntensity: 0.65,
+        godRayIntensity: 0.60,
         godRayDensity: 0.50,
-        godRayDecay: 0.927,
-        lumMin: 0.85,
-        lumMax: 0.97,
+        godRayDecay: 0.92,
+        lumMin: 0.80,
+        lumMax: 0.98,
         sunAltitude: 160,
         sunAzimuth: 0,
         lockSunToPlayer: true,
@@ -262,27 +285,11 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         enableSkydome: false,
         daySkydomeTexture: Math.random() > 0.5 ? '1' : '2',
         nightSkydomeTexture: '2', // Default to 2 because it has the transparency mask
-        showClouds: true,
-        showCloudsRegular: false,
-        showCloudsHigh: false,
-        showCloudsWispy: false,
-        showCloudsMega: false,
-        cloudScaleRegular: 1.0,
-        cloudScaleHigh: 1.0,
-        cloudScaleWispy: 1.0,
-        cloudScaleMega: 1.0,
-        cloudCountRegular: LOW_GFX ? 40 : 150,
-        cloudCountHigh: LOW_GFX ? 0 : 24,
-        cloudCountWispy: LOW_GFX ? 0 : 30,
-        cloudCountMega: LOW_GFX ? 0 : 24,
-        showCloudsHorizon: false,
         showVolumetricClouds: false,
-        cloudCountHorizon: LOW_GFX ? 0 : 45,
-        cloudScaleHorizon: 1.0,
         showBirds: true,
-        showFogPlanes: false,
+        showFogPlanes: true,
         showCrystals: false,
-        showMap: false,
+        showMap: true,
         showGUI: false,
         exposure: 1.9,
         shadeMode: 'original',
@@ -297,24 +304,16 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         birdFlockSpread: 12,
         birdMaxSpeed: 45,
         godMode: false,
+        showDistanceOverlay: false,
+        distanceOverlayOpacity: 0.28,
+        distanceOverlayColor: '#00e5ff',
+        distanceOverlayLabels: true,
+        distanceOverlayGroundDropline: true,
+        distanceOverlayMode: 'Horizontal Level',
     };
     window.params = params;
 
-    const cloudParams = {
-        c0: '#ffffff',
-        c1: '#ffffff',
-        c2: '#ffffff',
-        c3: '#ffffff',
-        c4: '#ffffff',
-        opBase: 1.0,
-        opHigh: 1.0,
-        opWispy: 1.0,
-        opMega: 1.0,
-        opHorizon: 1.0,
-        enableClouds: true,
-        density: 1.0,
-        cloudScale: 1.0
-    };
+    const cloudParams = {};
     window.cloudParams = cloudParams;
 
     const toonShaderManager = new ToonShaderManager();
@@ -337,7 +336,7 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
             settingsManager,
             presetDropdownControllers,
             DEFAULT_PRESETS,
-            updateAtmoParamsFromPhase,
+            updateAtmoParamsFromPhase: () => { if (typeof window.updateAtmoParamsFromPhase === 'function') window.updateAtmoParamsFromPhase(); },
             setTimePhase
         });
     }
@@ -352,7 +351,7 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
             settingsManager,
             presetDropdownControllers,
             DEFAULT_PRESETS,
-            updateAtmoParamsFromPhase,
+            updateAtmoParamsFromPhase: () => { if (typeof window.updateAtmoParamsFromPhase === 'function') window.updateAtmoParamsFromPhase(); },
             setTimePhase,
             showVisualToast
         });
@@ -416,8 +415,8 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
             const currentBiomeFogSettings = window.biomeFogSettings ? JSON.parse(JSON.stringify(window.biomeFogSettings)) : null;
             const currentBiomeSkyConfigs = window.BIOME_SKY_CONFIGS ? JSON.parse(JSON.stringify(window.BIOME_SKY_CONFIGS)) : null;
             const currentModelId = (typeof flightModelManager !== 'undefined' && flightModelManager)
-                ? (flightModelManager.getCurrentConfig()?.id || 'mitsubishi_b2m2')
-                : 'kiki';
+                ? (flightModelManager.getCurrentConfig()?.id || 'psx_saviola_s21')
+                : 'psx_saviola_s21';
 
             const d = new Date();
             const pad = (n) => String(n).padStart(2, '0');
@@ -582,55 +581,21 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
     // Initialized below after engine systems are ready
     initPostProcessingUI();
     godRaysPass.uniforms.uIntensity.value = params.godRayIntensity;
+    godRaysPass.uniforms.uDecay.value = params.godRayDecay;
     
-    // 2. LIGHTING
-    // ==========================================
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
-    scene.add(ambientLight);
-
-
-    // Modular Giant Floating Crystals (Instanced)
+    // 2. MODULAR LIGHTING SYSTEM
     const crystalSystem = new CrystalSystem({ scene });
     const instCrystals = crystalSystem.instCrystals;
+    const CRYSTAL_COUNT = crystalSystem.count;
+    const matCrystal = crystalSystem.matCrystal;
+    const crystalBaseY = new Float32Array(CRYSTAL_COUNT).fill(-9999);
+    window.instCrystals = instCrystals;
 
+    const lightingSystem = createLightingSystem({ scene });
+    const { ambientLight, dirLight, staticSun, sunMesh, lensflare } = lightingSystem;
 
-    const dirLight = new THREE.DirectionalLight(0xfffaeb, 1.4); // warm bright sunlight
-    dirLight.position.set(150, 200, 50);
-    dirLight.castShadow = true;
-    dirLight.shadow.camera.left = -120;
-    dirLight.shadow.camera.right = 120;
-    dirLight.shadow.camera.top = 120;
-    dirLight.shadow.camera.bottom = -120;
-    dirLight.shadow.mapSize.width = 2048;
-    dirLight.shadow.mapSize.height = 2048;
-    dirLight.shadow.bias = -0.002;
-    dirLight.shadow.normalBias = 1.5;
-    scene.add(dirLight);
-
-    // Sun Glare (Lensflare)
-    const staticSun = new THREE.Group();
-    staticSun.position.set(0, 1500, -20000); // Massive distance so Kiki can fly towards it
-    scene.add(staticSun);
-
-    const flareTextureLoader = new THREE.TextureLoader();
-    const textureFlare0 = flareTextureLoader.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/lensflare/lensflare0.png');
-    const textureFlare3 = flareTextureLoader.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/lensflare/lensflare3.png');
-    const lensflare = new LensflareMesh();
-    lensflare.addElement(new LensflareElement(textureFlare0, 1600, 0, dirLight.color)); // Massive permanent horizon glare
-    lensflare.addElement(new LensflareElement(textureFlare3, 60, 0.6));
-    lensflare.addElement(new LensflareElement(textureFlare3, 70, 0.7));
-    lensflare.addElement(new LensflareElement(textureFlare3, 120, 0.9));
-    lensflare.addElement(new LensflareElement(textureFlare3, 70, 1.0));
-    staticSun.add(lensflare);
-
-    // Physical Sun Sphere
-    const sunGeo = new THREE.SphereGeometry(600, 32, 32);
-    const sunMat = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false }); // fog: false makes it glow through atmosphere
-    const sunMesh = new THREE.Mesh(sunGeo, sunMat);
-    staticSun.add(sunMesh);
-
-    // --- Modular Moon & Halo ---
-    const { staticMoon, moonMesh, moonHalo } = initMoon({ scene });
+    // --- Modular Moon ---
+    const { staticMoon, moonMesh } = initMoon({ scene, resolveAssetUrl });
 // ==========================================
     // 3. TOON MATERIALS
     // ==========================================
@@ -646,8 +611,6 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
 
     const matRock = new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap, dithering: true });
     const matBush = new THREE.MeshToonMaterial({ color: 0x48a868, gradientMap, dithering: true });
-    const matCloud = new THREE.MeshToonMaterial({ color: 0xfffaec, transparent: true, opacity: 0.65, gradientMap, dithering: true });
-    const matWispyCloud = new THREE.MeshToonMaterial({ color: 0xffffff, transparent: true, opacity: 0.42, gradientMap, dithering: true });
     const matFlower = new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap, dithering: true });
     function createSandNoiseTexture(size = 256) {
         const data = new Uint8Array(size * size * 4);
@@ -658,8 +621,9 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         const texture = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
-        texture.minFilter = THREE.LinearFilter;
+        texture.minFilter = THREE.LinearMipmapLinearFilter;
         texture.magFilter = THREE.LinearFilter;
+        texture.generateMipmaps = true;
         texture.needsUpdate = true;
         return texture;
     }
@@ -672,6 +636,7 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         uShimmerMult: uniform(1.0),
         uWorldOriginZ: uniform(0.0)
     };
+    window.terrainUniforms = terrainUniforms;
 
     const terrainMat = createTerrainMaterial(
         terrainUniforms.uTime,
@@ -779,86 +744,26 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
     });
 
 
-    const instRocks = new THREE.InstancedMesh(geoRock, matRock, Math.max(1, ROCK_COUNT));
-    instRocks.count = ROCK_COUNT;
-    const instBushes = new THREE.InstancedMesh(geoBush, matBush, Math.max(1, BUSH_COUNT));
-    instBushes.count = BUSH_COUNT;
-    const MAX_CLOUD_COUNT = 300;
-    const instClouds = new THREE.InstancedMesh(geoCloud, matCloud, MAX_CLOUD_COUNT);
-    instClouds.count = CLOUD_COUNT;
-    const instFlowers = new THREE.InstancedMesh(geoFlower, matFlower, Math.max(1, FLOWER_COUNT));
-    instFlowers.count = FLOWER_COUNT;
+    // Modular Diorama System (Rocks, Bushes, Flowers, Icebergs)
+    const dioramaSystem = createDioramaSystem({ scene, LOW_GFX, matRock, matBush, matFlower });
+    const { instRocks, instBushes, instFlowers, instIcebergs, ICEBERG_COUNT } = dioramaSystem;
 
 
-
-
-
-    const ICEBERG_COUNT = 40;
-    const iceGeos = [];
-    const iceBase = new THREE.ConeGeometry(5.0, 8, 5);
-    iceBase.translate(0, 2.0, 0);
-    applyColor(iceBase, 0x8adeef);
-    iceGeos.push(iceBase);
-    const icePeak = new THREE.ConeGeometry(3.0, 6, 4);
-    icePeak.translate(0.8, 6.5, 0.5);
-    icePeak.rotateZ(0.12);
-    applyColor(icePeak, 0xc5f0fa);
-    iceGeos.push(icePeak);
-    const iceShoulder = new THREE.DodecahedronGeometry(3.5, 0);
-    iceShoulder.scale(1.3, 0.7, 1.1);
-    iceShoulder.translate(-1.5, 2.5, 1.0);
-    applyColor(iceShoulder, 0x67d4e8);
-    iceGeos.push(iceShoulder);
-    const iceSub = new THREE.ConeGeometry(4.5, 5, 5);
-    iceSub.translate(0, -1.5, 0);
-    iceSub.rotateX(Math.PI);
-    applyColor(iceSub, 0x38bdf8);
-    iceGeos.push(iceSub);
-    const geoIceberg = BufferGeometryUtils.mergeGeometries(iceGeos.map(g => g.index ? g.toNonIndexed() : g), false);
-
-    const matIceberg = new THREE.MeshStandardMaterial({
-        vertexColors: true,
-        roughness: 0.15,
-        metalness: 0.05,
-        transparent: true,
-        opacity: 0.88,
-        side: THREE.DoubleSide
-    });
-    const instIcebergs = new THREE.InstancedMesh(geoIceberg, matIceberg, ICEBERG_COUNT);
-    const tmpIce = new THREE.Object3D();
-    for (let i = 0; i < ICEBERG_COUNT; i++) {
-        tmpIce.position.set(0, -1000, 0);
-        tmpIce.updateMatrix();
-        instIcebergs.setMatrixAt(i, tmpIce.matrix);
-    }
-    scene.add(instIcebergs);
-
-    const rockColors = [0xe5d4ba, 0xcbb192, 0xd8c8b8, 0x8a7b69, 0xd2c0a3];
-    const tempRockColor = new THREE.Color();
-    for (let i = 0; i < ROCK_COUNT; i++) {
-        tempRockColor.setHex(rockColors[Math.floor(Math.random() * rockColors.length)]);
-        instRocks.setColorAt(i, tempRockColor);
-    }
-
-    const flowerColors = [0xffffff, 0xffd700, 0xffa8d1, 0x4da9e8, 0xff6b6b]; // white, yellow, pink, blue, red
-    const tempFlowerColor = new THREE.Color();
-    for (let i = 0; i < FLOWER_COUNT; i++) {
-        tempFlowerColor.setHex(flowerColors[Math.floor(Math.random() * flowerColors.length)]);
-        instFlowers.setColorAt(i, tempFlowerColor);
-    }
     
     // Initialize Open Sea Ocean WebGPU System
     animeWaterSystem = new WaterSystem(scene, renderer);
     animeWaterSystem.setVisible(params.showWater);
     globalWaterParam.waterHeight = animeWaterSystem.waterLevel;
     if (waterHeightController) waterHeightController.updateDisplay();
-    // On-demand lazy-loader for WaterModalUI
-    window.summonWaterModal = async () => {
+    window.waterModalUI = new WaterModalUI(animeWaterSystem);
+    window.summonWaterModal = async (show = true) => {
         if (!window.waterModalUI) {
-            const { WaterModalUI } = await import('./tools/WaterModalUI.js');
             window.waterModalUI = new WaterModalUI(animeWaterSystem);
         }
-        if (window.waterModalUI && window.waterModalUI.toggle) window.waterModalUI.toggle();
+        if (show && window.waterModalUI && window.waterModalUI.toggle) {
+            window.waterModalUI.toggle();
+        }
+        return window.waterModalUI;
     };
     animeWaterGUI = new WaterEditorGUI(animeWaterSystem, gui);
 
@@ -957,6 +862,7 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         }
         return window.groundFogEditor;
     };
+    window.summonGroundFogEditor().catch(() => {});
 
     // On-demand lazy-loader for ArchipelagoEditorUI
     window.summonArchipelagoEditor = async () => {
@@ -969,6 +875,9 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
                     lastDepthFieldGridX = -999999;
                     lastDepthFieldGridZ = -999999;
                     if (playerGrp) updateTerrainGeometry(playerGrp.position.x, playerGrp.position.z);
+                    if (typeof stylizedTrees !== 'undefined' && stylizedTrees && typeof stylizedTrees.respawn === 'function') {
+                        stylizedTrees.respawn();
+                    }
                 },
                 teleportPlayer: (x, y, z) => {
                     if (playerGrp) {
@@ -982,6 +891,9 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
                         lastDepthFieldGridX = -999999;
                         lastDepthFieldGridZ = -999999;
                         updateTerrainGeometry(x, z);
+                        if (typeof stylizedTrees !== 'undefined' && stylizedTrees && typeof stylizedTrees.respawn === 'function') {
+                            stylizedTrees.respawn();
+                        }
                     }
                 }
             });
@@ -1002,88 +914,6 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         mesh.frustumCulled = false;
         scene.add(mesh);
     });
-    instClouds.castShadow = true;
-    instClouds.frustumCulled = false;
-    scene.add(instClouds);
-
-    // Super High Cumulonimbus Clouds & See-Through Wispy Clouds
-    const baseCloudSpheres = [];
-    const mainPillar = new THREE.DodecahedronGeometry(150, 1).toNonIndexed();
-    mainPillar.scale(1, 1.2, 1);
-    baseCloudSpheres.push(mainPillar);
-    
-    const fluff1 = new THREE.DodecahedronGeometry(110, 1).toNonIndexed();
-    fluff1.translate(120, -30, 40);
-    baseCloudSpheres.push(fluff1);
-    
-    const fluff2 = new THREE.DodecahedronGeometry(90, 1).toNonIndexed();
-    fluff2.translate(-100, -50, 80);
-    baseCloudSpheres.push(fluff2);
-    
-    const fluff3 = new THREE.DodecahedronGeometry(130, 1).toNonIndexed();
-    fluff3.translate(-40, 20, -110);
-    baseCloudSpheres.push(fluff3);
-
-    const fluff4 = new THREE.DodecahedronGeometry(80, 1).toNonIndexed();
-    fluff4.translate(60, 60, 90);
-    baseCloudSpheres.push(fluff4);
-
-    const highCloudGeo = BufferGeometryUtils.mergeGeometries(baseCloudSpheres);
-    highCloudGeo.computeVertexNormals();
-    const highCloudMat = new THREE.MeshToonMaterial({ color: 0xffffff, transparent: true, opacity: 0.7 });
-    
-    const MAX_HIGH_CLOUD_COUNT = 100;
-    const instHighClouds = new THREE.InstancedMesh(highCloudGeo, highCloudMat, MAX_HIGH_CLOUD_COUNT);
-    instHighClouds.count = HIGH_CLOUD_COUNT;
-    instHighClouds.frustumCulled = false;
-    scene.add(instHighClouds);
-
-    const MAX_WISPY_CLOUD_COUNT = 100;
-    const instWispyClouds = new THREE.InstancedMesh(geoCloud, matWispyCloud, MAX_WISPY_CLOUD_COUNT);
-    instWispyClouds.count = WISPY_CLOUD_COUNT;
-    instWispyClouds.frustumCulled = false;
-    scene.add(instWispyClouds);
-
-    // Far-Distance Mega Painted Clouds (Visible when Kiki climbs high)
-    const MAX_MEGA_CLOUD_COUNT = 100;
-    const megaCloudMat = new THREE.MeshToonMaterial({ color: 0xfff6e3, transparent: true, opacity: 0.88 });
-    const instMegaClouds = new THREE.InstancedMesh(highCloudGeo, megaCloudMat, MAX_MEGA_CLOUD_COUNT);
-    instMegaClouds.count = MEGA_CLOUD_COUNT;
-    instMegaClouds.frustumCulled = false;
-    scene.add(instMegaClouds);
-    
-    // Initialize all cloud instance matrices so they don't render a giant mass at origin (0,0,0)
-    const dummyInit = new THREE.Object3D();
-    dummyInit.position.set(0, -1000, 0); // Force teleport on first frame!
-    dummyInit.scale.set(0, 0, 0);
-    dummyInit.scale.set(0, 0, 0);
-    dummyInit.updateMatrix();
-    for (let i = 0; i < MAX_CLOUD_COUNT; i++) instClouds.setMatrixAt(i, dummyInit.matrix);
-    for (let i = 0; i < MAX_HIGH_CLOUD_COUNT; i++) instHighClouds.setMatrixAt(i, dummyInit.matrix);
-    for (let i = 0; i < MAX_WISPY_CLOUD_COUNT; i++) instWispyClouds.setMatrixAt(i, dummyInit.matrix);
-    for (let i = 0; i < MAX_MEGA_CLOUD_COUNT; i++) instMegaClouds.setMatrixAt(i, dummyInit.matrix);
-
-
-    
-    // Apply Pastel Colors to Clouds
-    let pastelColors = [0xffd1dc, 0xd1ffd1, 0xd1e8ff, 0xfffdd1, 0xe8d1ff];
-    const tempCloudColor = new THREE.Color();
-    for (let i = 0; i < CLOUD_COUNT; i++) {
-        if (Math.random() > 0.5) tempCloudColor.setHex(pastelColors[Math.floor(Math.random() * pastelColors.length)]);
-        else tempCloudColor.setHex(0xffffff);
-        instClouds.setColorAt(i, tempCloudColor);
-    }
-    for (let i = 0; i < HIGH_CLOUD_COUNT; i++) {
-        if (Math.random() > 0.5) tempCloudColor.setHex(pastelColors[Math.floor(Math.random() * pastelColors.length)]);
-        else tempCloudColor.setHex(0xffffff);
-        instHighClouds.setColorAt(i, tempCloudColor);
-    }
-    if (instClouds.instanceColor) instClouds.instanceColor.needsUpdate = true;
-    if (instHighClouds.instanceColor) instHighClouds.instanceColor.needsUpdate = true;
-    
-    instFlowers.receiveShadow = false;
-    instFlowers.castShadow = false;
-    if (FLOWER_COUNT > 0) scene.add(instFlowers);
     
     // ==========================================
     // PROCEDURAL SKYDOME (replaces PNG cubemap + SpiralNoiseC cloud dome)
@@ -1298,7 +1128,7 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
     const dummyMatrix = new THREE.Matrix4();
     dummyMatrix.makeScale(0, 0, 0);
     dummyMatrix.setPosition(0, -1000, 0);
-    [...treeMeshes, instRocks, instBushes, instClouds, instFlowers].forEach(mesh => {
+    [...treeMeshes, instRocks, instBushes, instFlowers].forEach(mesh => {
         for(let i=0; i<mesh.count; i++) {
             mesh.setMatrixAt(i, dummyMatrix);
         }
@@ -1307,174 +1137,19 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
 
 
 
-    // ===================================================
-    // 6.5 BOIDS (BIRDS)
-    // ==========================================
-    const BIRD_COUNT = LOW_GFX ? 12 : 40;
-    const geoBird = new THREE.BufferGeometry();
-    const s = 0.8;
-    const bVerts = new Float32Array([
-        // Head / Body spine
-        0, 0.1*s, 1.8*s,    -0.2*s, 0, 0.4*s,      0.2*s, 0, 0.4*s,
-        -0.2*s, 0, 0.4*s,   -0.15*s, 0.05*s, -1.2*s,  0.2*s, 0, 0.4*s,
-        0.2*s, 0, 0.4*s,    -0.15*s, 0.05*s, -1.2*s,  0.15*s, 0.05*s, -1.2*s,
-        // Tail feathers
-        -0.15*s, 0.05*s, -1.2*s,  -0.5*s, 0.1*s, -2.0*s,  0.15*s, 0.05*s, -1.2*s,
-        0.15*s, 0.05*s, -1.2*s,   -0.5*s, 0.1*s, -2.0*s,  0.5*s, 0.1*s, -2.0*s,
-        // Left Wing Inner
-        -0.2*s, 0, 0.6*s,   -1.6*s, 0.1*s, 0.1*s,  -0.2*s, 0, -0.6*s,
-        // Left Wing Outer Tip
-        -1.6*s, 0.1*s, 0.1*s, -3.2*s, 0.2*s, -0.5*s, -1.4*s, 0.05*s, -0.5*s,
-        // Right Wing Inner
-        0.2*s, 0, 0.6*s,    0.2*s, 0, -0.6*s,      1.6*s, 0.1*s, 0.1*s,
-        // Right Wing Outer Tip
-        1.6*s, 0.1*s, 0.1*s,  1.4*s, 0.05*s, -0.5*s,  3.2*s, 0.2*s, -0.5*s
-    ]);
-    geoBird.setAttribute('position', new THREE.BufferAttribute(bVerts, 3));
-    geoBird.computeVertexNormals();
-    
-    const matBird = new MeshToonNodeMaterial({ color: 0xd6e5f5, side: THREE.DoubleSide, gradientMap });
-    matBird.positionNode = Fn(() => {
-        let transformed = positionLocal.toVar();
-        const wingDist = abs(positionGeometry.x);
-        const flap = sin(terrainUniforms.uTime.mul(9.0).add(wingDist.mul(0.5))).mul(wingDist).mul(0.35);
-        const isWing = step(0.3, wingDist);
-        transformed.y.addAssign(flap.mul(isWing));
-        return transformed;
-    })();
+    // Modular Bird System
+    const birdSystem = createBirdSystem({ scene, LOW_GFX, terrainUniforms, gradientMap });
+    const { instBirds, instHighBirds, birdData, highBirdData, BIRD_COUNT, HIGH_BIRD_COUNT, MAX_BIRD_COUNT, matBird } = birdSystem;
+    window.instBirds = instBirds;
+    window.matBird = matBird;
+    window.MAX_BIRD_COUNT = MAX_BIRD_COUNT;
 
-    const MAX_BIRD_COUNT = 120;
-    const instBirds = new THREE.InstancedMesh(geoBird, matBird, MAX_BIRD_COUNT);
-    instBirds.count = BIRD_COUNT;
-    instBirds.castShadow = true;
-    instBirds.frustumCulled = false;
-    scene.add(instBirds);
-
-    const birdData = new Float32Array(MAX_BIRD_COUNT * 6);
-    for (let i = 0; i < MAX_BIRD_COUNT; i++) {
-        birdData[i * 6 + 0] = (Math.random() - 0.5) * 600;
-        birdData[i * 6 + 1] = 60 + Math.random() * 80;
-        birdData[i * 6 + 2] = (Math.random() - 0.5) * 600;
-        birdData[i * 6 + 3] = (Math.random() - 0.5) * 10;
-        birdData[i * 6 + 4] = (Math.random() - 0.5) * 2;
-        birdData[i * 6 + 5] = (Math.random() - 0.5) * 10;
-    }
-
-    const HIGH_BIRD_COUNT = 0;
-    const instHighBirds = new THREE.InstancedMesh(geoBird, matBird, Math.max(1, HIGH_BIRD_COUNT));
-    instHighBirds.count = HIGH_BIRD_COUNT;
-    instHighBirds.castShadow = true;
-    instHighBirds.frustumCulled = false;
-    if (HIGH_BIRD_COUNT > 0) scene.add(instHighBirds);
-
-    const highBirdData = new Float32Array(HIGH_BIRD_COUNT * 6);
-    for (let i = 0; i < HIGH_BIRD_COUNT; i++) {
-        highBirdData[i * 6 + 0] = (Math.random() - 0.5) * 1200;
-        highBirdData[i * 6 + 1] = 300 + Math.random() * 200; // High altitude!
-        highBirdData[i * 6 + 2] = (Math.random() - 0.5) * 1200;
-        highBirdData[i * 6 + 3] = (Math.random() - 0.5) * 10;
-        highBirdData[i * 6 + 4] = (Math.random() - 0.5) * 2;
-        highBirdData[i * 6 + 5] = (Math.random() - 0.5) * 10;
-    }
-
-    // ==========================================
-    // FISH AND WHALE
-    // ==========================================
-    // WIND TRAILS
-    // ==========================================
-    const trailGeo = new THREE.BoxGeometry(0.1, 0.1, 10.0);
-    const trailMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.15 });
-    const instTrails = new THREE.InstancedMesh(trailGeo, trailMat, 100);
-    instTrails.frustumCulled = false;
-    scene.add(instTrails);
-
-    const trailsData = new Float32Array(100 * 4); 
-    for(let i=0; i<100; i++) {
-       trailsData[i*4] = (Math.random() - 0.5) * 80;
-       trailsData[i*4+1] = (Math.random() - 0.5) * 60;
-       trailsData[i*4+2] = (Math.random() - 0.5) * 100;
-       trailsData[i*4+3] = Math.random();
-    }
-
-    function updateBirdsGen(data, inst, count, tX, tY, tZ, time, dt, centerPull) {
-        for (let i = 0; i < count; i++) {
-            let px = data[i * 6 + 0], py = data[i * 6 + 1], pz = data[i * 6 + 2];
-            let vx = data[i * 6 + 3], vy = data[i * 6 + 4], vz = data[i * 6 + 5];
-
-            let cx = 0, cy = 0, cz = 0;
-            let sx = 0, sy = 0, sz = 0;
-            let ax = 0, ay = 0, az = 0;
-            let n = 0;
-
-            for (let j = 0; j < count; j++) {
-                if (i === j) continue;
-                let dx = px - data[j * 6 + 0], dy = py - data[j * 6 + 1], dz = pz - data[j * 6 + 2];
-                let distSq = dx*dx + dy*dy + dz*dz;
-                
-                if (distSq < 1200) { 
-                    cx += data[j * 6 + 0]; cy += data[j * 6 + 1]; cz += data[j * 6 + 2];
-                    ax += data[j * 6 + 3]; ay += data[j * 6 + 4]; az += data[j * 6 + 5];
-                    n++;
-                }
-                if (distSq < 400) { 
-                    sx += dx; sy += dy; sz += dz;
-                }
-            }
-
-            if (n > 0) {
-                cx /= n; cy /= n; cz /= n;
-                ax /= n; ay /= n; az /= n;
-                vx += (cx - px) * 0.4 * dt;
-                vy += (cy - py) * 0.4 * dt;
-                vz += (cz - pz) * 0.4 * dt;
-                vx += (ax - vx) * 0.1 * dt;
-                vy += (ay - vy) * 0.1 * dt;
-                vz += (az - vz) * 0.1 * dt;
-            }
-            
-            vx += sx * 1.8 * dt; vy += sy * 1.8 * dt; vz += sz * 1.8 * dt;
-
-            // Give each bird an offset slot around Kiki so they soar gracefully around her rather than clumping
-            let formAngle = (i / count) * Math.PI * 2.0;
-            let formRadius = (params.birdFlockRadius || 22) + (i % 6) * (params.birdFlockSpread || 9);
-            let targetX = tX + Math.cos(formAngle) * formRadius;
-            let targetY = tY + ((i % 5) - 2) * 3.5;
-            let targetZ = tZ + Math.sin(formAngle) * formRadius;
-
-            let tx = targetX - px, ty = targetY - py, tz = targetZ - pz;
-            let dToT = Math.sqrt(tx*tx + ty*ty + tz*tz);
-            if (dToT > 3) {
-                let pullFactor = (dToT > 100) ? centerPull * 4.0 : centerPull * 1.2;
-                vx += (tx / dToT) * pullFactor * dt;
-                vy += (ty / dToT) * pullFactor * dt;
-                vz += (tz / dToT) * pullFactor * dt;
-            }
-
-            let maxSpd = (centerPull > 3.0 && typeof velocity !== 'undefined') ? Math.max(40, velocity * 1.2) : (params.birdMaxSpeed || 35);
-            let spd = Math.sqrt(vx*vx + vy*vy + vz*vz);
-            if (spd > maxSpd) { vx *= maxSpd/spd; vy *= maxSpd/spd; vz *= maxSpd/spd; }
-            if (spd < 15) { vx *= 15/spd; vy *= 15/spd; vz *= 15/spd; }
-
-            px += vx * dt; py += vy * dt; pz += vz * dt;
-            data[i * 6 + 0] = px; data[i * 6 + 1] = py; data[i * 6 + 2] = pz;
-            data[i * 6 + 3] = vx; data[i * 6 + 4] = vy; data[i * 6 + 5] = vz;
-
-            dummy.position.set(px, py, pz);
-            let targetYaw = Math.atan2(vx, vz);
-            let roll = Math.max(-0.6, Math.min(0.6, sx * 0.05));
-            dummy.rotation.set(roll, targetYaw, Math.sin(time * 12 + i) * 0.35);
-            dummy.scale.setScalar(params.birdScale || 0.42);
-            dummy.updateMatrix();
-            inst.setMatrixAt(i, dummy.matrix);
-        }
-        inst.instanceMatrix.needsUpdate = true;
-    }
+    // Modular Wind Trails System
+    const windTrails = createWindTrails({ scene });
+    const { instTrails, trailsData } = windTrails;
 
     function updateBirds(playerX, playerY, playerZ, time, dt) {
-        const playerPos = { x: playerX, y: playerY, z: playerZ };
-        const vel = (typeof velocity !== 'undefined') ? velocity : 35;
-        if (typeof window.birdFlock !== 'undefined' && window.birdFlock) window.birdFlock.update(playerPos, time, dt, vel);
-        if (typeof window.flamingoFlock !== 'undefined' && window.flamingoFlock) window.flamingoFlock.update(playerPos, time, dt, vel);
+        updateFlocks(playerX, playerY, playerZ, time, dt, typeof velocity !== 'undefined' ? velocity : 35);
     }
 
     const dummy = new THREE.Object3D();
@@ -1545,103 +1220,6 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         
 
 
-        // Clouds
-        const cloudScale = 1.0 + Math.min(1.0, Math.max(0.0, (playerGrp.position.y - 300.0) / 11700.0)) * 4.0;
-        const cloudDist = 1200 * cloudScale;
-        const cloudTeleportDist = cloudDist * 1.15;
-        for (let i = 0; i < CLOUD_COUNT; i++) {
-            instClouds.getMatrixAt(i, dummy.matrix);
-            dummy.matrix.decompose(dummy.position, dummy.quaternion, dummy.scale);
-            
-            if (Math.abs(dummy.position.x - playerX) > cloudTeleportDist || Math.abs(dummy.position.z - playerZ) > cloudTeleportDist || dummy.position.y < -500) {
-                const angle = Math.random() * Math.PI * 2.0;
-                const r = cloudDist * (0.6 + Math.random() * 0.38);
-                dummy.position.set(
-                    playerX + Math.cos(angle) * r,
-                    280 + Math.random() * 120,
-                    playerZ + Math.sin(angle) * r
-                );
-                dummy.rotation.set(0, Math.random() * Math.PI, 0);
-                let s = (1.3 + Math.random() * 2.2) * params.cloudScaleRegular;
-                dummy.scale.set(s * (0.8 + Math.random() * 0.8), s * (0.5 + Math.random() * 0.6), s * (0.8 + Math.random() * 0.8));
-            }
-            dummy.position.x += 4.0 * dt;
-            dummy.position.z += 1.5 * dt;
-            dummy.updateMatrix();
-            instClouds.setMatrixAt(i, dummy.matrix);
-        }
-        instClouds.instanceMatrix.needsUpdate = true;
-
-        // High Cumulonimbus Clouds
-        const highCloudDist = 3500;
-        const highCloudTeleport = highCloudDist * 1.15;
-        for (let i = 0; i < HIGH_CLOUD_COUNT; i++) {
-            instHighClouds.getMatrixAt(i, dummy.matrix);
-            dummy.position.setFromMatrixPosition(dummy.matrix);
-            if (Math.abs(dummy.position.x - playerX) > highCloudTeleport || Math.abs(dummy.position.z - playerZ) > highCloudTeleport || dummy.position.y < -500) {
-                const angle = Math.random() * Math.PI * 2.0;
-                const r = highCloudDist * (0.6 + Math.random() * 0.38);
-                dummy.position.set(
-                    playerX + Math.cos(angle) * r,
-                    1200 + Math.random() * 500,
-                    playerZ + Math.sin(angle) * r
-                );
-                dummy.rotation.set(0, Math.random() * Math.PI, 0);
-                dummy.scale.set((1.5 + Math.random() * 2.0) * params.cloudScaleHigh, (0.8 + Math.random() * 1.0) * params.cloudScaleHigh, (1.5 + Math.random() * 2.0) * params.cloudScaleHigh);
-            }
-            dummy.position.x += 1.5 * dt;
-            dummy.updateMatrix();
-            instHighClouds.setMatrixAt(i, dummy.matrix);
-        }
-        instHighClouds.instanceMatrix.needsUpdate = true;
-
-        // See-Through Wispy Clouds
-        const wispyDist = 1400 * cloudScale;
-        const wispyTeleport = wispyDist * 1.15;
-        for (let i = 0; i < WISPY_CLOUD_COUNT; i++) {
-            instWispyClouds.getMatrixAt(i, dummy.matrix);
-            dummy.position.setFromMatrixPosition(dummy.matrix);
-            if (Math.abs(dummy.position.x - playerX) > wispyTeleport || Math.abs(dummy.position.z - playerZ) > wispyTeleport || dummy.position.y < -500) {
-                const angle = Math.random() * Math.PI * 2.0;
-                const r = wispyDist * (0.6 + Math.random() * 0.38);
-                dummy.position.set(
-                    playerX + Math.cos(angle) * r,
-                    230 + Math.random() * 150,
-                    playerZ + Math.sin(angle) * r
-                );
-                dummy.rotation.set(0, Math.random() * Math.PI, 0);
-                dummy.scale.set((2.0 + Math.random() * 1.5) * params.cloudScaleWispy, (0.4 + Math.random() * 0.4) * params.cloudScaleWispy, (1.8 + Math.random() * 1.5) * params.cloudScaleWispy);
-            }
-            dummy.position.x += 5.0 * dt;
-            dummy.updateMatrix();
-            instWispyClouds.setMatrixAt(i, dummy.matrix);
-        }
-        instWispyClouds.instanceMatrix.needsUpdate = true;
-
-        // Distant Mega Painted Clouds (Hovering at max altitude horizon)
-        const megaDist = 3800;
-        const megaTeleport = megaDist * 1.15;
-        for (let i = 0; i < MEGA_CLOUD_COUNT; i++) {
-            instMegaClouds.getMatrixAt(i, dummy.matrix);
-            dummy.position.setFromMatrixPosition(dummy.matrix);
-            if (Math.abs(dummy.position.x - playerX) > megaTeleport || Math.abs(dummy.position.z - playerZ) > megaTeleport || dummy.position.y < -500) {
-                const ang = Math.random() * Math.PI * 2.0;
-                const r = megaDist * (0.6 + Math.random() * 0.38);
-                dummy.position.set(
-                    playerX + Math.cos(ang) * r,
-                    450 + Math.random() * 400,
-                    playerZ + Math.sin(ang) * r
-                );
-                dummy.rotation.set(0, Math.random() * Math.PI, 0);
-                dummy.scale.set((3.0 + Math.random() * 2.5) * params.cloudScaleMega, (1.4 + Math.random() * 1.2) * params.cloudScaleMega, (3.0 + Math.random() * 2.5) * params.cloudScaleMega);
-            }
-            dummy.position.x += 0.8 * dt;
-            dummy.updateMatrix();
-            instMegaClouds.setMatrixAt(i, dummy.matrix);
-        }
-        instMegaClouds.instanceMatrix.needsUpdate = true;
-
-        // Distant Horizon Clouds (Billboarded PNGs)
 
 
         // === TREE VISIBILITY: runs EVERY FRAME (not gated by shouldUpdateTerrain) ===
@@ -1711,9 +1289,13 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
     // 7. PLAYER SETUP
     // ==========================================
     playerGrp = new THREE.Group();
-    playerGrp.position.set(0, 50, 0);
+    playerGrp.position.set(0, 45, 8000);
     scene.add(playerGrp);
     window.playerGrp = playerGrp;
+
+    const initialBiome = getBiomeAt(playerGrp.position.x, playerGrp.position.z);
+    const initialBiomeEl = document.getElementById('biome-label');
+    if (initialBiomeEl && initialBiome) initialBiomeEl.innerText = initialBiome.name;
 
     const playerVisuals = new THREE.Group();
     playerGrp.add(playerVisuals);
@@ -1728,10 +1310,12 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
     const kikiLeftLight = new THREE.PointLight(0xffaa44, 2.5, 300, 1.2);
     kikiLeftLight.position.set(-35, 15, 10);
     playerVisuals.add(kikiLeftLight);
+    window.kikiLeftLight = kikiLeftLight;
 
     const kikiRightLight = new THREE.PointLight(0xffaa44, 2.5, 300, 1.2);
     kikiRightLight.position.set(35, 15, 10);
     playerVisuals.add(kikiRightLight);
+    window.kikiRightLight = kikiRightLight;
 
     // Load GLTF Model Loaders
     const gltfLoader = new GLTFLoader();
@@ -1795,8 +1379,9 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         gltfLoader,
         resolveAssetUrl,
         uTime: terrainUniforms.uTime,
+        uSunDir: terrainUniforms.uSunDir,
         gradientMap,
-        getWorldHeight,
+        getWorldHeight: (x, z) => terrainMeshManager.getGroundedHeight(x, z),
         getBiomeAt,
         getIslandData,
         getPathStrength,
@@ -1825,6 +1410,10 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         if (!cfg) return;
         const isPlane = !!cfg.isPlane;
         if (biplaneAudio) {
+            if (!biplaneAudio.audioCtx) {
+                const ctx = (typeof getAudioContext === 'function' ? getAudioContext() : null) || window.audioCtx;
+                if (ctx) biplaneAudio.setAudioContext(ctx);
+            }
             if (isPlane && isEngineSoundOn && !isSoundMuted) {
                 biplaneAudio.setActive(true);
             } else {
@@ -1834,6 +1423,11 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         const topEngineBtn = document.getElementById('top-engine-btn');
         if (topEngineBtn) {
             topEngineBtn.style.display = isPlane ? 'inline-flex' : 'none';
+            if (isPlane) {
+                topEngineBtn.style.opacity = isEngineSoundOn ? '1' : '0.45';
+                topEngineBtn.style.color = isEngineSoundOn ? '#4ade80' : 'rgba(255, 255, 255, 0.6)';
+                topEngineBtn.title = isEngineSoundOn ? `Airplane Engine Sound: ON (${cfg.name}) (Click to Mute)` : `Airplane Engine Sound: OFF (${cfg.name}) (Click to Enable)`;
+            }
         }
         const charBtn = document.getElementById('char-toggle');
         if (charBtn) {
@@ -1854,11 +1448,50 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         }
     }
 
+    window.addEventListener('flight-model-changed', (e) => {
+        if (e && e.detail && e.detail.config) {
+            onFlightModelChanged(e.detail.config);
+            if (toonShaderManager && toonShaderManager.mode && toonShaderManager.mode !== 'original') {
+                toonShaderManager.apply(scene, toonShaderManager.mode);
+            }
+        }
+    });
+
     // Initialize initial state for engine button based on starting model
     const initCfg = flightModelManager.getCurrentConfig();
     if (initCfg) {
         onFlightModelChanged(initCfg);
     }
+
+    // Initialize Distance Overlay (100m, 200m, 300m, 400m, 500m, 600m, 1000m)
+    const distanceOverlay = new DistanceOverlay({
+        scene,
+        camera,
+        config: {
+            visible: params.showDistanceOverlay,
+            opacity: params.distanceOverlayOpacity,
+            color: params.distanceOverlayColor,
+            showLabels: params.distanceOverlayLabels,
+            showGroundDropline: params.distanceOverlayGroundDropline,
+            mode: params.distanceOverlayMode
+        }
+    });
+    window.distanceOverlay = distanceOverlay;
+    window.toggleDistanceOverlay = (forceVal) => {
+        if (!distanceOverlay) return;
+        const nextVal = forceVal !== undefined ? forceVal : !params.showDistanceOverlay;
+        params.showDistanceOverlay = nextVal;
+        distanceOverlay.setVisible(nextVal);
+        showVisualToast(nextVal ? 'Distance Rings: ON' : 'Distance Rings: OFF', flightModelManager);
+        if (gui && typeof gui.controllersRecursive === 'function') {
+            gui.controllersRecursive().forEach(c => {
+                if (c.property === 'showDistanceOverlay' && typeof c.updateDisplay === 'function') {
+                    c.updateDisplay();
+                }
+            });
+        }
+        return nextVal;
+    };
 
     // Initialize Modular Debug GUI (Performance, Biomes, Atmosphere, Water, Trees, Audio)
     initDebugGUI({
@@ -1869,6 +1502,12 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         uDitherAmount,
         terrain,
         terrainGeo,
+        terrainMeshManager,
+        playerGrp,
+        scene,
+        camera,
+        renderer,
+        cameraBase,
         dirLight,
         bloomPass,
         settingsManager,
@@ -1894,12 +1533,132 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         flightModelManager,
         toggleModelVisibility: updateModelVisibility,
         globalWaterParam,
-        skyUniforms
+        skyUniforms,
+        toonShaderManager,
+        treeMeshes,
+        distanceOverlay
     });
 
-    window.addEventListener('flight-model-changed', (e) => {
-        if (e.detail && e.detail.config) {
-            onFlightModelChanged(e.detail.config);
+    window.summonDebugGUI = () => {
+        if (gui) {
+            gui.show();
+            if (gui._hidden) gui.open();
+        }
+        return gui;
+    };
+
+    window.toggleGUI = () => {
+        if (gui) {
+            if (gui._hidden) gui.show();
+            else gui.hide();
+        }
+    };
+
+    // Real-time Live Sync Receiver for Dual-Window Studio Mode
+    liveSync.onMessage((msg) => {
+        if (!msg || !msg.type) return;
+        if (msg.type === 'SET_TIME_PHASE') {
+            const phase = msg.payload.phase;
+            if (typeof setTimePhase === 'function') {
+                setTimePhase(phase);
+                if (typeof updateAtmoParamsFromPhase === 'function') updateAtmoParamsFromPhase();
+            }
+        } else if (msg.type === 'PARAM_CHANGE') {
+            const { category, key, value } = msg.payload || {};
+            
+            // Exposure & Lighting
+            if (key === 'exposure') {
+                renderer.toneMappingExposure = value;
+                params.exposure = value;
+                params.dayExposure = value;
+            }
+            if (key === 'exposureTrim') {
+                params.exposureTrim = value;
+            }
+            if (key === 'sunIntensity') {
+                if (dirLight) dirLight.intensity = value;
+                if (envConfigs && envConfigs[timePhase]) envConfigs[timePhase].dirI = value;
+            }
+            if (key === 'sunLight') {
+                const hex = typeof value === 'string' ? parseInt(value.replace('#',''), 16) : value;
+                if (dirLight) dirLight.color.setHex(hex);
+                if (envConfigs && envConfigs[timePhase]) envConfigs[timePhase].dir = hex;
+                if (skyUniforms && skyUniforms.uSunColor) skyUniforms.uSunColor.value.set(value);
+            }
+            if (key === 'ambientLight') {
+                const hex = typeof value === 'string' ? parseInt(value.replace('#',''), 16) : value;
+                if (ambientLight) ambientLight.color.setHex(hex);
+                if (envConfigs && envConfigs[timePhase]) envConfigs[timePhase].amb = hex;
+            }
+            if (key === 'ambIntensity') {
+                if (ambientLight) ambientLight.intensity = value;
+                if (envConfigs && envConfigs[timePhase]) envConfigs[timePhase].ambI = value;
+            }
+            if (key === 'skyColor') {
+                const hex = typeof value === 'string' ? parseInt(value.replace('#',''), 16) : value;
+                if (envConfigs && envConfigs[timePhase]) envConfigs[timePhase].bg = hex;
+                if (scene && scene.background) scene.background.setHex(hex);
+            }
+            if (key === 'fogColor') {
+                const hex = typeof value === 'string' ? parseInt(value.replace('#',''), 16) : value;
+                if (envConfigs && envConfigs[timePhase]) envConfigs[timePhase].fog = hex;
+                if (scene && scene.fog) scene.fog.color.setHex(hex);
+            }
+
+            // Sky Gradients
+            if (key === 'zenithColor' && skyUniforms && skyUniforms.uSkyColorZenith) skyUniforms.uSkyColorZenith.value.set(value);
+            if (key === 'horizonColor' && skyUniforms && skyUniforms.uSkyColorHorizon) skyUniforms.uSkyColorHorizon.value.set(value);
+            if (key === 'sunFlareGlow' && skyUniforms && skyUniforms.uSunCoronaIntensity) skyUniforms.uSunCoronaIntensity.value = value;
+
+            // Clouds
+            if (category === 'clouds' || (key && key.startsWith('cloud'))) {
+                if (key === 'coverage' && skyUniforms && skyUniforms.uCloudCoverage) skyUniforms.uCloudCoverage.value = value;
+                if (key === 'density' && skyUniforms && skyUniforms.uCloudOpacity) skyUniforms.uCloudOpacity.value = value;
+                if (key === 'sharpness' && skyUniforms && skyUniforms.uCloudEdge) skyUniforms.uCloudEdge.value = value;
+                if (key === 'sunColor' && skyUniforms && skyUniforms.uCloudColor) skyUniforms.uCloudColor.value.set(value);
+                if (key === 'shadowColor' && skyUniforms && skyUniforms.uCloudShadowColor) skyUniforms.uCloudShadowColor.value.set(value);
+            }
+
+            // Ocean & Water
+            if (category === 'water' && animeWaterSystem && animeWaterSystem.openSea) {
+                const uniforms = animeWaterSystem.openSea.material.uniforms;
+                if (key === 'deepColor') uniforms.uDeepColor.value.set(value);
+                if (key === 'shallowColor') uniforms.uShallowColor.value.set(value);
+                if (key === 'waveHeight') uniforms.uGlobalWaveHeight.value = value;
+                if (key === 'swellLen') uniforms.uSwellWavelength.value = value;
+                if (key === 'seaIntensity') uniforms.uSeaState.value = value;
+            }
+
+            // Trees
+            if (category === 'trees' && stylizedTrees) {
+                if (key === 'density') { stylizedTrees.density = value; stylizedTrees.respawn(); }
+                if (key === 'scale') { stylizedTrees.scaleMul = value; stylizedTrees.respawn(); }
+                if (key === 'minSpacing') { stylizedTrees.setCellSize(value); }
+                if (key === 'leafBottom') stylizedTrees.uLeafBottom.value.set(value);
+                if (key === 'leafTop') stylizedTrees.uLeafTop.value.set(value);
+                if (key === 'barkBase') stylizedTrees.uBarkBase.value.set(value);
+                if (key === 'respawn') stylizedTrees.respawn();
+                if (key === 'compressionTier' && typeof stylizedTrees.setCompressionTier === 'function') stylizedTrees.setCompressionTier(value);
+            }
+
+            // Global Terrain
+            if (key === 'globalHeightMultiplier') globalTerrainParams.globalHeightMultiplier = value;
+        } else if (msg.type === 'BIOME_CHANGE') {
+            const { biome, param, value } = msg.payload || {};
+            if (param === 'height') {
+                biomeHeights[biome] = value;
+            } else if (param === 'noise') {
+                biomeScales[biome] = value;
+            }
+        } else if (msg.type === 'LOAD_PRESET') {
+            const name = msg.payload ? msg.payload.name : null;
+            if (name && DEFAULT_PRESETS && DEFAULT_PRESETS[name]) {
+                runApplyPresetData(DEFAULT_PRESETS[name], {
+                    envConfigs, params, cloudParams, flightModelManager, gui,
+                    settingsManager, presetDropdownControllers, DEFAULT_PRESETS,
+                    updateAtmoParamsFromPhase, setTimePhase, _isSyncing: true
+                });
+            }
         }
     });
 
@@ -1922,7 +1681,14 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
 
     function setEngineSoundEnabled(enabled) {
         isEngineSoundOn = !!enabled;
+        if (!window.audioCtx && typeof initAudio === 'function') {
+            initAudio({ biplaneAudio, flightModelManager, isEngineSoundOn, isSoundMuted });
+        }
         if (biplaneAudio) {
+            if (!biplaneAudio.audioCtx) {
+                const ctx = (typeof getAudioContext === 'function' ? getAudioContext() : null) || window.audioCtx;
+                if (ctx) biplaneAudio.setAudioContext(ctx);
+            }
             biplaneAudio.setEnabled(isEngineSoundOn);
             const curCfg = flightModelManager.getCurrentConfig();
             if (curCfg && curCfg.isPlane && isEngineSoundOn && !isSoundMuted) {
@@ -1933,9 +1699,12 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         }
         const topEngineBtn = document.getElementById('top-engine-btn');
         if (topEngineBtn) {
+            const curCfg = flightModelManager ? flightModelManager.getCurrentConfig() : null;
+            const isPlane = curCfg ? !!curCfg.isPlane : false;
+            topEngineBtn.style.display = isPlane ? 'inline-flex' : 'none';
             topEngineBtn.style.opacity = isEngineSoundOn ? '1' : '0.45';
             topEngineBtn.style.color = isEngineSoundOn ? '#4ade80' : 'rgba(255, 255, 255, 0.6)';
-            topEngineBtn.title = isEngineSoundOn ? 'Engine Sound: ON (Click to Mute)' : 'Engine Sound: OFF (Click to Enable)';
+            topEngineBtn.title = isEngineSoundOn ? `Airplane Engine Sound: ON${curCfg ? ` (${curCfg.name})` : ''} (Click to Mute)` : `Airplane Engine Sound: OFF${curCfg ? ` (${curCfg.name})` : ''} (Click to Enable)`;
         }
         const engineBtn = document.getElementById('engine-sound-btn');
         if (engineBtn) {
@@ -2575,7 +2344,12 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
 
 
     // Load Initial Flight Model
-    const savedModelId = localStorage.getItem('wl_saved_model_id');
+    let savedModelId = localStorage.getItem('wl_saved_model_id');
+    if (savedModelId === 'kiki' && !localStorage.getItem('wl_migrated_default_savoia')) {
+        savedModelId = 'psx_saviola_s21';
+        localStorage.setItem('wl_saved_model_id', 'psx_saviola_s21');
+        localStorage.setItem('wl_migrated_default_savoia', 'true');
+    }
     let loadPromise;
     if (savedModelId && typeof flightModelManager !== 'undefined') {
         loadPromise = flightModelManager.setModelById(savedModelId, true);
@@ -2612,7 +2386,7 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         getCameraManager: () => ({
             get cameraZoomDist() { return cameraZoomDist; },
             set cameraZoomDist(v) {
-                cameraZoomDist = v;
+                cameraZoomDist = Math.max(6.0, Math.min(300.0, v));
                 localStorage.setItem('wl_zoomDist', cameraZoomDist);
                 const zoomToggleBtn = document.getElementById('zoom-toggle');
                 if (zoomToggleBtn) {
@@ -2659,9 +2433,9 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         isFlightPaused: () => (typeof isFlightPaused !== 'undefined' ? isFlightPaused : false),
     };
 
-    if (typeof initTerrainEditor === 'function') {
-        initTerrainEditor(scene, camera, renderer, terrain);
-    }
+    const treePlacementEditor = new TreePlacementEditor(scene, camera, renderer, terrain);
+    window.treePlacementEditor = treePlacementEditor;
+    window.toggleTerrainEditor = () => treePlacementEditor.toggle();
 
     // --- Pan Event Listeners (Handles Mouse & Mobile Touch Screen) ---
     let isDragging = false;
@@ -2734,23 +2508,21 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
 
     function shiftAllInstances(shiftX, shiftZ) {
         if (typeof instCrystals !== 'undefined') shiftInstancedMesh(instCrystals, typeof CRYSTAL_COUNT !== 'undefined' ? CRYSTAL_COUNT : instCrystals.count, shiftX, shiftZ);
-        if (typeof instIcebergs !== 'undefined') shiftInstancedMesh(instIcebergs, typeof ICEBERG_COUNT !== 'undefined' ? ICEBERG_COUNT : instIcebergs.count, shiftX, shiftZ);
-        if (typeof instClouds !== 'undefined') shiftInstancedMesh(instClouds, typeof MAX_CLOUD_COUNT !== 'undefined' ? MAX_CLOUD_COUNT : instClouds.count, shiftX, shiftZ);
-        if (typeof instHighClouds !== 'undefined') shiftInstancedMesh(instHighClouds, typeof MAX_HIGH_CLOUD_COUNT !== 'undefined' ? MAX_HIGH_CLOUD_COUNT : instHighClouds.count, shiftX, shiftZ);
-        if (typeof instWispyClouds !== 'undefined') shiftInstancedMesh(instWispyClouds, typeof MAX_WISPY_CLOUD_COUNT !== 'undefined' ? MAX_WISPY_CLOUD_COUNT : instWispyClouds.count, shiftX, shiftZ);
-        if (typeof instMegaClouds !== 'undefined') shiftInstancedMesh(instMegaClouds, typeof MAX_MEGA_CLOUD_COUNT !== 'undefined' ? MAX_MEGA_CLOUD_COUNT : instMegaClouds.count, shiftX, shiftZ);
-        if (typeof instRocks !== 'undefined') shiftInstancedMesh(instRocks, typeof ROCK_COUNT !== 'undefined' ? ROCK_COUNT : instRocks.count, shiftX, shiftZ);
-        if (typeof instBushes !== 'undefined') shiftInstancedMesh(instBushes, typeof BUSH_COUNT !== 'undefined' ? BUSH_COUNT : instBushes.count, shiftX, shiftZ);
-        if (typeof instFlowers !== 'undefined') shiftInstancedMesh(instFlowers, typeof FLOWER_COUNT !== 'undefined' ? FLOWER_COUNT : instFlowers.count, shiftX, shiftZ);
-        if (typeof instBirds !== 'undefined') shiftInstancedMesh(instBirds, typeof MAX_BIRD_COUNT !== 'undefined' ? MAX_BIRD_COUNT : instBirds.count, shiftX, shiftZ);
-        if (typeof instHighBirds !== 'undefined') shiftInstancedMesh(instHighBirds, typeof HIGH_BIRD_COUNT !== 'undefined' ? HIGH_BIRD_COUNT : instHighBirds.count, shiftX, shiftZ);
-        if (typeof instBillboardTrees !== 'undefined') shiftInstancedMesh(instBillboardTrees, instBillboardTrees.count, shiftX, shiftZ);
-        if (typeof instJungleBillboardTrees !== 'undefined') shiftInstancedMesh(instJungleBillboardTrees, instJungleBillboardTrees.count, shiftX, shiftZ);
+        shiftDiorama(dioramaSystem, shiftX, shiftZ, shiftInstancedMesh);
+        shiftBirds(birdSystem, shiftX, shiftZ, shiftInstancedMesh);
+        shiftWindTrails(windTrails, shiftX, shiftZ, shiftInstancedMesh);
+        if (typeof stylizedTrees !== 'undefined' && stylizedTrees && typeof stylizedTrees.respawn === 'function') {
+            stylizedTrees.respawn();
+        }
     }
 
     const _cachedWaterSunDir = new THREE.Vector3();
 
     async function animate() {
+        if (window.is3DViewportHidden) {
+            requestAnimationFrame(animate);
+            return;
+        }
         if (proceduralSkyMesh && !isGodMode) {
             camera.getWorldPosition(proceduralSkyMesh.position);
         }
@@ -2762,6 +2534,8 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         if (!playerPhysics && typeof playerGrp !== 'undefined') {
             playerPhysics = new PlayerPhysics(playerGrp);
             cameraManager = new CameraManager(camera, cameraBase, cameraZoomDist);
+            window.cameraManager = cameraManager;
+            window.playerPhysics = playerPhysics;
         }
         lastAnimTime = nowAnimTime;
         adaptiveRes.sample(rawDt * 1000);
@@ -2803,23 +2577,29 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
             const activeCam = isGodMode ? godCamera : camera;
             window.rainSystem.update(time, activeCam, params);
         }
-        if (window.groundFogEditor && typeof playerGrp !== 'undefined' && playerGrp.position) {
-            window.groundFogEditor.updateFrame(dt, timePhase);
-            if (typeof window.fogUniforms !== 'undefined' && window.fogGroup) {
-                window.fogUniforms.uTime.value = wrappedTime;
-                const currentB = getBiomeAt(playerGrp.position.x, playerGrp.position.z);
-                const bName = currentB ? currentB.name : 'Archipelago';
-                const cleanB = cleanBiomeName(bName);
-                const biomeFogOffset = (window.biomeFogSettings && window.biomeFogSettings[cleanB] !== undefined) ? window.biomeFogSettings[cleanB] : 0;
-                const currentGroundY = getWorldHeight(playerGrp.position.x, playerGrp.position.z);
-                
-                // Smoothly position fog group at terrain / water level plus biome offset
-                window.fogGroup.position.x = playerGrp.position.x;
-                window.fogGroup.position.z = playerGrp.position.z;
-                const baseFloor = Math.max(currentGroundY, 2.4);
-                const targetFogY = baseFloor + biomeFogOffset;
-                window.fogGroup.position.y += (targetFogY - window.fogGroup.position.y) * dt * 3.0;
+        if (typeof window.fogUniforms !== 'undefined' && window.fogGroup && typeof playerGrp !== 'undefined' && playerGrp.position) {
+            window.fogUniforms.uTime.value = wrappedTime;
+            if (typeof dirLight !== 'undefined') {
+                window.fogUniforms.uSunDirection.value.copy(dirLight.position).sub(playerGrp.position).normalize();
+                if (dirLight.color) {
+                    window.fogUniforms.uSunColor.value.copy(dirLight.color);
+                }
             }
+            if (window.groundFogEditor) {
+                window.groundFogEditor.updateFrame(dt, timePhase);
+            }
+            const currentB = getBiomeAt(playerGrp.position.x, playerGrp.position.z);
+            const bName = currentB ? currentB.name : 'Misty Mountains';
+            const cleanB = cleanBiomeName(bName);
+            const biomeFogOffset = (window.biomeFogSettings && window.biomeFogSettings[cleanB] !== undefined) ? window.biomeFogSettings[cleanB] : 0;
+            const currentGroundY = getWorldHeight(playerGrp.position.x, playerGrp.position.z);
+            
+            // Smoothly position fog group at terrain / water level plus biome offset
+            window.fogGroup.position.x = playerGrp.position.x;
+            window.fogGroup.position.z = playerGrp.position.z;
+            const baseFloor = Math.max(currentGroundY, 2.4);
+            const targetFogY = baseFloor + biomeFogOffset;
+            window.fogGroup.position.y += (targetFogY - window.fogGroup.position.y) * dt * 3.0;
         }
 
         currentFrame++;
@@ -2838,7 +2618,7 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
             }
             const currZn = getBiomeAt(playerGrp.position.x, playerGrp.position.z);
             const biomeEl = document.getElementById('biome-label');
-            if (biomeEl) biomeEl.innerText = currZn.name;
+            if (biomeEl && currZn) biomeEl.innerText = currZn.name || '';
         }
 
         
@@ -2882,16 +2662,17 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
             kikiRightLight.intensity += (kikiGlow - kikiRightLight.intensity) * decayEnv;
         }
 
-        // Procedural Sky — per-biome lerp + time of day factors
+        // Procedural Sky - per-biome lerp + time of day factors
         if (skyUniforms && typeof playerGrp !== 'undefined') {
             const currentB = getBiomeAt(playerGrp.position.x, playerGrp.position.z);
-            const skyBiomeName = currentB ? currentB.name : '🌲 Ghibli Land';
-            const biomeTarget = BIOME_SKY_CONFIGS[skyBiomeName] || BIOME_SKY_CONFIGS['🌊 Open Ocean'];
+            const skyBiomeName = currentB ? currentB.name : 'Ghibli Land';
+            const biomeTarget = (BIOME_SKY_CONFIGS && (BIOME_SKY_CONFIGS[skyBiomeName] || BIOME_SKY_CONFIGS['Open Ocean'] || BIOME_SKY_CONFIGS['Ghibli Land'])) || { coverage: 0.45, edge: 0.06, speed: 0.018, turbulence: 0.0, stormDarken: 0.0, skyZenith: 0x5a9ed0, skyHorizon: 0xc8dce8, cloudCol: 0xfffaec, cloudShadow: 0xa89888 };
             const decaySky = 1.0 - Math.exp(-1.5 * dt);
 
             skyUniforms.uTime.value = time;
             if (typeof staticSun !== 'undefined') {
-                skyUniforms.uSunPosition.value.copy(staticSun.position).sub(playerGrp.position).normalize();
+                const activeCelestial = (timePhase === 2 && staticMoon) ? staticMoon : staticSun;
+                skyUniforms.uSunPosition.value.copy(activeCelestial.position).sub(playerGrp.position).normalize();
             }
 
             skyUniforms.uCloudCoverage.value += (biomeTarget.coverage - skyUniforms.uCloudCoverage.value) * decaySky;
@@ -2947,21 +2728,14 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
             }
         }
 
-        // Instanced mesh clouds remain visible (scene-level 3D clouds)
-        if (typeof instClouds !== 'undefined') instClouds.visible = params.showClouds && params.showCloudsRegular;
-        if (typeof instHighClouds !== 'undefined') instHighClouds.visible = params.showClouds && params.showCloudsHigh;
-        if (typeof instWispyClouds !== 'undefined') instWispyClouds.visible = params.showClouds && params.showCloudsWispy;
-        if (typeof instMegaClouds !== 'undefined') instMegaClouds.visible = params.showClouds && params.showCloudsMega;
-        if (typeof instHorizonClouds1 !== 'undefined') instHorizonClouds1.visible = params.showCloudsHorizon;
-        if (typeof instHorizonClouds2 !== 'undefined') instHorizonClouds2.visible = params.showCloudsHorizon;
-        if (typeof instHorizonClouds3 !== 'undefined') instHorizonClouds3.visible = params.showCloudsHorizon;
+
 
 
 
 
 
         // Floating Crystals — respawn in Crystal Land
-        const crystalDist = 1200;
+        const crystalDist = 3200;
         let inCrystalLand = false;
         if (typeof playerGrp !== 'undefined' && playerGrp.position) {
             const b = getBiomeAt(playerGrp.position.x, playerGrp.position.z);
@@ -2977,36 +2751,122 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
                 matCrystal.userData.shader.uniforms.uTime.value = time;
             }
 
+            // Gather active crystal positions for spacing collision checks
+            const crystalPositions = [];
+            for (let j = 0; j < CRYSTAL_COUNT; j++) {
+                instCrystals.getMatrixAt(j, dummy.matrix);
+                dummy.matrix.decompose(dummy.position, dummy.quaternion, dummy.scale);
+                if (dummy.position.y > -500) {
+                    crystalPositions.push({ x: dummy.position.x, z: dummy.position.z, idx: j });
+                }
+            }
+
             for (let i = 0; i < CRYSTAL_COUNT; i++) {
                 instCrystals.getMatrixAt(i, dummy.matrix);
                 dummy.matrix.decompose(dummy.position, dummy.quaternion, dummy.scale);
                 
-                if (dummy.position.y < -500 || Math.abs(dummy.position.x - playerGrp.position.x) > crystalDist || Math.abs(dummy.position.z - playerGrp.position.z) > crystalDist) {
-                    const s = (30 + Math.random() * 60) * 3;
-                    let dx = (Math.random() - 0.5) * crystalDist * 2.0;
-                    let dz = (Math.random() - 0.5) * crystalDist * 2.0;
-                    const cX = playerGrp.position.x + dx;
-                    let cZ = playerGrp.position.z + dz;
-                    const cGroundY = getWorldHeight(cX, cZ);
-                    
-                    let spawnY = cGroundY + 100 + Math.random() * 150;
-                    if (i % 5 === 0) {
-                        spawnY = cGroundY + 15 + (s * 3.0); 
+                const distToPlayer = Math.hypot(dummy.position.x - playerGrp.position.x, dummy.position.z - playerGrp.position.z);
+                if (dummy.position.y < -500 || distToPlayer > crystalDist) {
+                    // Varied, balanced scale categories
+                    let s = 30;
+                    const rType = (i % 5);
+                    if (rType === 0) {
+                        // Grand focal monolith
+                        s = 85 + Math.random() * 30;
+                    } else if (rType <= 2) {
+                        // Medium floating crystal obelisk
+                        s = 45 + Math.random() * 25;
+                    } else {
+                        // Smaller elegant hovering shard
+                        s = 22 + Math.random() * 18;
                     }
+
+                    // Best-candidate rejection sampling to guarantee wide, even spread
+                    let bestX = playerGrp.position.x + (Math.random() - 0.5) * crystalDist * 1.8;
+                    let bestZ = playerGrp.position.z + (Math.random() - 0.5) * crystalDist * 1.8;
+                    let maxMinDist = -1;
+
+                    for (let attempt = 0; attempt < 16; attempt++) {
+                        const angle = Math.random() * Math.PI * 2.0;
+                        const rad = 400 + Math.random() * (crystalDist - 500);
+                        const candX = playerGrp.position.x + Math.cos(angle) * rad;
+                        const candZ = playerGrp.position.z + Math.sin(angle) * rad;
+
+                        let minDistToOthers = Infinity;
+                        for (let k = 0; k < crystalPositions.length; k++) {
+                            if (crystalPositions[k].idx === i) continue;
+                            const d = Math.hypot(candX - crystalPositions[k].x, candZ - crystalPositions[k].z);
+                            if (d < minDistToOthers) minDistToOthers = d;
+                        }
+
+                        if (minDistToOthers > 600) {
+                            bestX = candX;
+                            bestZ = candZ;
+                            break;
+                        } else if (minDistToOthers > maxMinDist) {
+                            maxMinDist = minDistToOthers;
+                            bestX = candX;
+                            bestZ = candZ;
+                        }
+                    }
+
+                    // Multi-point ground sampling under the crystal's footprint
+                    const footRad = s * 0.6;
+                    const h0 = getWorldHeight(bestX, bestZ);
+                    const h1 = getWorldHeight(bestX + footRad, bestZ);
+                    const h2 = getWorldHeight(bestX - footRad, bestZ);
+                    const h3 = getWorldHeight(bestX, bestZ + footRad);
+                    const h4 = getWorldHeight(bestX, bestZ - footRad);
+                    const peakGroundY = Math.max(2.4, h0, h1, h2, h3, h4);
                     
-                    dummy.position.set(cX, spawnY, cZ);
-                    dummy.scale.set(s * 0.6, s, s * 0.6);
+                    // Crystal geometry extends 3.0 * s downwards from center.
+                    // Provide generous open sky clearance below the lowest tip so it always floats.
+                    let airClearance = 140 + Math.random() * 120; // 140 to 260 units of open sky beneath
+                    if (i % 3 === 0) {
+                        airClearance = 80 + Math.random() * 50;   // 80 to 130 units of open sky beneath
+                    } else if (i % 3 === 2) {
+                        airClearance = 280 + Math.random() * 180; // 280 to 460 units of open sky beneath
+                    }
+
+                    const spawnY = peakGroundY + (s * 3.0) + airClearance;
+                    crystalBaseY[i] = spawnY;
+                    
+                    dummy.position.set(bestX, spawnY, bestZ);
+                    dummy.scale.set(s * 0.55, s, s * 0.55);
+
+                    // Update cached position for subsequent crystals in the same frame
+                    const found = crystalPositions.find(cp => cp.idx === i);
+                    if (found) {
+                        found.x = bestX;
+                        found.z = bestZ;
+                    } else {
+                        crystalPositions.push({ x: bestX, z: bestZ, idx: i });
+                    }
                 }
                 
-                // Constantly ensure they NEVER clip the ground wherever they drift
-                const localGroundY = getWorldHeight(dummy.position.x, dummy.position.z);
-                const minHeight = localGroundY + 15 + (dummy.scale.y * 3.0); 
-                if (dummy.position.y < minHeight) {
-                    dummy.position.y = minHeight;
+                // Floating bob around stable base altitude
+                const bob = Math.sin(time * 0.6 + i * 1.7) * 8.0;
+                dummy.position.y = crystalBaseY[i] + bob;
+
+                // Absolute ground collision prevention: ensure bottom tip NEVER clips any ground or water
+                const footRadCurrent = dummy.scale.x * 1.1;
+                const px = dummy.position.x;
+                const pz = dummy.position.z;
+                const gh0 = getWorldHeight(px, pz);
+                const gh1 = getWorldHeight(px + footRadCurrent, pz);
+                const gh2 = getWorldHeight(px - footRadCurrent, pz);
+                const gh3 = getWorldHeight(px, pz + footRadCurrent);
+                const gh4 = getWorldHeight(px, pz - footRadCurrent);
+                const currentPeakGround = Math.max(2.4, gh0, gh1, gh2, gh3, gh4);
+
+                const minTipClearance = 60.0; // Guaranteed minimum 60 units of clear sky below lowest tip
+                const minCenterY = currentPeakGround + (dummy.scale.y * 3.05) + minTipClearance;
+                if (dummy.position.y < minCenterY) {
+                    dummy.position.y = minCenterY;
+                    crystalBaseY[i] = minCenterY - bob;
                 }
 
-                dummy.position.y += Math.sin(time * 0.3 + i * 2.0) * 0.15;
-                dummy.rotateY(0.002);
+                dummy.rotateY(0.0018 + (i % 3) * 0.0008);
                 dummy.updateMatrix();
                 instCrystals.setMatrixAt(i, dummy.matrix);
             }
@@ -3123,9 +2983,9 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
         }
     
 
-        // Update Sun & Celestial positioning from active environment config
-        const targetSunY = target.sunY;
-        const decaySunY = 1.0 - Math.exp(-3.0 * dt);
+        // Update Sun & Celestial positioning from active environment config or GUI parameter
+        const targetSunY = (params.sunAltitude !== undefined && params.sunAltitude !== null) ? params.sunAltitude : target.sunY;
+        const decaySunY = 1.0 - Math.exp(-6.0 * dt);
         currentSunY += (targetSunY - currentSunY) * decaySunY;
         currentMoonY += (target.moonY - currentMoonY) * decaySunY;
 
@@ -3142,32 +3002,33 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
 
         // Sun positioning & visibility
         staticSun.position.copy(playerGrp.position).add(tempVecSunFwd);
-        staticSun.position.y = playerGrp.position.y * 0.45 + currentSunY;
+        staticSun.position.y = (params.sunAltitude !== undefined && params.sunAltitude !== null)
+            ? (playerGrp.position.y * 0.45 + params.sunAltitude)
+            : (playerGrp.position.y * 0.45 + currentSunY);
         if (params.sunDiscScale && staticSun.scale.x !== params.sunDiscScale) {
             staticSun.scale.setScalar(params.sunDiscScale);
         }
         staticSun.visible = (timePhase !== 2);
 
-        // Moon positioning
-        tempVecMoonOff.copy(tempVecSunFwd).applyAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI * 0.35);
+        // Moon positioning (matches sun position & lock to player for full continuity)
         if (staticMoon) {
-            staticMoon.position.copy(playerGrp.position).add(tempVecMoonOff);
+            staticMoon.position.copy(playerGrp.position).add(tempVecSunFwd);
             staticMoon.position.y = playerGrp.position.y * 0.45 + currentMoonY;
             staticMoon.visible = (timePhase === 2);
+            if (timePhase === 2) {
+                updateMoon(dt);
+            }
         }
 
         // Active celestial light source
-        const activeLightTarget = (timePhase === 2) ? staticMoon : staticSun;
-        tempVecToLight.copy(activeLightTarget.position).sub(playerGrp.position).normalize();
-        dirLight.position.copy(playerGrp.position).add(tempVecToLight.multiplyScalar(2000));
-        dirLight.target.position.copy(playerGrp.position);
-        dirLight.target.updateMatrixWorld();
+        updateLightingPosition({
+            lightingSystem,
+            playerPos: playerGrp.position,
+            timePhase,
+            staticMoon
+        });
 
-        // Cloud colors lerping
-        if (typeof matCloud !== 'undefined') matCloud.color.lerp(tempColorTarget.setHex(target.cloudCol), decayEnv);
-        if (typeof highCloudMat !== 'undefined') highCloudMat.color.lerp(tempColorTarget.setHex(target.cloudCol), decayEnv);
-        if (typeof megaCloudMat !== 'undefined') megaCloudMat.color.lerp(tempColorTarget.setHex(target.cloudCol), decayEnv);
-        if (typeof matWispyCloud !== 'undefined') matWispyCloud.color.lerp(tempColorTarget.setHex(target.cloudCol), decayEnv);
+
         
         // Dynamically scale up the terrain as Kiki flies high
         terrainScale = 1.0 + Math.min(1.0, Math.max(0.0, (playerGrp.position.y - 300.0) / 11700.0)) * 9.0;
@@ -3213,41 +3074,45 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
 
         updateTerrainGeometry(playerGrp.position.x, playerGrp.position.z);
         updateInstances(playerGrp.position.x, playerGrp.position.z, time, dt, playerPhysics ? playerPhysics.currentYaw : 0);
+        updateBirdsGen({
+            data: birdData,
+            inst: instBirds,
+            count: BIRD_COUNT,
+            tX: playerGrp.position.x,
+            tY: playerGrp.position.y,
+            tZ: playerGrp.position.z,
+            time,
+            dt,
+            centerPull: 2.0,
+            params,
+            velocity: playerPhysics ? playerPhysics.velocity : 18.0,
+            dummy
+        });
         updateBirds(playerGrp.position.x, playerGrp.position.y, playerGrp.position.z, time, dt);
         
-        if (isWindTrailsOn && isWindOn) {
-            instTrails.visible = true;
-            const trailOpacity = isBoosting ? 0.22 : 0.08;
-            trailMat.opacity = trailOpacity;
-            for (let i = 0; i < 100; i++) {
-                let z = trailsData[i*4+2];
-                z += (playerPhysics ? playerPhysics.velocity : 18.0) * 3.0 * dt; 
-                if (z > 50) {
-                     z -= 100;
-                     trailsData[i*4] = (Math.random() - 0.5) * 80;
-                     trailsData[i*4+1] = (Math.random() - 0.5) * 60;
-                }
-                trailsData[i*4+2] = z;
-                
-                dummy.position.set(trailsData[i*4], trailsData[i*4+1], z);
-                dummy.position.x += Math.sin(time * 3.0 + trailsData[i*4+3] * 10) * 0.5;
-                dummy.position.y += Math.cos(time * 3.0 + trailsData[i*4+3] * 10) * 0.5;
-                dummy.scale.set(1.0, 1.0, isBoosting ? 2.5 : 1.0);
-                dummy.rotation.set(0,0,0);
-                dummy.updateMatrix();
-                instTrails.setMatrixAt(i, dummy.matrix);
-            }
-            instTrails.position.copy(playerGrp.position);
-            instTrails.rotation.copy(playerGrp.rotation);
-            instTrails.instanceMatrix.needsUpdate = true;
-        } else {
-            instTrails.visible = false;
-        }
+        updateWindTrails({
+            windTrails,
+            playerX: playerGrp.position.x,
+            playerY: playerGrp.position.y,
+            playerZ: playerGrp.position.z,
+            dt,
+            isWindTrailsOn: isWindTrailsOn && isWindOn,
+            velocity: playerPhysics ? playerPhysics.velocity : 18.0
+        });
 
         updateWindSound(isWindOn, isBoosting, isSoundMuted, playerPhysics ? playerPhysics.velocity : 18.0, time);
 
         if (typeof flightModelManager !== 'undefined' && flightModelManager) {
             flightModelManager.update(dt);
+        }
+
+        if (typeof distanceOverlay !== 'undefined' && distanceOverlay) {
+            distanceOverlay.update(
+                (typeof playerGrp !== 'undefined' && playerGrp) ? playerGrp.position : null,
+                playerPhysics ? playerPhysics.currentYaw : 0,
+                (typeof playerGrp !== 'undefined' && playerGrp) ? playerGrp.quaternion : null,
+                typeof currentGroundY !== 'undefined' ? currentGroundY : 0
+            );
         }
 
         if (typeof biplaneAudio !== 'undefined' && biplaneAudio) {
@@ -3329,6 +3194,10 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
     window.addEventListener('resize', () => {
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
+        if (godCamera) {
+            godCamera.aspect = window.innerWidth / window.innerHeight;
+            godCamera.updateProjectionMatrix();
+        }
         renderer.setSize(window.innerWidth, window.innerHeight);
         // Re-derive the pixel budget: dragging onto a 4K monitor must not quadruple the
         // framebuffer. setSize() alone never re-evaluated pixel ratio.
@@ -3445,6 +3314,6 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
             setEngineSoundOn: (v) => { if (typeof setEngineSoundEnabled === 'function') setEngineSoundEnabled(v); },
             setModelVisible: (v) => { if (typeof updateModelVisibility === 'function') updateModelVisibility(v); },
             setSoundMuted: (v) => { if (typeof setSoundMuted === 'function') setSoundMuted(v); },
-            setCameraZoomDist: (v) => { cameraZoomDist = v; }
+            setCameraZoomDist: (v) => { cameraZoomDist = Math.max(6.0, Math.min(300.0, v)); }
         });
     }
