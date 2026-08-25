@@ -35,7 +35,9 @@ export class PlayerPhysics {
         const decayPitch = 1.0 - Math.exp(-1.5 * delta);
         const decayCharacterQuat = 1.0 - Math.exp(-5.0 * delta);
 
-        if (inputState.left) {
+        if (inputState.analogX !== undefined && Math.abs(inputState.analogX) > 0.05) {
+            this.turnVelocity -= this.turnAcceleration * delta * inputState.analogX;
+        } else if (inputState.left) {
             this.turnVelocity += this.turnAcceleration * delta;
         } else if (inputState.right) {
             this.turnVelocity -= this.turnAcceleration * delta;
@@ -52,7 +54,9 @@ export class PlayerPhysics {
 
         // Altitude Control
         let targetPitch = 0.0; // Default level flight
-        if (inputState.up) { 
+        if (inputState.analogY !== undefined && Math.abs(inputState.analogY) > 0.05) {
+            targetPitch = -this.maxPitchAngle * inputState.analogY;
+        } else if (inputState.up) { 
             targetPitch = this.maxPitchAngle; 
         } else if (inputState.down) {
             targetPitch = -this.maxPitchAngle; 
@@ -80,7 +84,11 @@ export class PlayerPhysics {
         this.targetQuaternion.setFromEuler(this.eulerRotation);
         
         // Soft camera auto-leveling
-        if (!inputState.left && !inputState.right && !inputState.up && !inputState.down) {
+        const isActivelySteering = inputState.left || inputState.right || inputState.up || inputState.down ||
+            (inputState.analogX !== undefined && Math.abs(inputState.analogX) > 0.05) ||
+            (inputState.analogY !== undefined && Math.abs(inputState.analogY) > 0.05);
+
+        if (!isActivelySteering) {
             this.character.quaternion.slerp(this.targetQuaternion, 1.0 - Math.exp(-1.2 * delta)); 
         } else {
             this.character.quaternion.slerp(this.targetQuaternion, decayCharacterQuat); 

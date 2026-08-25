@@ -105,8 +105,7 @@ export class FlightControlsBridge {
                 e.preventDefault();
                 e.stopPropagation();
                 this.isMouseDraggingJoy = true;
-                joyBase.style.opacity = '1';
-                joyBase.style.background = 'rgba(255,255,255,0.25)';
+                joyBase.style.opacity = '0.8';
                 this._updateJoystick(e, joyBase, joyKnob);
             });
 
@@ -126,66 +125,93 @@ export class FlightControlsBridge {
         }
 
         window.addEventListener('touchstart', e => {
-            if (this.isMobileMode && e.touches.length === 1 && e.changedTouches[0].clientX < window.innerWidth / 2) {
-                const touch = e.changedTouches[0];
-                this.activeTouchId = touch.identifier;
-                if (joyBase) {
-                    joyBase.style.left = `${touch.clientX - 50}px`;
-                    joyBase.style.bottom = 'auto';
-                    joyBase.style.top = `${touch.clientY - 50}px`;
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const touch = e.changedTouches[i];
+                const target = document.elementFromPoint(touch.clientX, touch.clientY);
+
+                if (target && (target.closest('#top-bar') || target.closest('.lil-gui') || target.closest('#crystal-editor') || target.closest('#debug-overlay'))) {
+                    continue;
                 }
-                this._updateJoystick(touch, joyBase, joyKnob);
-                e.preventDefault();
-                return;
+
+                if (target && target.closest('#boost-btn')) {
+                    continue;
+                }
+
+                if (this.activeTouchId === null) {
+                    const isLeftHalf = touch.clientX < window.innerWidth * 0.55;
+                    const isOnJoystick = joyBase && (joyBase === target || joyBase.contains(target));
+
+                    if (isLeftHalf || isOnJoystick) {
+                        this.activeTouchId = touch.identifier;
+                        if (joyBase) {
+                            joyBase.style.display = 'block';
+                            joyBase.style.opacity = '0.8';
+                            const radius = joyBase.offsetWidth / 2 || 50;
+                            joyBase.style.left = `${touch.clientX - radius}px`;
+                            joyBase.style.bottom = 'auto';
+                            joyBase.style.top = `${touch.clientY - radius}px`;
+                        }
+                        this._updateJoystick(touch, joyBase, joyKnob);
+                        e.preventDefault();
+                    }
+                }
             }
 
-            if (e.target.tagName !== 'CANVAS' && e.target !== joyBase && e.target !== joyKnob) return;
-            e.preventDefault();
-
-            if (e.touches.length === 1) {
-                const touch = e.changedTouches[0];
-                this.activeTouchId = touch.identifier;
-                this._updateJoystick(touch, joyBase, joyKnob);
-            } else if (e.touches.length === 2 && this.options.getCameraManager) {
-                this._resetJoystick(joyBase, joyKnob);
-                const dx = e.touches[0].clientX - e.touches[1].clientX;
-                const dy = e.touches[0].clientY - e.touches[1].clientY;
-                this.initialPinchDist = Math.sqrt(dx * dx + dy * dy);
-                const cm = this.options.getCameraManager();
-                this.initialZoomDist = cm ? cm.cameraZoomDist : 12.0;
+            if (e.touches.length === 2 && this.options.getCameraManager) {
+                const isJoyTouch = Array.from(e.touches).some(t => t.identifier === this.activeTouchId);
+                if (!isJoyTouch) {
+                    const dx = e.touches[0].clientX - e.touches[1].clientX;
+                    const dy = e.touches[0].clientY - e.touches[1].clientY;
+                    this.initialPinchDist = Math.sqrt(dx * dx + dy * dy);
+                    const cm = this.options.getCameraManager();
+                    this.initialZoomDist = cm ? cm.cameraZoomDist : 12.0;
+                }
             }
         }, { passive: false });
 
         window.addEventListener('touchmove', e => {
-            if (e.target.tagName !== 'CANVAS') return;
-            e.preventDefault();
+            if (this.activeTouchId !== null) {
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    const touch = e.changedTouches[i];
+                    if (touch.identifier === this.activeTouchId) {
+                        this._updateJoystick(touch, joyBase, joyKnob);
+                        e.preventDefault();
+                        break;
+                    }
+                }
+            }
 
             if (e.touches.length === 2 && this.initialPinchDist !== null && this.options.getCameraManager) {
-                const dx = e.touches[0].clientX - e.touches[1].clientX;
-                const dy = e.touches[0].clientY - e.touches[1].clientY;
-                const newDist = Math.sqrt(dx * dx + dy * dy);
-                const cm = this.options.getCameraManager();
-                if (cm) {
-                    cm.cameraZoomDist = Math.max(6.0, Math.min(300.0, this.initialZoomDist * (this.initialPinchDist / newDist)));
-                }
-            } else {
-                for (let touch of e.changedTouches) {
-                    if (touch.identifier === this.activeTouchId) this._updateJoystick(touch, joyBase, joyKnob);
+                const isJoyTouch = Array.from(e.touches).some(t => t.identifier === this.activeTouchId);
+                if (!isJoyTouch) {
+                    const dx = e.touches[0].clientX - e.touches[1].clientX;
+                    const dy = e.touches[0].clientY - e.touches[1].clientY;
+                    const newDist = Math.sqrt(dx * dx + dy * dy);
+                    const cm = this.options.getCameraManager();
+                    if (cm && newDist > 0) {
+                        cm.cameraZoomDist = Math.max(6.0, Math.min(300.0, this.initialZoomDist * (this.initialPinchDist / newDist)));
+                    }
+                    e.preventDefault();
                 }
             }
         }, { passive: false });
 
-        window.addEventListener('touchend', e => {
-            for (let touch of e.changedTouches) {
-                if (touch.identifier === this.activeTouchId) this._resetJoystick(joyBase, joyKnob);
+        const handleTouchEnd = e => {
+            if (this.activeTouchId !== null) {
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    if (e.changedTouches[i].identifier === this.activeTouchId) {
+                        this._resetJoystick(joyBase, joyKnob);
+                        break;
+                    }
+                }
             }
-            if (e.touches.length < 2) this.initialPinchDist = null;
-        });
+            if (e.touches.length < 2) {
+                this.initialPinchDist = null;
+            }
+        };
 
-        window.addEventListener('touchcancel', () => {
-            this._resetJoystick(joyBase, joyKnob);
-            this.initialPinchDist = null;
-        });
+        window.addEventListener('touchend', handleTouchEnd, { passive: false });
+        window.addEventListener('touchcancel', handleTouchEnd, { passive: false });
     }
 
     _updateJoystick(touch, joyBase, joyKnob) {
@@ -215,6 +241,7 @@ export class FlightControlsBridge {
                 joyBase.style.opacity = '0';
                 joyBase.style.display = 'none';
             } else {
+                joyBase.style.opacity = '0.3';
                 joyBase.style.left = '40px';
                 joyBase.style.top = 'auto';
                 joyBase.style.bottom = '40px';
@@ -233,12 +260,22 @@ export class FlightControlsBridge {
                 boostBtn.style.display = 'flex';
                 boostBtn.style.pointerEvents = 'auto';
             }
-            const startBoost = (e) => { e.preventDefault(); this.touchState.boost = true; boostBtn.style.transform = 'scale(0.9)'; };
-            const resetBoost = (e) => { e.preventDefault(); this.touchState.boost = false; boostBtn.style.transform = 'scale(1)'; };
-            boostBtn.addEventListener('touchstart', startBoost);
+            const startBoost = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.touchState.boost = true;
+                boostBtn.style.transform = 'scale(0.9)';
+            };
+            const resetBoost = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.touchState.boost = false;
+                boostBtn.style.transform = 'scale(1)';
+            };
+            boostBtn.addEventListener('touchstart', startBoost, { passive: false });
             boostBtn.addEventListener('mousedown', startBoost);
-            boostBtn.addEventListener('touchend', resetBoost);
-            boostBtn.addEventListener('touchcancel', resetBoost);
+            boostBtn.addEventListener('touchend', resetBoost, { passive: false });
+            boostBtn.addEventListener('touchcancel', resetBoost, { passive: false });
             boostBtn.addEventListener('mouseup', resetBoost);
             boostBtn.addEventListener('mouseleave', resetBoost);
         }

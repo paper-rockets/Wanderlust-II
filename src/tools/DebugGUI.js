@@ -1211,14 +1211,28 @@ export function initDebugGUI(ctx) {
         topFullscreenBtn.addEventListener('click', toggleFullscreen);
     }
 
-    document.addEventListener('fullscreenchange', () => {
-        const isFS = !!document.fullscreenElement;
+    const ENTER_FS_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>';
+    const EXIT_FS_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>';
+
+    function updateFullscreenUI() {
+        const isFS = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+        document.body.classList.toggle('is-fullscreen', isFS);
+        document.documentElement.classList.toggle('is-fullscreen', isFS);
+
         if (fsToggleBtn) {
-            fsToggleBtn.innerText = isFS ? 'Exit Fullscreen' : 'Fullscreen';
+            fsToggleBtn.innerHTML = isFS ? EXIT_FS_SVG : ENTER_FS_SVG;
+            fsToggleBtn.title = isFS ? 'Exit Fullscreen' : 'Toggle Fullscreen';
+            fsToggleBtn.setAttribute('aria-label', isFS ? 'Exit Fullscreen' : 'Toggle Fullscreen');
         }
         if (topFullscreenBtn) {
-            topFullscreenBtn.innerText = isFS ? 'Exit Fullscreen' : 'Fullscreen';
+            topFullscreenBtn.innerHTML = isFS ? EXIT_FS_SVG : ENTER_FS_SVG;
+            topFullscreenBtn.title = isFS ? 'Exit Fullscreen' : 'Toggle Fullscreen';
+            topFullscreenBtn.setAttribute('aria-label', isFS ? 'Exit Fullscreen' : 'Toggle Fullscreen');
         }
+    }
+
+    ['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange'].forEach(evt => {
+        document.addEventListener(evt, updateFullscreenUI);
     });
 
     const sparkleBtn = document.getElementById('sparkle-btn');

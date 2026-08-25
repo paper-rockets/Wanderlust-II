@@ -52,13 +52,24 @@ export function showVisualToast(msg, flightModelManager = null) {
 }
 
 export function toggleFullscreen() {
-    if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(err => {
-            console.warn(`Error attempting to enable fullscreen: ${err.message}`);
-        });
+    const doc = document;
+    const docEl = document.documentElement;
+    const isFullscreen = !!(doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement);
+    if (!isFullscreen) {
+        if (docEl.requestFullscreen) {
+            docEl.requestFullscreen().catch(err => console.warn(`Error attempting to enable fullscreen: ${err.message}`));
+        } else if (docEl.webkitRequestFullscreen) {
+            docEl.webkitRequestFullscreen();
+        } else if (docEl.msRequestFullscreen) {
+            docEl.msRequestFullscreen();
+        }
     } else {
-        if (document.exitFullscreen) {
-            document.exitFullscreen();
+        if (doc.exitFullscreen) {
+            doc.exitFullscreen().catch(err => console.warn(`Error attempting to exit fullscreen: ${err.message}`));
+        } else if (doc.webkitExitFullscreen) {
+            doc.webkitExitFullscreen();
+        } else if (doc.msExitFullscreen) {
+            doc.msExitFullscreen();
         }
     }
 }

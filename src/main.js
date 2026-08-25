@@ -2920,7 +2920,9 @@ import { postProcessing as composer, scenePass, initPostProcessing, bloomPass, g
             up: keys.w || touchState.y < -0.1,
             down: keys.s || touchState.y > 0.1,
             left: keys.a || touchState.x < -0.1,
-            right: keys.d || touchState.x > 0.1
+            right: keys.d || touchState.x > 0.1,
+            analogX: touchState.x,
+            analogY: touchState.y
         };
 
         let curWaterY = 2.4;
